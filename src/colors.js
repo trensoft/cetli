@@ -2,8 +2,9 @@
 // The colour NAMES of the menu and the choice of the base colour of a new note. No hex values and no UI here (those are
 // app/data.js); no ambient random source: the only one is the injected platform's `randomBytes` (contract at the top of store.js).
 
-// Order of the menu. `gray` is NOT here: it stays a known value in old note files but is not offered.
-export const NOTE_COLOR_IDS = Object.freeze(['yellow', 'pink', 'green', 'purple', 'orange', 'blue', 'mint', 'peach']);
+// The named colours of the menu, in the order of the grid (0.2.2). `orange`, `mint` and `peach` are NOT here: they stay known
+// values in old note files (app/data.js LEGACY_COLORS) but are neither offered nor drawn for a new note.
+export const NOTE_COLOR_IDS = Object.freeze(['yellow', 'pink', 'green', 'purple', 'blue', 'gray']);
 
 // Uniform integer in [0, n) from `randomBytes(len) -> Uint8Array`, by rejection sampling (no modulo bias).
 // A source that keeps returning rejected values (a broken stub) ends after 64 draws with a plain modulo.
@@ -23,8 +24,8 @@ export function randomIndex(randomBytes, n) {
 }
 
 // The base colour of a new note: a random one of the colours that no live note uses yet; when all are used, one of all.
-// `usedColors` is any iterable of the `color` strings of the existing, not deleted notes. A custom colour (`#rrggbb`),
-// `gray` and any unknown string occupy nothing, because they are not in `ids`.
+// `usedColors` is any iterable of the `color` strings of the existing, not deleted notes. A custom colour (`#rrggbb`), a legacy
+// name (orange, mint, peach) and any unknown string occupy nothing, because they are not in `ids`.
 export function pickNoteColor(usedColors, randomBytes, ids = NOTE_COLOR_IDS) {
     const used = new Set(usedColors);
     const free = ids.filter(id => !used.has(id));

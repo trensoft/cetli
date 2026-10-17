@@ -99,6 +99,18 @@ msgid "Gray"
 msgstr "Szürke"
 
 #: app/strings.js
+msgid "Black"
+msgstr "Fekete"
+
+#: app/strings.js
+msgid "White"
+msgstr "Fehér"
+
+#: app/strings.js
+msgid "RHEL red"
+msgstr "RHEL-piros"
+
+#: app/strings.js
 msgid "A newer version arrived from the other computer"
 msgstr "Újabb változat érkezett a másik számítógépről"
 
@@ -179,3 +191,105 @@ msgstr "Egyedi szín"
 #: app/strings.js
 msgid "Choose a color"
 msgstr "Válassz színt"
+
+#: app/strings.js
+msgid "All notes"
+msgstr "Összes jegyzet"
+
+#. Translators: shown in the "All notes" list for a note that has no text.
+#: app/strings.js
+msgid "(empty note)"
+msgstr "(üres jegyzet)"
+
+# ---- All notes: search, cards, delete (0.2.2) ----
+
+#: app/strings.js
+msgid "Search notes…"
+msgstr "Jegyzetek keresése…"
+
+#: app/strings.js
+msgid "No notes"
+msgstr "Nincsenek jegyzetek"
+
+#: app/strings.js
+msgid "After you create notes, they will appear here"
+msgstr "Ha létrehozol jegyzeteket, itt jelennek meg"
+
+#: app/strings.js
+msgid "No results"
+msgstr "Nincs találat"
+
+#: app/strings.js
+msgid "Try a different search"
+msgstr "Próbálj más keresést"
+
+#. Translators: tooltips of the eye button on a card in the "All notes" list: the note window is open / closed now.
+#: app/strings.js
+msgid "Hide note"
+msgstr "Jegyzet elrejtése"
+
+#: app/strings.js
+msgid "Show note"
+msgstr "Jegyzet megjelenítése"
+
+#: app/strings.js
+msgid "Delete note?"
+msgstr "Törlöd a jegyzetet?"
+
+#: app/strings.js
+msgid "This cannot be undone. To only hide the note, close it instead."
+msgstr "Ez nem vonható vissza. Ha csak el akarod rejteni, inkább zárd be."
+
+#: app/strings.js
+msgid "Cancel"
+msgstr "Mégse"
+
+#: app/strings.js
+msgid "Delete"
+msgstr "Törlés"
+
+#: app/strings.js
+#, javascript-format
+msgid "The note was not deleted (%s)"
+msgstr "A jegyzet nem lett törölve (%s)"
+
+#: app/strings.js
+msgid "Formatting"
+msgstr "Formázás"
+
+#: app/strings.js
+msgid "Bold"
+msgstr "Félkövér"
+
+#: app/strings.js
+msgid "Italic"
+msgstr "Dőlt"
+
+#: app/strings.js
+msgid "Underline"
+msgstr "Aláhúzott"
+
+#: app/strings.js
+msgid "Strikethrough"
+msgstr "Áthúzott"
+
+#. Translators: the key combination in the brackets is not translated.
+#: app/strings.js
+msgid "Bold (Ctrl+B)"
+msgstr "Félkövér (Ctrl+B)"
+
+#: app/strings.js
+msgid "Italic (Ctrl+I)"
+msgstr "Dőlt (Ctrl+I)"
+
+#: app/strings.js
+msgid "Underline (Ctrl+U)"
+msgstr "Aláhúzott (Ctrl+U)"
+
+#: app/strings.js
+msgid "Strikethrough (Ctrl+Shift+X)"
+msgstr "Áthúzott (Ctrl+Shift+X)"
+
+#: app/strings.js
+msgid "Ctrl+Z does not undo formatting."
+msgstr "A Ctrl+Z a formázást nem vonja vissza."

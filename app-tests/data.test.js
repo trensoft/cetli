@@ -7,8 +7,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {
-    APP_ID, COLORS, ISSUE_URL, PALETTE, TEXT_DARK, TEXT_LIGHT, WEBSITE, WINDOW_TITLE_PREFIX, buildCss, cssClassOf,
+    APP_ID, COLORS, ISSUE_URL, KNOWN_COLORS, PALETTE, TEXT_DARK, TEXT_LIGHT, WEBSITE, WINDOW_TITLE_PREFIX, buildCss, cssClassOf,
+    customRowStyle,
 } from '../app/data.js';
+import {PREVIEW_LINES, PREVIEW_LINE_CHARS, previewOf} from '../app/preview.js';
 import {changedRegion} from '../app/textdiff.js';
 import {setOpen, shouldOpen, sizeOf} from '../app/layoutfile.js';
 import {makeEnv, uuid} from '../tests/support/helpers.js';
@@ -26,11 +28,11 @@ const contrast = (a, b) => {
     return (hi + 0.05) / (lo + 0.05);
 };
 
-test('PLAN 8: eight menu colours (gray known, not offered), the fills, text/fill contrast above 4.5 in both themes and on the header strip', () => {
-    assert.deepEqual([...COLORS], ['yellow', 'pink', 'green', 'purple', 'orange', 'blue', 'mint', 'peach']);
-    assert.equal(PALETTE.yellow.light, '#fbf1b8');
+test('PLAN 8: six named menu colours (orange, mint, peach known, not offered), the fills, text/fill contrast above 4.5 in both themes and on the header strip', () => {
+    assert.deepEqual([...COLORS], ['yellow', 'pink', 'green', 'purple', 'blue', 'gray']);
+    assert.equal(PALETTE.yellow.light, '#fff6cb');
     assert.equal(PALETTE.gray.dark, '#3a3a3a');
-    for (const name of [...COLORS, 'gray']) {
+    for (const name of KNOWN_COLORS) {
         const p = PALETTE[name];
         assert.ok(contrast(p.light, TEXT_LIGHT) > 4.5, `${name} light`);
         assert.ok(contrast(p.lightHeader, TEXT_LIGHT) > 4.5, `${name} light header`);
@@ -60,7 +62,7 @@ test('PLAN 8: the stylesheet ITSELF sets text and fill with 4.5:1 for every colo
     };
     const mark = get('window.cetli-note label.cetli-mark');
     const unresolved = get('window.cetli-note label.cetli-unresolved');
-    for (const name of COLORS) {
+    for (const name of KNOWN_COLORS) {
         const p = PALETTE[name];
         for (const [fillSel, headSel, fill, head, text] of [
             [`window.cetli-${name}`, `window.cetli-${name} headerbar.cetli-header`, p.light, p.lightHeader, TEXT_LIGHT],
@@ -85,7 +87,7 @@ test('PLAN 8: the stylesheet ITSELF sets text and fill with 4.5:1 for every colo
 
 test('PLAN 8/7: the stylesheet is built from the table only; a colour class never comes from file content', () => {
     const css = buildCss();
-    for (const name of COLORS) {
+    for (const name of KNOWN_COLORS) {
         assert.ok(css.includes(`window.cetli-${name} {`), name);
         assert.ok(css.includes(PALETTE[name].light) && css.includes(PALETTE[name].dark), name);
     }
@@ -221,4 +223,90 @@ test('static: the user-visible strings are literal msgids that xgettext can see 
     assert.ok(calls.length >= 20);
     for (const arg of calls)
         assert.match(arg, /^'[^'\\]*'$/, `_(${arg}) is not a plain single-quoted literal`);
+});
+
+// ---- 0.2.1 "All notes" ----------------------------------------------------------------------------------------------
+
+test('"All notes": the preview of a note is its first lines, cut by code points; empty, long and odd texts', () => {
+    assert.deepEqual(previewOf(''), {text: '', empty: true});
+    assert.deepEqual(previewOf(' \n\t\r\n  '), {text: '', empty: true}, 'blanks only is empty');
+    assert.deepEqual(previewOf(undefined), {text: '', empty: true});
+    assert.deepEqual(previewOf('  hello  '), {text: 'hello', empty: false});
+    assert.equal(previewOf('\n\n\nfirst\n\n  second  \nthird\nfourth').text, 'first\nsecond\nthird', `at most ${PREVIEW_LINES} lines, blank lines skipped`);
+    assert.equal(previewOf('a\r\nb\rc').text, 'a\nb\nc', 'every line end');
+    const cutLine = previewOf('x'.repeat(5000)).text;
+    assert.equal(Array.from(cutLine).length, PREVIEW_LINE_CHARS + 1);
+    assert.ok(cutLine.endsWith('…'));
+    assert.equal(previewOf('x'.repeat(PREVIEW_LINE_CHARS)).text, 'x'.repeat(PREVIEW_LINE_CHARS), 'a line of exactly the limit is not cut');
+    // an emoji is ONE code point and a cut never leaves half of a pair (a lone surrogate is not valid text for a label)
+    for (const n of [PREVIEW_LINE_CHARS - 1, PREVIEW_LINE_CHARS, PREVIEW_LINE_CHARS + 1, 700, 3000])
+        assert.equal(previewOf('\u{1F389}'.repeat(n)).text.isWellFormed(), true, `${n} emoji`);
+    // the head ends INSIDE a pair (the high half is the 800th unit): the half is dropped, the lines before it are untouched
+    const split = `${'x'.repeat(400)}\n${'y'.repeat(397)}\n\u{1F389}z`;
+    assert.equal(split.charCodeAt(799) >= 0xd800 && split.charCodeAt(799) <= 0xdbff, true, 'the test text really splits a pair at the cut');
+    assert.equal(previewOf(split).text.isWellFormed(), true, 'no lone surrogate from a cut inside a pair');
+    assert.equal(previewOf('\u{1F389}'.repeat(PREVIEW_LINE_CHARS + 5)).text, `${'\u{1F389}'.repeat(PREVIEW_LINE_CHARS)}…`);
+    // blank lines before the text do not hide it (the head that is read starts at the first non-blank character)
+    assert.equal(previewOf(`${'\n'.repeat(5000)}late`).text, 'late');
+    // a note of the maximum size: only a head is read (fast), the preview stays small
+    const t0 = process.hrtime.bigint();
+    const big3 = previewOf('line of text\n'.repeat(5000));
+    const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+    assert.equal(big3.text, 'line of text\nline of text\nline of text');
+    assert.ok(ms < 50, `64 KB preview in ${ms.toFixed(2)} ms`);
+    // a 64 KB single line
+    assert.equal(Array.from(previewOf('z'.repeat(65536)).text).length, PREVIEW_LINE_CHARS + 1);
+});
+
+test('"All notes": the list rows use the fills and texts of the note windows; every row of every known colour is >= 7:1 (light) and >= 4.5:1 (dark)', () => {
+    const css = buildCss();
+    const rules = new Map(css.split('\n').filter(Boolean).map(l => /^(.*?) \{ (.*) \}$/.exec(l)).filter(Boolean).map(m => [m[1], m[2]]));
+    for (const name of KNOWN_COLORS) {
+        const p = PALETTE[name];
+        assert.equal(rules.get(`window.cetli-list row.cetli-row.cetli-${name}`), `background-color: ${p.light}; color: ${TEXT_LIGHT};`, name);
+        assert.equal(rules.get(`window.cetli-list.cetli-dark row.cetli-row.cetli-${name}`), `background-color: ${p.dark}; color: ${TEXT_DARK};`, name);
+        assert.ok(contrast(p.light, TEXT_LIGHT) >= 7 && contrast(p.dark, TEXT_DARK) >= 4.5, name);
+    }
+    for (const sel of ['window.cetli-list listbox.cetli-rows', 'window.cetli-list row.cetli-row', 'window.cetli-list row.cetli-row:hover', 'window.cetli-list row.cetli-row label.cetli-empty'])
+        assert.ok(rules.has(sel), sel);
+    assert.equal(/cetli-x-/.test(css), false, 'the shared stylesheet holds no custom colour');
+});
+
+test('"All notes": the row style of a custom colour comes from three numbers; anything else has none', () => {
+    const st = customRowStyle('#1a2b3c');
+    assert.equal(st.cls, 'cetli-x-1a2b3c');
+    assert.match(st.css, /^window\.cetli-list row\.cetli-row\.cetli-x-1a2b3c, window\.cetli-list\.cetli-dark row\.cetli-row\.cetli-x-1a2b3c \{ background-color: #1a2b3c; color: #(000000|ffffff); \}\n$/);
+    assert.equal(customRowStyle('#ffffff').css.includes('color: #000000'), true);
+    assert.equal(customRowStyle('#000000').css.includes('color: #ffffff'), true);
+    for (const bad of ['#AABBCC', '#aabbcc;}', '#aabbcc\n', 'red', '', null, undefined, 7, 'a'.repeat(100000), '#aabbcc} window { display: none'])
+        assert.equal(customRowStyle(bad), null, String(bad).slice(0, 30));
+});
+
+test('i18n: the "All notes" texts are in the template and in both catalogs, in Hungarian with accents; the three catalogs agree', () => {
+    const read = f => fs.readFileSync(path.join(root, f), 'utf8');
+    const ids = text => new Set([...text.matchAll(/^msgid "(.+)"$/gm)].map(m => m[1]));
+    const strings = read('app/strings.js');
+    const fromCode = new Set([...strings.matchAll(/\b_\('([^'\\]*)'\)/g)].map(m => m[1]));
+    const pot = ids(read('po/cetli.pot')), en = ids(read('po/en.po')), hu = ids(read('po/hu.po'));
+    for (const id of ['All notes', '(empty note)']) {
+        assert.ok(fromCode.has(id), `${id} in strings.js`);
+        for (const [name, set] of [['cetli.pot', pot], ['en.po', en], ['hu.po', hu]])
+            assert.ok(set.has(id), `${id} in ${name}`);
+    }
+    for (const id of fromCode) {
+        assert.ok(pot.has(id) && en.has(id) && hu.has(id), `msgid "${id}" is in all three catalogs`);
+    }
+    assert.match(read('po/hu.po'), /msgid "All notes"\nmsgstr "Összes jegyzet"/);
+    assert.match(read('po/hu.po'), /msgid "\(empty note\)"\nmsgstr "\(üres jegyzet\)"/);
+    assert.match(read('po/cetli.pot'), /msgid "All notes"\nmsgstr ""/);
+    assert.match(read('po/en.po'), /msgid "All notes"\nmsgstr ""/);
+    // the "Translators" comment travels with the template for the one text that needs context
+    assert.match(read('po/cetli.pot'), /#\. Translators: shown in the "All notes" list for a note that has no text\.\n#: app\/strings\.js\nmsgid "\(empty note\)"/);
+});
+
+test('"All notes": the list window has a title of its own; only note windows are cetli-<uuid>', () => {
+    const strings = read('app/strings.js');
+    assert.match(strings, /export const allNotesTitle = \(\) => _\('All notes'\);/);
+    assert.equal(/WINDOW_TITLE_PREFIX/.test(read('app/allnotes.js')), false, 'the list code never builds a cetli-<uuid> title');
+    function read(f) { return fs.readFileSync(path.join(root, f), 'utf8'); }
 });

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Base colour of a new note (src/colors.js, Store.createNote): a random one of the menu colours that no live note uses yet;
-// all used -> one of all. Custom colours, `gray`, unknown strings and deleted notes occupy nothing. The random source is the
+// Base colour of a new note (src/colors.js, Store.createNote): a random one of the six named menu colours that no live note uses
+// yet; all used -> one of all. Custom colours, the legacy names (orange, mint, peach), unknown strings and deleted notes occupy nothing. The random source is the
 // injected platform's `randomBytes`; here it is scripted, so every result is deterministic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,7 +9,8 @@ import fs from 'node:fs';
 import {NOTE_COLOR_IDS, pickNoteColor, randomIndex} from '../src/colors.js';
 import {makeEnv, rec, uuid} from './support/helpers.js';
 
-const IDS = ['yellow', 'pink', 'green', 'purple', 'orange', 'blue', 'mint', 'peach'];
+const IDS = ['yellow', 'pink', 'green', 'purple', 'blue', 'gray'];
+const LEGACY = ['orange', 'mint', 'peach'];
 
 // randomBytes(4) that returns the scripted unsigned 32-bit values one by one (big endian); the last one repeats.
 const script = values => {
@@ -35,9 +36,11 @@ const withEnv = fn => async () => {
     }
 };
 
-test('colours: the menu order is exactly yellow, pink, green, purple, orange, blue, mint, peach (gray is not offered)', () => {
+test('colours: the six are exactly yellow, pink, green, purple, blue, gray (orange, mint, peach are not drawn)', () => {
     assert.deepEqual([...NOTE_COLOR_IDS], IDS);
     assert.ok(Object.isFrozen(NOTE_COLOR_IDS));
+    for (const old of LEGACY)
+        assert.equal(NOTE_COLOR_IDS.includes(old), false, old);
 });
 
 test('colours: randomIndex maps a draw to [0, n) and rejects the biased tail (no modulo bias)', () => {
@@ -62,40 +65,46 @@ test('colours: a source that is always rejected ends after 64 draws (no endless 
 test('colours: only colours that no live note uses are drawn, and every free colour can be drawn', () => {
     const used = ['yellow', 'green', 'blue'];
     const free = IDS.filter(c => !used.includes(c));
-    assert.deepEqual(free, ['pink', 'purple', 'orange', 'mint', 'peach']);
+    assert.deepEqual(free, ['pink', 'purple', 'gray']);
     const got = free.map((_, k) => pickNoteColor(used, script([k])));
     assert.deepEqual(got, free);
     for (let u = 0; u < 40; u++)
         assert.ok(free.includes(pickNoteColor(used, script([u]))), `draw ${u}`);
 });
 
-test('colours: when all 8 are used the draw is over all 8 again', () => {
+test('colours: when all 6 are used the draw is over all 6 again', () => {
     const got = IDS.map((_, k) => pickNoteColor(IDS, script([k])));
     assert.deepEqual(got, IDS);
     assert.equal(pickNoteColor([...IDS, ...IDS], script([3])), 'purple');
 });
 
-test('colours: a custom colour, gray and an unknown string occupy nothing', () => {
-    const used = [...IDS.filter(c => c !== 'mint'), '#aabbcc', 'gray', 'no-such-colour', '', '#AABBCC'];
+test('colours: gray is a candidate like the others (it is used by a note -> not drawn while another is free)', () => {
+    const used = IDS.filter(c => c !== 'blue');
     for (let u = 0; u < 20; u++)
-        assert.equal(pickNoteColor(used, script([u])), 'mint');
-    // the three do not take a slot either when nothing else is used
-    assert.deepEqual(IDS.map((_, k) => pickNoteColor(['#aabbcc', 'gray', 'zzz'], script([k]))), IDS);
+        assert.equal(pickNoteColor(used, script([u])), 'blue');
 });
 
-test('colours: createNote without a colour lets the core pick; 8 notes get 8 different colours, the 9th starts over', withEnv(async env => {
+test('colours: a custom colour, a legacy name and an unknown string occupy nothing', () => {
+    const used = [...IDS.filter(c => c !== 'green'), '#aabbcc', ...LEGACY, 'no-such-colour', '', '#AABBCC'];
+    for (let u = 0; u < 20; u++)
+        assert.equal(pickNoteColor(used, script([u])), 'green');
+    // they do not take a slot either when nothing else is used
+    assert.deepEqual(IDS.map((_, k) => pickNoteColor(['#aabbcc', ...LEGACY, 'zzz'], script([k]))), IDS);
+});
+
+test('colours: createNote without a colour lets the core pick; 6 notes get 6 different colours, the 7th starts over', withEnv(async env => {
     const draws = script([0]);                           // always the first free colour
     env.platform.randomBytes = draws;
     const seen = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 6; i++) {
         const r = await env.store.createNote({text: `n${i}`});
         assert.equal(r.ok, true);
         seen.push(r.record.color);
     }
     assert.deepEqual(seen, IDS);
     env.platform.randomBytes = script([3]);
-    const ninth = await env.store.createNote({text: 'n9'});
-    assert.equal(ninth.record.color, 'purple');          // all 8 used: index 3 of ALL
+    const seventh = await env.store.createNote({text: 'n7'});
+    assert.equal(seventh.record.color, 'purple');        // all 6 used: index 3 of ALL
 }));
 
 test('colours: a deleted note no longer occupies its colour', withEnv(async env => {
@@ -118,12 +127,12 @@ test('colours: a note that arrives from another device occupies its colour; one 
     assert.equal(r.color, 'pink');
 }));
 
-test('colours: an explicit colour is kept as given (gray, custom) and does not use the random source', withEnv(async env => {
+test('colours: an explicit colour is kept as given (a legacy name, custom) and does not use the random source', withEnv(async env => {
     const s = script([0]);
     env.platform.randomBytes = s;
-    const g = (await env.store.createNote({text: 'g', color: 'gray'})).record;
+    const g = (await env.store.createNote({text: 'g', color: 'peach'})).record;
     const c = (await env.store.createNote({text: 'c', color: '#0a0b0c'})).record;
-    assert.equal(g.color, 'gray');
+    assert.equal(g.color, 'peach');
     assert.equal(c.color, '#0a0b0c');
     assert.equal(s.calls.n, 0);
     assert.equal(fs.readFileSync(`${env.dirs.notes}/${c.id}.json`, 'utf8').includes('"#0a0b0c"'), true);

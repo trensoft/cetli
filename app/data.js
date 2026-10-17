@@ -22,32 +22,50 @@ export const MIN_SIZE = 120;
 export const MAX_SIZE = 4000;
 export const REMOTE_QUIET_MS = 2000;          // PLAN 3: a remote version replaces the text only after 2 s without a key
 
-// The menu, in this order (src/colors.js is the single list of names, shared with the core's colour picker).
+// The named colours of the menu, in this order (src/colors.js is the single list of names, shared with the core's colour picker).
 export const COLORS = NOTE_COLOR_IDS;
 export const DEFAULT_COLOR = 'yellow';
-// `gray` is not offered but stays a known value: old notes carry it.
-export const LEGACY_COLORS = Object.freeze(['gray']);
+// Not offered any more but still known values: old notes carry them (an unknown name would show as yellow).
+export const LEGACY_COLORS = Object.freeze(['orange', 'mint', 'peach']);
 export const KNOWN_COLORS = Object.freeze([...COLORS, ...LEGACY_COLORS]);
+// The three fixed custom colours of the grid, ONE line each (the menu, strings.js and the tests read these names). The black is the
+// Sticky Notes charcoal header (white text 10.80:1; its body #5e5e5e would give 6.48:1, below the 7:1 gate, so the one stored value
+// is the header); the white is the measured value of the Sticky Notes sample ("window" is a system colour, not storable as #rrggbb).
+// Lower case only: an upper case `#EE0000` shows as yellow in the 0.1.0 and the 0.2.0 client (see normalizeCustomColor).
+export const NOTE_BLACK = '#3f3d3c';
+export const NOTE_WHITE = '#ffffff';
+export const NOTE_RHEL_RED = '#ee0000';
+// The colour grid (0.2.2), 9 values in this order: the first six are names (a note file keeps the NAME, no migration), the last
+// three are custom `#rrggbb` (black, white, red). A new NAME is forbidden: an old client would show it as yellow.
+export const GRID_COLORS = Object.freeze(['yellow', 'pink', 'green', 'purple', 'blue', 'gray', NOTE_BLACK, NOTE_WHITE, NOTE_RHEL_RED]);
 
 export const TEXT_LIGHT = '#2b2b2b';
 export const TEXT_DARK = '#f2f2f2';
 
 // PLAN 8: the fills (ours). `lightHeader` is the slim strip, one step darker (90 % of the fill's channels); the dark
 // fills are the same hue at about half the brightness, `darkHeader` 80 % of that.
+// The LIGHT side of the six named colours is Sticky Notes (MIT, vixalien/sticky commit 235efbaf, data/stylus/colors.styl, see
+// evidence/sticky-notes-colors.md): bg -> light (the body), header -> lightHeader (the strip, and the circle of the grid). The DARK
+// side stays as in 0.2.1: the Sticky Notes dark fills are mid-tones (white text 4.77:1 to 5.65:1), below the 7:1 gate, and the gate
+// is not loosened silently. orange, mint and peach are the cetli's own legacy values.
 // Measured (tests / app-tests/color.test.js): every light fill and lightHeader >= 7:1 against TEXT_LIGHT (so against black too);
-// every dark fill and darkHeader >= 7:1 against TEXT_DARK; every two menu colours >= 15 apart in CIELAB (dE76, light fills).
+// every dark fill and darkHeader >= 7:1 against TEXT_DARK; every two circles of the grid (lightHeader, and the three custom values)
+// >= MIN_DELTA_E apart in CIELAB (dE76), except the named pair of DELTA_E_EXCEPTIONS; text/fill >= 4.5:1 (WCAG AA) for every colour
+// of GRID_COLORS in both themes, on the fill and on the strip.
 export const MIN_CONTRAST = 7;
 export const MIN_DELTA_E = 15;
+// The one named exception of the distance rule: gray and white are 12.9 apart in the Sticky Notes sample itself.
+export const DELTA_E_EXCEPTIONS = Object.freeze([Object.freeze(['gray', NOTE_WHITE])]);
 export const PALETTE = Object.freeze({
-    yellow: {light: '#fbf1b8', lightHeader: '#e2d9a6', dark: '#524e3c', darkHeader: '#423e30'},
-    pink: {light: '#f7c9d8', lightHeader: '#deb5c2', dark: '#5a494f', darkHeader: '#483a3f'},
-    green: {light: '#cdebb6', lightHeader: '#b9d4a4', dark: '#47513f', darkHeader: '#394132'},
-    purple: {light: '#dccdf5', lightHeader: '#c6b9dd', dark: '#514c5b', darkHeader: '#413d49'},
+    yellow: {light: '#fff6cb', lightHeader: '#ffee92', dark: '#524e3c', darkHeader: '#423e30'},
+    pink: {light: '#ffe3f1', lightHeader: '#ffc5e1', dark: '#564f53', darkHeader: '#443f42'},
+    green: {light: '#e7f6e4', lightHeader: '#d1ebcb', dark: '#47513f', darkHeader: '#394132'},
+    purple: {light: '#f2e5ff', lightHeader: '#e2d0f5', dark: '#514c5b', darkHeader: '#413d49'},
     orange: {light: '#fbcf94', lightHeader: '#e2ba85', dark: '#5a4b35', darkHeader: '#483c2a'},
-    blue: {light: '#bddcf5', lightHeader: '#aac6dd', dark: '#444f58', darkHeader: '#363f46'},
+    blue: {light: '#e7f3ff', lightHeader: '#cce7ff', dark: '#444f58', darkHeader: '#363f46'},
     mint: {light: '#bfeadd', lightHeader: '#acd3c7', dark: '#42514c', darkHeader: '#35413d'},
     peach: {light: '#fbd5c4', lightHeader: '#e2c0b0', dark: '#584b45', darkHeader: '#463c37'},
-    gray: {light: '#dcdcdc', lightHeader: '#c6c6c6', dark: '#3a3a3a', darkHeader: '#2e2e2e'},
+    gray: {light: '#edebe9', lightHeader: '#dddad8', dark: '#3a3a3a', darkHeader: '#2e2e2e'},
 });
 
 // ---- custom colour: `#rrggbb` in the `color` field of a note file (untrusted input) ----
@@ -64,6 +82,10 @@ export function parseCustomColor(s) {
     const m = s.match(CUSTOM_RE);
     return {r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16)};
 }
+
+// Any `#rrggbb` (either case) -> the lower case `#rrggbb` that is stored; anything else -> null. A colour chooser value goes
+// through this before it is written to a note file.
+export const normalizeCustomColor = s => (typeof s === 'string' && /^#[0-9a-fA-F]{6}$/.test(s) ? s.toLowerCase() : null);
 
 const hex2 = n => n.toString(16).padStart(2, '0');
 const hexOf = ({r, g, b}) => `#${hex2(r)}${hex2(g)}${hex2(b)}`;
@@ -82,8 +104,16 @@ export function contrastRatio(a, b) {
 const BLACK = {r: 0, g: 0, b: 0};
 const WHITE = {r: 255, g: 255, b: 255};
 
-// Text colour for a custom background: black or white, whichever has the higher measured contrast.
-export const textColorFor = rgb => (contrastRatio(rgb, BLACK) >= contrastRatio(rgb, WHITE) ? '#000000' : '#ffffff');
+// Backgrounds that get WHITE text although black measures slightly higher (Attila's choice): the red of the grid. White on
+// #ee0000 is 4.53:1 (AA is 4.5:1), black is 4.64:1.
+const WHITE_TEXT_ON = Object.freeze([NOTE_RHEL_RED]);
+
+// Text colour for a custom background: black or white, whichever has the higher measured contrast, except WHITE_TEXT_ON.
+export const textColorFor = rgb => {
+    if (WHITE_TEXT_ON.includes(hexOf(rgb)))
+        return '#ffffff';
+    return contrastRatio(rgb, BLACK) >= contrastRatio(rgb, WHITE) ? '#000000' : '#ffffff';
+};
 
 // The strip: a step darker, 85 % of every channel (rounded down).
 const darker = ({r, g, b}) => ({r: Math.floor(r * 0.85), g: Math.floor(g * 0.85), b: Math.floor(b * 0.85)});
@@ -113,14 +143,28 @@ export function customColorStyle(s) {
     return {cls, css: `${css}\n`};
 }
 
+// The CSS of the row of ONE custom colour in the "All notes" list: null or {cls, css}, same rules as customColorStyle.
+export function customRowStyle(s) {
+    const rgb = parseCustomColor(s);
+    if (!rgb)
+        return null;
+    const cls = cssClassOf(s);
+    return {cls, css: `window.cetli-list row.cetli-row.${cls}, window.cetli-list.cetli-dark row.cetli-row.${cls} { background-color: ${hexOf(rgb)}; color: ${textColorFor(rgb)}; }\n`};
+}
+
 // The one stylesheet of the named colours. Built from the constants above only.
 export function buildCss() {
     const rules = [
         'window.cetli-note { border-radius: 6px; }',
         'window.cetli-note headerbar.cetli-header { min-height: 28px; box-shadow: none; border-radius: 6px 6px 0 0; }',
         'window.cetli-note textview.cetli-text, window.cetli-note textview.cetli-text text { background: transparent; color: inherit; }',
-        'window.cetli-note label.cetli-mark { font-size: smaller; padding: 2px 8px; opacity: 0.85; }',
+        'window.cetli-note label.cetli-mark { font-size: smaller; padding: 2px 8px; }',
         'window.cetli-note label.cetli-unresolved { font-size: smaller; }',
+        // the "All notes" list: a row is the note in miniature (same fills and texts as the windows)
+        'window.cetli-list listbox.cetli-rows { background: transparent; }',
+        'window.cetli-list row.cetli-row { border-radius: 6px; margin: 3px 6px; padding: 2px 4px; }',
+        'window.cetli-list row.cetli-row:hover { box-shadow: inset 0 0 0 2px rgba(128, 128, 128, 0.8); }',
+        'window.cetli-list row.cetli-row label.cetli-empty { font-style: italic; }',
     ];
     for (const name of KNOWN_COLORS) {
         const p = PALETTE[name];
@@ -129,6 +173,8 @@ export function buildCss() {
             `window.cetli-${name} headerbar.cetli-header { background-color: ${p.lightHeader}; color: ${TEXT_LIGHT}; }`,
             `window.cetli-dark.cetli-${name} { background-color: ${p.dark}; color: ${TEXT_DARK}; }`,
             `window.cetli-dark.cetli-${name} headerbar.cetli-header { background-color: ${p.darkHeader}; color: ${TEXT_DARK}; }`,
+            `window.cetli-list row.cetli-row.cetli-${name} { background-color: ${p.light}; color: ${TEXT_LIGHT}; }`,
+            `window.cetli-list.cetli-dark row.cetli-row.cetli-${name} { background-color: ${p.dark}; color: ${TEXT_DARK}; }`,
         );
         if (COLORS.includes(name))
             rules.push(`button.cetli-swatch-${name} { background-color: ${p.light}; min-width: 20px; min-height: 20px; border-radius: 10px; }`);

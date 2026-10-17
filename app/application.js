@@ -14,6 +14,7 @@ import {
     APP_ID, APP_NAME, COPYRIGHT, DEFAULT_COLOR, DEFAULT_HEIGHT, DEFAULT_WIDTH, DEVELOPER, ISSUE_URL, MAX_SIZE, MIN_SIZE, WEBSITE,
     buildCss,
 } from './data.js';
+import {AllNotesWindow} from './allnotes.js';
 import {setOpen, shouldOpen, sizeOf} from './layoutfile.js';
 import {NoteWindow} from './window.js';
 import * as S from './strings.js';
@@ -31,13 +32,19 @@ function readVersion() {
 
 function buildMenu() {
     const menu = new Gio.Menu();
+    // The colour grid: an item the menu cannot draw itself; each note window puts its grid in under the id 'colors'.
+    const colors = new Gio.Menu();
+    const grid = Gio.MenuItem.new(null, null);
+    grid.set_attribute_value('custom', GLib.Variant.new_string('colors'));
+    colors.append_item(grid);
+    menu.append_section(null, colors);
     const notes = new Gio.Menu();
-    notes.append(S.menuNewNote(), 'app.new-note');
+    notes.append(S.menuAllNotes(), 'app.all-notes');
     notes.append(S.menuDeleteNote(), 'win.delete');
     menu.append_section(null, notes);
-    const about = new Gio.Menu();
-    about.append(S.menuAbout(), 'win.about');
-    menu.append_section(null, about);
+    const more = new Gio.Menu();
+    more.append(S.menuAbout(), 'win.about');
+    menu.append_section(null, more);
     return menu;
 }
 
@@ -59,6 +66,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     const version = readVersion();
     let menu = null;
     let watcher = null;
+    let allNotes = null;                 // the one "All notes" window, while it is open
     let starting = false;
     let unresolved = 0;
     let resolveReady;
@@ -71,7 +79,10 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         hold: () => gtkApp.hold(),
         release: () => gtkApp.release(),
         log: m => platform.log.warn(m),
-        closed: id => windows.delete(id),
+        closed: id => {
+            windows.delete(id);
+            allNotes?.scheduleRefresh();               // the eye of its card
+        },
         setOpen: async (id, open) => {
             try {
                 await setOpen(store, id, open);
@@ -81,6 +92,15 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         },
         showAbout: parent => showAbout(parent),
         newNote: from => newNote(from),
+        notesChanged: () => allNotes?.scheduleRefresh(),
+        openNote: id => openNote(id),
+        isOpen: id => windows.has(id),
+        closeNote: id => windows.get(id)?.win.close(),
+        deleteNote: id => deleteNote(id),
+        onAllNotesClosed: win => {
+            if (allNotes === win)
+                allNotes = null;
+        },
     };
 
     function showAbout(parent) {
@@ -104,6 +124,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         windows.set(record.id, win);
         win.setUnresolved(unresolved);
         win.present();
+        allNotes?.scheduleRefresh();                   // the eye of its card
         return win;
     }
 
@@ -113,8 +134,54 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
             from?._setMark('refused', S.markNotSaved(res.cause.code));
             return null;
         }
+        allNotes?.scheduleRefresh();
         const existing = windows.get(res.record.id);
         return existing ?? openWindow(res.record, {});
+    }
+
+    // A click in the "All notes" list: bring the note's window to the front, or open it again when it was closed.
+    async function openNote(id) {
+        const rec = store.getNote(id);
+        if (!rec || rec.deleted)
+            return;
+        const w = windows.get(id);
+        if (w) {
+            w.win.present();
+            return;
+        }
+        await openWindow(rec, await store.loadLayout());
+        ctl.setOpen(id, true);
+    }
+
+    // The trash of a card in the "All notes" list. An open note is deleted by its window (which knows its base and closes itself);
+    // a closed one has no window: it is deleted here from the record the core holds. A refused delete leaves the card and says so.
+    async function deleteNote(id) {
+        const w = windows.get(id);
+        if (w) {
+            w.deleteNote();
+            return;
+        }
+        const rec = store.getNote(id);
+        if (!rec || rec.deleted)
+            return;
+        ctl.hold();
+        try {
+            const res = await store.deleteNote(id, rec);
+            if (res.ok) {
+                ctl.notesChanged?.();
+            } else {
+                platform.log.warn(`All notes: delete refused (${res.cause?.code})`);
+                allNotes?.showError(S.deleteRefused(res.cause?.code));
+            }
+        } finally {
+            ctl.release();
+        }
+    }
+
+    function showAllNotes() {
+        if (allNotes === null)
+            allNotes = new AllNotesWindow({ctl});
+        allNotes.present();
     }
 
     const alive = () => store.listNotes().filter(n => !n.deleted);
@@ -151,6 +218,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     function onStoreEvent(ev) {
         if (starting)
             return;
+        allNotes?.scheduleRefresh();
         const w = windows.get(ev.id);
         switch (ev.type) {
         case 'added':
@@ -212,10 +280,15 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         const add = new Gio.SimpleAction({name: 'new-note'});
         add.connect('activate', () => newNote(null));
         gtkApp.add_action(add);
+        const all = new Gio.SimpleAction({name: 'all-notes'});
+        all.connect('activate', () => showAllNotes());
+        gtkApp.add_action(all);
         gtkApp.set_accels_for_action('app.new-note', ['<Control>n']);
+        gtkApp.set_accels_for_action('app.all-notes', ['<Control>h']);
         Adw.StyleManager.get_default().connect('notify::dark', () => {
             for (const w of windows.values())
                 w.setDark(ctl.dark());
+            allNotes?.setDark(ctl.dark());
         });
     });
 
@@ -235,5 +308,5 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
 
     gtkApp.connect('shutdown', () => watcher?.stop());
 
-    return {gtkApp, store, windows, ctl, ready, run: argv => gtkApp.run(argv)};
+    return {gtkApp, store, windows, ctl, ready, run: argv => gtkApp.run(argv), showAllNotes, get allNotes() { return allNotes; }};
 }

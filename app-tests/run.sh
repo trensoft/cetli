@@ -13,8 +13,16 @@ if [ -z "${CETLI_GTKENV:-}" ]; then
     exit $rc
 fi
 . "$CETLI_GTKENV/gjsenv.sh"
-"$CETLI_GTKENV/headless.sh" 1920x1080 -- gjs -m "$here/app-tests/gtk-smoke.js" 2>&1 | grep -E '^(ok|FAIL) |checks passed|RESULT' || true
-"$CETLI_GTKENV/headless.sh" 1920x1080 -- gjs -m "$here/app-tests/gtk-smoke.js" >/dev/null 2>&1 || rc=1
+# CETLI_BULK=1 adds the 1000-note test (slow: it starts the program with 1000 files in the folder).
+smokes="gtk-smoke.js allnotes-smoke.js preview-marks-smoke.js marks-gjs-smoke.js color-picker-smoke.js color-render-smoke.js color-grid-render-smoke.js format-bar-smoke.js format-bar-render-smoke.js"
+[ "${CETLI_BULK:-}" = 1 ] && smokes="$smokes allnotes-bulk-smoke.js"
+for smoke in $smokes; do
+    echo "== $smoke"
+    out="$("$CETLI_GTKENV/headless.sh" 1920x1080 -- gjs -m "$here/app-tests/$smoke" 2>&1)"
+    st=$?
+    printf '%s\n' "$out" | grep -E '^(ok|FAIL|info) |checks passed|RESULT' || true
+    [ "$st" -eq 0 ] || rc=1
+done
 if command -v msgfmt >/dev/null 2>&1; then
     tmp="$(mktemp -d)"
     mkdir -p "$tmp/hu/LC_MESSAGES"

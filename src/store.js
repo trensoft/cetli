@@ -16,8 +16,8 @@
 // Platform: {sha256Hex(bytes), sha1(bytes) -> Uint8Array(20), now() -> ms, randomUuid(), randomBytes(n), log: {warn, info}}
 
 import {
-    CAUSE, MAX_FILE_BYTES, MAX_NOTES, MAX_REV, MAX_TEXT_BYTES, NAME_CONFLICT, NAME_MAIN, DEVICE_RE, ST,
-    TICK_MAX_BYTES, TICK_MAX_FILES, TOMBSTONE_PURGE_MS, UUID_LEN, UUID_RE, YEAR_MAX,
+    CAUSE, KNOWN_KEYS, MAX_FILE_BYTES, MAX_NOTES, MAX_REV, MAX_TEXT_BYTES, NAME_CONFLICT, NAME_MAIN, DEVICE_RE, ST,
+    TICK_MAX_BYTES, TICK_MAX_FILES, TOMBSTONE_PURGE_MS, UNKNOWN_KEY_RE, UUID_LEN, UUID_RE, YEAR_MAX,
 } from './constants.js';
 import {FS} from './fs-error.js';
 import {entryProblem, isoOf, makeFormat, utf8Len} from './format.js';
@@ -25,6 +25,49 @@ import {parseLayout, serializeLayout} from './layout.js';
 import {pickNoteColor} from './colors.js';
 
 const MAX_PASSES = 4;
+
+// The `extra` argument of a local save (2.5): a plain object whose keys are unknown keys of the record (V10 key pattern,
+// never one of the known keys, or canon would write the key twice). A value sets the key, `null` removes it, an absent
+// key is left alone. Values are taken through JSON so that the record in memory is what a reader of the file would see.
+// Result: a Map (null = remove) or null when the argument is not acceptable (the save is then refused as BAD_INPUT).
+function extraChanges(extra) {
+    if (typeof extra !== 'object' || extra === null || Array.isArray(extra))
+        return null;
+    const proto = Object.getPrototypeOf(extra);
+    if (proto !== Object.prototype && proto !== null)
+        return null;
+    const out = new Map();
+    for (const k of Object.keys(extra)) {
+        if (!UNKNOWN_KEY_RE.test(k) || KNOWN_KEYS.includes(k))
+            return null;
+        const v = extra[k];
+        if (v === null) {
+            out.set(k, null);
+            continue;
+        }
+        let json;
+        try {
+            json = JSON.stringify(v);
+        } catch {
+            return null;                                  // a cycle, a BigInt, a throwing getter
+        }
+        if (typeof json !== 'string')
+            return null;                                  // undefined, a function, a symbol: nothing to write
+        out.set(k, JSON.parse(json));
+    }
+    return out;
+}
+
+// Same keys, same values by their canonical text (what canon() writes), so equal here means equal bytes.
+function sameExtra(a, b) {
+    if (a.size !== b.size)
+        return false;
+    for (const [k, v] of a) {
+        if (!b.has(k) || JSON.stringify(b.get(k)) !== JSON.stringify(v))
+            return false;
+    }
+    return true;
+}
 const TMP_NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
 const CAUSE_TEXT = Object.freeze({
     [CAUSE.QUARANTINE]: t => `newer date: quarantine until ${t}`,
@@ -666,11 +709,14 @@ export class Store {
         return result;
     }
 
-    async _doSave({id, base, text, color, deleted}) {
+    async _doSave({id, base, text, color, deleted, extra}) {
         if (this.deviceId === null)
             throw new Error('store not started: no device id yet (call start() first)');
         if (typeof id !== 'string' || !UUID_RE.test(id) || typeof text !== 'string' || typeof color !== 'string' ||
             typeof deleted !== 'boolean')
+            return this._refuse(CAUSE.BAD_INPUT);
+        const changes = extra === undefined ? new Map() : extraChanges(extra);
+        if (changes === null)
             return this._refuse(CAUSE.BAD_INPUT);
         const name = mainName(id);
         // Read the current `<X>.json` and every other record of this id, fresh and without the tick budget.
@@ -691,8 +737,22 @@ export class Store {
         if (utf8Len(text0) > MAX_TEXT_BYTES)
             return this._refuse(CAUSE.TOO_LARGE);
 
-        // Nothing changed: no write (section 3 (3)).
-        if (d && base && base.v === d.v && d.text === text0 && d.color === color && d.deleted === deleted)
+        // The unknown keys of the new record: those of the record the user started from, then the changes of this save
+        // (a value sets, null removes). A deleted note keeps no `marks` (formatting contract, rule 6).
+        const origin = base ?? d;
+        const nextExtra = new Map(origin ? origin.extra : []);
+        for (const [k, v] of changes) {
+            if (v === null)
+                nextExtra.delete(k);
+            else
+                nextExtra.set(k, v);
+        }
+        if (deleted)
+            nextExtra.delete('marks');
+
+        // Nothing changed: no write (section 3 (3)). The unknown keys count: a save that only changes `extra` is a change.
+        if (d && base && base.v === d.v && d.text === text0 && d.color === color && d.deleted === deleted &&
+            sameExtra(nextExtra, d.extra))
             return {ok: true, unchanged: true, record: d};
 
         // The new record: above everything seen (section 1.2), so that local typing wins. Built and checked BEFORE the
@@ -707,11 +767,10 @@ export class Store {
         // Not in PLAN.md (V6 would call a year above 2100 UNKNOWN): refuse like the rev limit. Easy to remove: this branch.
         if (new Date(updatedMs).getUTCFullYear() > YEAR_MAX)
             return this._refuse(CAUSE.REV_LIMIT);
-        const origin = base ?? d;
         const rec = this.fmt.makeRecord({
             id, rev, updated: isoOf(updatedMs), created: origin ? origin.created : isoOf(nowMs), device: this.deviceId,
             color, text: text0, deleted, conflict_of: origin ? origin.conflict_of : null,
-        }, origin ? origin.extra : new Map());
+        }, nextExtra);
         if (!this.fmt.fitsV11(rec))
             return this._refuse(CAUSE.TOO_LARGE);
         // Never write a file our own reader would reject (clock before year 2000, a malformed `base`): V2 to V11 on the

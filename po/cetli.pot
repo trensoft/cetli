@@ -92,6 +92,18 @@ msgid "Gray"
 msgstr ""
 
 #: app/strings.js
+msgid "Black"
+msgstr ""
+
+#: app/strings.js
+msgid "White"
+msgstr ""
+
+#: app/strings.js
+msgid "RHEL red"
+msgstr ""
+
+#: app/strings.js
 msgid "A newer version arrived from the other computer"
 msgstr ""
 
@@ -170,4 +182,106 @@ msgstr ""
 
 #: app/strings.js
 msgid "Choose a color"
+msgstr ""
+
+#: app/strings.js
+msgid "All notes"
+msgstr ""
+
+#. Translators: shown in the "All notes" list for a note that has no text.
+#: app/strings.js
+msgid "(empty note)"
+msgstr ""
+
+# ---- All notes: search, cards, delete (0.2.2) ----
+
+#: app/strings.js
+msgid "Search notes…"
+msgstr ""
+
+#: app/strings.js
+msgid "No notes"
+msgstr ""
+
+#: app/strings.js
+msgid "After you create notes, they will appear here"
+msgstr ""
+
+#: app/strings.js
+msgid "No results"
+msgstr ""
+
+#: app/strings.js
+msgid "Try a different search"
+msgstr ""
+
+#. Translators: tooltips of the eye button on a card in the "All notes" list: the note window is open / closed now.
+#: app/strings.js
+msgid "Hide note"
+msgstr ""
+
+#: app/strings.js
+msgid "Show note"
+msgstr ""
+
+#: app/strings.js
+msgid "Delete note?"
+msgstr ""
+
+#: app/strings.js
+msgid "This cannot be undone. To only hide the note, close it instead."
+msgstr ""
+
+#: app/strings.js
+msgid "Cancel"
+msgstr ""
+
+#: app/strings.js
+msgid "Delete"
+msgstr ""
+
+#: app/strings.js
+#, javascript-format
+msgid "The note was not deleted (%s)"
+msgstr ""
+
+#: app/strings.js
+msgid "Formatting"
+msgstr ""
+
+#: app/strings.js
+msgid "Bold"
+msgstr ""
+
+#: app/strings.js
+msgid "Italic"
+msgstr ""
+
+#: app/strings.js
+msgid "Underline"
+msgstr ""
+
+#: app/strings.js
+msgid "Strikethrough"
+msgstr ""
+
+#. Translators: the key combination in the brackets is not translated.
+#: app/strings.js
+msgid "Bold (Ctrl+B)"
+msgstr ""
+
+#: app/strings.js
+msgid "Italic (Ctrl+I)"
+msgstr ""
+
+#: app/strings.js
+msgid "Underline (Ctrl+U)"
+msgstr ""
+
+#: app/strings.js
+msgid "Strikethrough (Ctrl+Shift+X)"
+msgstr ""
+
+#: app/strings.js
+msgid "Ctrl+Z does not undo formatting."
 msgstr ""

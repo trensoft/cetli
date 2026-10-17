@@ -104,7 +104,7 @@ test('2.5: the remote version is a tombstone: no copy, the note comes back', wit
 test('3 (3): an unchanged buffer is not written', withEnv({}, async env => {
     const created = (await env.store.createNote({text: 'same'})).record;
     env.layer.calls.length = 0;
-    const r = await env.store.saveNote(created.id, created, {text: 'same', color: 'yellow', deleted: false});
+    const r = await env.store.saveNote(created.id, created, {text: 'same', color: created.color, deleted: false});
     assert.equal(r.ok, true);
     assert.equal(r.unchanged, true);
     assert.equal(env.layer.calls.filter(c => c.op === 'writeTmp').length, 0);

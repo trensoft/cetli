@@ -7,7 +7,9 @@ import GLib from 'gi://GLib';
 import Gdk from 'gi://Gdk?version=4.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
+import {GRID_COLORS, NOTE_BLACK, isCustomColor, parseCustomColor} from '../app/data.js';
 import {createApp} from '../app/application.js';
+import * as S from '../app/strings.js';
 
 const base = GLib.dir_make_tmp('cetli-picker-XXXXXX');
 const dirs = {notes: `${base}/data/notes`, tmp: `${base}/data/tmp`, state: `${base}/state`};
@@ -78,9 +80,89 @@ async function scenario() {
         check(w.color === 'pink', `refused: ${JSON.stringify(bad)}`);
     }
 
-    // The colour popover builds its palette from COLORS (gray is not in it) and holds the picker.
-    check(w.customPicker.get_ancestor(Gtk.Popover) !== null, 'the picker is inside the colour popover');
+    // The picker is inside the hamburger menu (the popover of the menu button), not in a popover of its own.
+    check(w.customPicker.get_ancestor(Gtk.PopoverMenu) !== null, 'the picker is inside the hamburger menu');
     check(rev > 0, 'sane revision numbers');
+
+    // ---- the menu: the colour grid on top, then the entries (0.2.2)
+    const flat = [];
+    const walk = (m, depth) => {
+        for (let i = 0; i < m.get_n_items(); i++) {
+            const custom = m.get_item_attribute_value(i, 'custom', null)?.get_string()[0];
+            const action = m.get_item_attribute_value(i, 'action', null)?.get_string()[0];
+            const label = m.get_item_attribute_value(i, 'label', null)?.get_string()[0];
+            const sec = m.get_item_link(i, 'section');
+            if (sec) {
+                flat.push('|');
+                walk(sec, depth + 1);
+            } else {
+                flat.push(custom ? `custom:${custom}` : `${action}:${label}`);
+            }
+        }
+    };
+    walk(ctl.ctl.menu, 0);
+    check(flat.join(' ') === `| custom:colors | app.all-notes:${S.menuAllNotes()} win.delete:${S.menuDeleteNote()} | win.about:${S.menuAbout()}`,
+        `menu order: the grid, a separator, All notes, Delete note, then About (${flat.join(' ')})`);
+    check(!flat.some(e => e.startsWith('app.new-note')), 'New note is not in the menu');
+    check(ctl.gtkApp.get_accels_for_action('app.all-notes').join() === '<Control>h', 'All notes has Ctrl+H');
+    check(ctl.gtkApp.get_accels_for_action('app.new-note').join() === '<Control>n', 'New note keeps Ctrl+N');
+    // New note: a + button in the header of the note window
+    check(w.addButton.get_ancestor(Gtk.HeaderBar) !== null && w.addButton.get_action_name() === 'app.new-note' && w.addButton.get_icon_name() === 'list-add-symbolic',
+        'the + button is in the header and runs app.new-note');
+    check(w.addButton.get_tooltip_text() === S.menuNewNote(), 'the + button has the tooltip of New note');
+    const before = ctl.windows.size;
+    w.addButton.emit('clicked');
+    await waitFor(() => ctl.windows.size > before);
+    check(ctl.windows.size === before + 1, `a click on + opens a new note window (${before} -> ${ctl.windows.size})`);
+    for (const [otherId, other] of [...ctl.windows])
+        if (otherId !== id)
+            other.win.close();
+    await sleep(300);
+
+    // ---- the colour grid: 9 circles in the order of GRID_COLORS, 2 rows of 5, and the custom one last
+    check(GRID_COLORS.length === 9 && [...w.dots.keys()].join() === GRID_COLORS.join(), `the nine circles are GRID_COLORS in order (${[...w.dots.keys()]})`);
+    const grid = w.dots.get(GRID_COLORS[0]).button.get_ancestor(Gtk.Grid);
+    check(grid instanceof Gtk.Grid && w.customPicker.get_ancestor(Gtk.Grid) === grid, 'the circles and the picker are in one grid');
+    const cell = child => { const [col, row] = grid.query_child(child.get_parent() instanceof Gtk.Overlay ? child.get_parent() : child); return `${col},${row}`; };
+    check(GRID_COLORS.every((v, i) => cell(w.dots.get(v).button) === `${i % 5},${Math.floor(i / 5)}`), 'two rows of five: the nine circles fill them in order');
+    check(grid.get_row_spacing() === 10 && grid.get_column_spacing() === 10 && grid.get_margin_start() === 12 && grid.get_margin_end() === 12 && grid.get_margin_top() === 12,
+        'the grid has 10 px gaps and 12 px margins');
+    check(cell(w.customDot.button) === '4,1', 'the custom circle is the tenth, last of the second row');
+    check(w.customPicker.get_opacity() === 0 && w.customDot.button.get_child_visible(), 'the picker lies invisible over the custom circle');
+    check(w.customPicker.get_parent() === w.customDot.button.get_parent() && w.customDot.button.get_child() instanceof Gtk.Image && w.customDot.button.get_child().get_icon_name() === 'list-add-symbolic',
+        'the custom circle has a + and the picker lies over it');
+    check(w.customPicker.get_tooltip_text() === S.customColorTooltip(), 'the invisible picker has a name as tooltip');
+    check(GRID_COLORS.every(v => w.dots.get(v).button.get_tooltip_text() === S.colorName(v)) && !GRID_COLORS.some(v => S.colorName(v) === v),
+        'every circle has a name as tooltip (no raw #rrggbb)');
+
+    // a click on a circle sets that colour and saves it in the colour field; the tick is on that circle only
+    const marked = d => d.badge.get_visible() && d.button.has_css_class('cetli-selected');
+    const ticks = () => GRID_COLORS.filter(v => marked(w.dots.get(v))).concat(marked(w.customDot) ? ['custom'] : []);
+    const half = () => [...w.dots.values(), w.customDot].some(d => d.badge.get_visible() !== d.button.has_css_class('cetli-selected'));
+    for (const v of GRID_COLORS) {
+        w.dots.get(v).button.emit('clicked');
+        await waitFor(() => fileRec(id).color === v);
+        check(w.color === v && fileRec(id).color === v, `the circle ${v} sets and saves that colour (${fileRec(id).color})`);
+        check(ticks().join() === v && !half(), `and only that circle has the ring and the badge (${ticks()})`);
+        check(!w.customDot.button.has_css_class('cetli-selected') && w.customDot.fill === null, 'the custom circle stays neutral');
+        check(!w.win.has_css_class('cetli-fixed') === !isCustomColor(v), `the window is "fixed" only for a #rrggbb colour (${v})`);
+    }
+    // a colour from the picker that no circle has: the tick moves to the rainbow circle; one that a circle has: to that circle
+    choose(rgba(0x12, 0x34, 0x56));
+    await waitFor(() => fileRec(id).color === '#123456');
+    check(ticks().join() === 'custom' && !half(), `a colour of the picker that no circle has: the ring and the badge are on the custom circle (${ticks()})`);
+    check(w.customDot.button.has_css_class('cetli-fill-123456') && w.win.has_css_class('cetli-fixed'), 'the custom circle takes that colour, the window is fixed');
+    const black = parseCustomColor(NOTE_BLACK);
+    choose(rgba(black.r, black.g, black.b));
+    await waitFor(() => fileRec(id).color === NOTE_BLACK);
+    check(fileRec(id).color === NOTE_BLACK && ticks().join() === NOTE_BLACK, `the picker's black is the black circle's colour: the mark is there (${ticks()})`);
+    check(w.customDot.fill === null && !w.customDot.button.has_css_class(`cetli-fill-${NOTE_BLACK.slice(1)}`), 'and the custom circle is neutral again');
+    w.setColor('#336699');
+    check(ticks().join() === 'custom' && w.customDot.button.has_css_class('cetli-fill-336699'), 'a colour set in code shows the same mark');
+    w.setColor('green');
+    check(ticks().join() === 'green' && w.customDot.fill === null, 'and a name takes it away from the custom circle');
+    await sleep(500);
+    check(w.color === 'green', 'nothing came back by itself');
 }
 
 scenario().then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {

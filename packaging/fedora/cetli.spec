@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.0
+Version:        0.2.2
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -122,6 +122,16 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.2-1
+- Menu rearranged: a "+" button for a new note in the header bar (Ctrl+N); the main menu holds the colour grid on top, then All notes (Ctrl+H), Delete note and About
+- Colour grid with round swatches: yellow, pink, green, purple, blue, gray, charcoal (#3f3d3c), white and RHEL red (#ee0000), and a last circle for a custom #rrggbb colour; orange, mint and peach are no longer offered, notes that have them keep them
+- All notes window: a search field, one card per note (colour, time of the last change, first lines), an eye to hide or show the note window, a trash button with a confirmation, the most recently changed note first
+- The cards of the All notes window show the formatting of a note when it is intact, plain text otherwise
+- Formatting bar: bold, italic, underline and strikethrough on the selected text (Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+Shift+X); the buttons work on a selection only, there is no typing style, and a paste is plain text
+- Formatting is stored beside the text as a list of ranges ("marks"); formatting never changes the text, and a note without formatting is saved as before
+- Notes written by cetli 0.1.0 or 0.2.0 open as before and keep the formatting data; after such a version edits the text, 0.2.2 shows that note without formatting, the text is intact
+- Known limit: Ctrl+Z does not undo a formatting change
+
 * Sat Oct 17 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.0-1
 - Eight note colours: yellow, pink, green, purple, orange, blue, mint, peach
 - A new note starts with a random base colour

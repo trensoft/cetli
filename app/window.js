@@ -8,8 +8,9 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {SAVE_COALESCE_MS} from '../src/constants.js';
-import {COLORS, REMOTE_QUIET_MS, WINDOW_TITLE_PREFIX, cssClassOf, customColorStyle, isCustomColor, parseCustomColor} from './data.js';
+import {COLORS, GRID_COLORS, PALETTE, REMOTE_QUIET_MS, WINDOW_TITLE_PREFIX, cssClassOf, customColorStyle, isCustomColor, parseCustomColor, textColorFor} from './data.js';
 import {changedRegion} from './textdiff.js';
+import {FORMAT_ACTIONS, FormatBar, marksExtra, rangesOfRecord, sameRanges} from './format-bar.js';
 import * as S from './strings.js';
 
 // A Gdk.RGBA as the lower case `#rrggbb` of the core's custom colour.
@@ -32,6 +33,73 @@ function ensureCustomStyle(color) {
     customProviders.add(style.cls);
 }
 
+// The fill of a circle in the colour grid: a custom `#rrggbb` is itself, a name is the strip (header) colour of that colour, as
+// in the Sticky Notes circles.
+const dotFill = value => (isCustomColor(value) ? value : (PALETTE[value]?.lightHeader ?? null));
+
+// The CSS of the circles, once for the program: one class per place in the grid, built from the fills (which are
+// constants of data.js, `#rrggbb` only). A selected circle has a ring (an outer shadow, with a gap in the colour of the popover) and a
+// badge in its corner, NOT a tick on the fill (a tick on the yellow fill is 1.17:1). Every circle has a 1 px border, so the white
+// one can be seen on the white popover. `.cetli-fixed` (a custom colour on the note) puts the mark label at full opacity.
+const DOT_SIZE = 36;                           // the circles of the grid, px with the 1 px border (the grid is 5 x 36 + 4 x 10 = 220 px wide)
+let gridStyleAdded = false;
+
+function ensureGridStyle() {
+    if (gridStyleAdded)
+        return;
+    const rules = [
+        `button.cetli-dot { min-width: ${DOT_SIZE - 2}px; min-height: ${DOT_SIZE - 2}px; padding: 0; border-radius: ${DOT_SIZE / 2}px; border: 1px solid rgba(0, 0, 0, 0.5); background-image: none; }`,
+        'window.cetli-dark button.cetli-dot { border-color: rgba(255, 255, 255, 0.5); }',
+        'button.cetli-dot.cetli-selected { box-shadow: 0 0 0 2px @popover_bg_color, 0 0 0 4px @accent_bg_color; }',
+        'button.cetli-dot.cetli-dot-focus { outline: 2px solid @accent_bg_color; outline-offset: 2px; }',
+        'button.cetli-dot-custom { background-color: rgba(128, 128, 128, 0.25); }',
+        'image.cetli-badge { background-color: @accent_bg_color; color: @accent_fg_color; border-radius: 9px; padding: 3px; }',
+        'window.cetli-note.cetli-fixed label.cetli-mark { opacity: 1; }',
+    ];
+    GRID_COLORS.forEach((value, i) => {
+        const fill = dotFill(value);
+        if (fill !== null && parseCustomColor(fill) !== null)
+            rules.push(`button.cetli-dot-${i} { background-color: ${fill}; }`);
+    });
+    addProvider(rules);
+    gridStyleAdded = true;
+}
+
+function addProvider(rules) {
+    const css = `${rules.join('\n')}\n`;
+    const provider = new Gtk.CssProvider();
+    if (typeof provider.load_from_string === 'function')
+        provider.load_from_string(css);
+    else
+        provider.load_from_data(css);
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+// The custom circle shows the colour of a note that no other circle has: one rule per colour (from three integers), once.
+const fillProviders = new Set();
+
+function ensureFillStyle(color) {
+    const rgb = parseCustomColor(color);
+    if (rgb === null)
+        return null;
+    const cls = `cetli-fill-${color.slice(1)}`;
+    if (!fillProviders.has(cls)) {
+        addProvider([`button.cetli-dot-custom.${cls} { background-color: ${color}; color: ${textColorFor(rgb)}; }`]);
+        fillProviders.add(cls);
+    }
+    return cls;
+}
+const GRID_COLUMNS = 5;                       // 2 rows of 5: the 9 colours of GRID_COLORS and the custom colour
+
+// A circle (a button) with the badge of the selection over its bottom right corner; -> {overlay, badge}.
+function withBadge(button) {
+    const badge = new Gtk.Image({icon_name: 'object-select-symbolic', pixel_size: 10, halign: Gtk.Align.END, valign: Gtk.Align.END, can_target: false, visible: false});
+    badge.add_css_class('cetli-badge');
+    const overlay = new Gtk.Overlay({child: button});
+    overlay.add_overlay(badge);
+    return {overlay, badge};
+}
+
 const nowMs = () => Math.floor(GLib.get_monotonic_time() / 1000);
 
 function once(ms, fn) {
@@ -42,13 +110,14 @@ function once(ms, fn) {
 }
 
 export class NoteWindow {
-    // ctl: {store, gtkApp, menu, dark, hold(), release(), newNote(win), showAbout(win), setOpen(id, open), closed(id), log}
+    // ctl: {store, gtkApp, menu, dark, hold(), release(), newNote(win), showAbout(win), setOpen(id, open), closed(id), notesChanged(), log}
     constructor({ctl, record, size}) {
         this.ctl = ctl;
         this.store = ctl.store;
         this.id = record.id;
         this.base = record;                 // the record the user started from (core 2.5)
         this.shownText = record.text;       // the text of the version last read from or written to disk (PLAN 3 (3))
+        this.shownRanges = rangesOfRecord(record);   // its formatting (stored marks, or none when they do not fit the text)
         this.color = record.color;
         this.colorClass = null;             // the CSS class of the colour now on the window
         this.applying = false;              // PLAN 3 (2): set while a remote text is put into the buffer
@@ -91,24 +160,90 @@ export class NoteWindow {
         header.set_title_widget(new Gtk.Label({label: ''}));    // the title is the contract name, not for the eye
         this.unresolved = new Gtk.Label({visible: false});
         this.unresolved.add_css_class('cetli-unresolved');
+        // New note: a + in the header (not in the menu); Ctrl+N is the accelerator of the same action.
+        const add = Gtk.Button.new_from_icon_name('list-add-symbolic');
+        add.set_action_name('app.new-note');
+        add.set_tooltip_text(S.menuNewNote());
+        add.update_property([Gtk.AccessibleProperty.LABEL], [S.menuNewNote()]);
+        this.addButton = add;
+        header.pack_start(add);
         header.pack_start(this.unresolved);
 
-        const swatches = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 6});
-        for (const name of COLORS) {
-            const b = new Gtk.Button({
-                action_name: 'win.color', action_target: GLib.Variant.new_string(name), tooltip_text: S.colorName(name),
-            });
-            b.add_css_class(`cetli-swatch-${name}`);
-            b.add_css_class('circular');
-            swatches.append(b);
-        }
-        const popoverBox = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6, margin_top: 6, margin_bottom: 6, margin_start: 6, margin_end: 6});
-        popoverBox.append(swatches);
-        popoverBox.append(this._buildCustomPicker());
-        const colorButton = new Gtk.MenuButton({icon_name: 'color-select-symbolic', tooltip_text: S.colorTooltip(), popover: new Gtk.Popover({child: popoverBox})});
-        header.pack_end(new Gtk.MenuButton({icon_name: 'open-menu-symbolic', menu_model: this.ctl.menu, tooltip_text: S.menuTooltip()}));
-        header.pack_end(colorButton);
+        // The hamburger menu: the colour grid on top (a custom item of the menu model, filled in here), then the entries.
+        const popover = Gtk.PopoverMenu.new_from_model(this.ctl.menu);
+        popover.add_child(this._buildColorGrid(), 'colors');
+        this.menuPopover = popover;
+        this.menuButton = new Gtk.MenuButton({icon_name: 'open-menu-symbolic', popover, tooltip_text: S.menuTooltip()});
+        header.pack_end(this.menuButton);
         this.win.set_titlebar(header);
+    }
+
+    // The colours of GRID_COLORS as circles (2 rows of 5), then a circle with a + for any other colour. A circle sets the
+    // colour through the `win.color` action; the circle of the colour the note has shows a ring and a badge.
+    _buildColorGrid() {
+        ensureGridStyle();
+        const grid = new Gtk.Grid({row_spacing: 10, column_spacing: 10, margin_top: 12, margin_bottom: 12, margin_start: 12, margin_end: 12, halign: Gtk.Align.CENTER});
+        this.dots = new Map();               // colour value -> {button, badge}
+        GRID_COLORS.forEach((value, i) => {
+            const button = new Gtk.Button({action_name: 'win.color', action_target: GLib.Variant.new_string(value), tooltip_text: S.colorName(value)});
+            button.add_css_class('cetli-dot');
+            button.add_css_class(`cetli-dot-${i}`);
+            button.update_property([Gtk.AccessibleProperty.LABEL], [S.colorName(value)]);
+            const {overlay, badge} = withBadge(button);
+            this.dots.set(value, {button, badge});
+            grid.attach(overlay, i % GRID_COLUMNS, Math.floor(i / GRID_COLUMNS), 1, 1);
+        });
+        // The last circle: what the user sees is a neutral circle with a + (the colour of the note, if it is a custom one);
+        // the picker (the same one as before, it opens the GTK colour chooser) lies over it, invisible, and takes the click
+        // and the focus. As it is invisible, the circle shows the focus (cetli-dot-focus).
+        const plus = new Gtk.Image({icon_name: 'list-add-symbolic', pixel_size: 16});
+        const circle = new Gtk.Button({child: plus, can_target: false, focusable: false});
+        circle.add_css_class('cetli-dot');
+        circle.add_css_class('cetli-dot-custom');
+        const picker = this._buildCustomPicker();
+        picker.set_opacity(0);
+        picker.update_property([Gtk.AccessibleProperty.LABEL], [S.customColorTooltip()]);
+        const focus = new Gtk.EventControllerFocus();
+        focus.connect('notify::contains-focus', () => {
+            if (focus.contains_focus)
+                circle.add_css_class('cetli-dot-focus');
+            else
+                circle.remove_css_class('cetli-dot-focus');
+        });
+        picker.add_controller(focus);
+        const {overlay: custom, badge} = withBadge(circle);
+        custom.add_overlay(picker);
+        this.customDot = {button: circle, badge, fill: null};
+        grid.attach(custom, GRID_COLUMNS - 1, 1, 1, 1);
+        this._syncGrid();
+        return grid;
+    }
+
+    // The ring and the badge: on the circle whose value is the colour of the note; a custom colour that no circle has: on the
+    // custom one, which also takes that colour.
+    _syncGrid() {
+        if (!this.dots)
+            return;
+        for (const [value, dot] of this.dots)
+            this._select(dot, this.color === value);
+        const other = isCustomColor(this.color) && !this.dots.has(this.color);
+        this._select(this.customDot, other);
+        const cls = other ? ensureFillStyle(this.color) : null;
+        if (this.customDot.fill !== cls) {
+            if (this.customDot.fill)
+                this.customDot.button.remove_css_class(this.customDot.fill);
+            if (cls)
+                this.customDot.button.add_css_class(cls);
+            this.customDot.fill = cls;
+        }
+    }
+
+    _select(dot, on) {
+        dot.badge.set_visible(on);
+        if (on)
+            dot.button.add_css_class('cetli-selected');
+        else
+            dot.button.remove_css_class('cetli-selected');
     }
 
     // Any colour, next to the palette. Gtk.ColorDialogButton is GTK 4.10 and later (RHEL 10 has 4.16); GTK 4.8 (the Debian 12
@@ -154,11 +289,14 @@ export class NoteWindow {
         this.buffer.set_text(text, -1);
         this.applying = false;
         this.buffer.connect('changed', () => this._onChanged());
+        this.bar = new FormatBar({view: this.view, buffer: this.buffer, onChange: () => this._onChanged(true)});
+        this.bar.setRanges(this.shownRanges);
         const scroll = new Gtk.ScrolledWindow({child: this.view, hexpand: true, vexpand: true});
         this.markLabel = new Gtk.Label({visible: false, xalign: 0, wrap: true});
         this.markLabel.add_css_class('cetli-mark');
         box.append(scroll);
         box.append(this.markLabel);
+        box.append(this.bar.widget);
         this.win.set_child(box);
     }
 
@@ -171,6 +309,11 @@ export class NoteWindow {
         act('delete', () => this.deleteNote());
         act('about', () => this.ctl.showAbout(this.win));
         act('color', p => this.setColor(p.get_string()[0]), new GLib.VariantType('s'));
+        // Formatting keys: the accelerators belong to the application (set once), the actions to each window.
+        for (const f of FORMAT_ACTIONS) {
+            act(f.name, () => this.bar.activate(f.flag));
+            this.ctl.gtkApp.set_accels_for_action(`win.${f.name}`, [f.accel]);
+        }
     }
 
     // ---- look ------------------------------------------------------------------------------------------------
@@ -181,7 +324,12 @@ export class NoteWindow {
         ensureCustomStyle(this.color);
         this.colorClass = cssClassOf(this.color);
         this.win.add_css_class(this.colorClass);
+        if (isCustomColor(this.color))
+            this.win.add_css_class('cetli-fixed');
+        else
+            this.win.remove_css_class('cetli-fixed');
         this._syncPicker();
+        this._syncGrid();
     }
 
     setDark(dark) {
@@ -219,11 +367,12 @@ export class NoteWindow {
     }
 
     _dirty() {
-        return this._bufferText() !== this.shownText || this.color !== this.base.color;
+        return this._bufferText() !== this.shownText || this.color !== this.base.color || !sameRanges(this.bar.ranges(), this.shownRanges);
     }
 
-    _onChanged() {
-        if (this.applying)
+    // `format`: a formatting step (a tag change raises no `changed`, so the bar tells us).
+    _onChanged(format = false) {
+        if (this.applying && !format)
             return;                          // PLAN 3 (2): applying a remote text is not a user edit
         this.lastKey = nowMs();
         this.closeWarned = false;            // new text: a refused save is a new reason to ask before closing
@@ -253,10 +402,11 @@ export class NoteWindow {
         return run;
     }
 
-    async _doSave(text = this._bufferText()) {
+    // `text` and `ranges` are read together: the text and its formatting of the same instant.
+    async _doSave(text = this._bufferText(), ranges = this.bar.ranges()) {
         if (this.deleted)
             return;
-        if (text === this.shownText && this.color === this.base.color)
+        if (text === this.shownText && this.color === this.base.color && sameRanges(ranges, this.shownRanges))
             return;                          // PLAN 3 (3): nothing differs from what is on disk
         this.ctl.hold();
         try {
@@ -264,7 +414,7 @@ export class NoteWindow {
             // glib 2.74) and DURABLE also fsyncs the tmp/ directory on every save, so the main loop stands still for its
             // duration. The cost on a real disk is not measured. It runs from the SAVE_COALESCE_MS timer, never from a key
             // handler.
-            this._afterSave(await this.store.saveNote(this.id, this.base, {text, color: this.color, deleted: false}));
+            this._afterSave(await this.store.saveNote(this.id, this.base, {text, color: this.color, deleted: false, extra: marksExtra(text, ranges)}));
         } finally {
             this.ctl.release();
         }
@@ -275,9 +425,11 @@ export class NoteWindow {
         if (res.ok) {
             this.base = res.record;
             this.shownText = res.record.text;
+            this.shownRanges = rangesOfRecord(res.record);
             this.pendingRemote = null;       // the local text won; the other version was kept as a copy (2.5)
             this.remoteDeleted = false;
             this._clearMark();
+            this.ctl.notesChanged?.();       // our own saves raise no store event: the "All notes" list is told here
         } else {
             this._setMark('refused', S.markNotSaved(res.cause.code));
         }
@@ -289,7 +441,7 @@ export class NoteWindow {
     }
 
     setColor(name) {
-        if (!(COLORS.includes(name) || isCustomColor(name)) || name === this.color)
+        if (!(COLORS.includes(name) || GRID_COLORS.includes(name) || isCustomColor(name)) || name === this.color)
             return;
         this.color = name;
         this._applyColorClass();
@@ -307,6 +459,7 @@ export class NoteWindow {
                 const res = await this.store.deleteNote(this.id, this.base);
                 if (res.ok) {
                     this.deleted = true;
+                    this.ctl.notesChanged?.();
                     this.win.close();
                 } else {
                     this._setMark('refused', S.markNotSaved(res.cause.code));
@@ -380,6 +533,9 @@ export class NoteWindow {
                 this.applying = false;
             }
         }
+        // The formatting of that version (only when its marks fit its text), also when the text itself did not change.
+        this.shownRanges = rangesOfRecord(rec);
+        this.bar.setRanges(this.shownRanges);
         this.base = rec;
         this.shownText = rec.text;
         this.color = rec.color;
@@ -408,9 +564,10 @@ export class NoteWindow {
             this._quietTimer = null;
         }
         const text = this._bufferText();
+        const ranges = this.bar.ranges();      // read now: the window is gone when the queued save runs
         // The last text and the "closed" flag are written even if this was the last window (the app is held meanwhile).
         this._queue(async () => {
-            await this._doSave(text);
+            await this._doSave(text, ranges);
             if (!this.deleted) {
                 this.ctl.hold();
                 try {

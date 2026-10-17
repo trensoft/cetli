@@ -95,9 +95,11 @@ async function scenario() {
     check(fileRec(id).rev === 2, `one write for the burst (rev ${fileRec(id).rev})`);
 
     // colour
-    w.setColor('green');
+    const startColor = w.color;
+    const pickedColor = NOTE_COLOR_IDS.find(c => c !== startColor);
+    w.setColor(pickedColor);
     await sleep(500);
-    check(fileRec(id).color === 'green' && w.win.has_css_class('cetli-green') && !w.win.has_css_class('cetli-yellow'), 'colour change saved and class swapped');
+    check(fileRec(id).color === pickedColor && w.win.has_css_class(`cetli-${pickedColor}`) && !w.win.has_css_class(`cetli-${startColor}`), 'colour change saved and class swapped');
 
     // remote version, window clean and quiet: text replaced, cursor after the change shifts
     await sleep(2200);
@@ -190,17 +192,19 @@ async function scenario() {
     w3.buffer.insert_at_cursor('d', -1);
     await sleep(450);
     check(!w3._dirty() && fileRec(id3).text === 'abcd', 'the key was saved: the window is clean');
-    remoteWrite(id3, {rev: fileRec(id3).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'abcd REMOTE', color: 'purple'});
+    const startColor3 = w3.color;
+    const remoteColor = NOTE_COLOR_IDS.find(c => c !== startColor3);
+    remoteWrite(id3, {rev: fileRec(id3).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'abcd REMOTE', color: remoteColor});
     await sleep(700);
     check(w3._bufferText() === 'abcd' && w3.mark?.kind === 'newer', 'a clean window with a key 1 s ago keeps its text and shows the mark');
-    check(w3.color !== 'purple' && !w3.win.has_css_class('cetli-purple'), 'and its colour');
+    check(w3.color === startColor3 && !w3.win.has_css_class(`cetli-${remoteColor}`), 'and its colour');
     await sleep(1700);
     check(w3._bufferText() === 'abcd REMOTE' && w3.mark === null, 'after 2 s without a key the remote text is taken, the mark goes');
-    check(w3.color === 'purple' && w3.win.has_css_class('cetli-purple') && !w3.win.has_css_class('cetli-yellow'), 'the colour of the remote version is applied');
+    check(w3.color === remoteColor && w3.win.has_css_class(`cetli-${remoteColor}`) && !w3.win.has_css_class(`cetli-${startColor3}`), 'the colour of the remote version is applied');
 
     // a cursor exactly at the start of the changed region stays before the new text
     w3.buffer.place_cursor(w3.buffer.get_iter_at_offset(4));
-    remoteWrite(id3, {rev: fileRec(id3).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'abcdXYZ REMOTE', color: 'purple'});
+    remoteWrite(id3, {rev: fileRec(id3).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'abcdXYZ REMOTE', color: remoteColor});
     await sleep(900);
     check(w3._bufferText() === 'abcdXYZ REMOTE', `the text was inserted (${w3._bufferText()})`);
     const at = m => w3.buffer.get_iter_at_mark(m).get_offset();

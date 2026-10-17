@@ -48,14 +48,35 @@ Surface for the app (`src/index.js`): `createStore`, `createWatcher`, `Store` me
 
 ## Base colour of a new note (0.2.0)
 
-`createNote({text, color})`: when `color` is missing, the core picks it (`src/colors.js`); an explicit colour is kept as given (`gray`, a custom `#rrggbb`) and the random source is not touched.
+`createNote({text, color})`: when `color` is missing, the core picks it (`src/colors.js`); an explicit colour is kept as given (a legacy name, a custom `#rrggbb`) and the random source is not touched.
 
-- The candidates are `NOTE_COLOR_IDS` (the menu order: yellow, pink, green, purple, orange, blue, mint, peach). `gray` is a known value of old notes but not a candidate.
-- Colours that a live note (`listNotes()`, not `deleted`) already shows are excluded. A custom colour, `gray`, an unknown string and a deleted note occupy nothing. When all 8 are used, the draw is over all 8 again.
+- The candidates are `NOTE_COLOR_IDS` (the grid order of 0.2.2: yellow, pink, green, purple, blue, gray). `orange`, `mint` and `peach` are known values of old notes but not candidates.
+- Colours that a live note (`listNotes()`, not `deleted`) already shows are excluded. A custom colour, a legacy name (orange, mint, peach), an unknown string and a deleted note occupy nothing. When all 6 are used, the draw is over all 6 again.
 - The random source is the injected platform's `randomBytes(4)` (already in the platform contract; no new member, no `Math.random` in the core). The index is drawn by rejection sampling, so there is no modulo bias; a source that is always rejected stops after 64 draws.
 - The colour is chosen inside the serial section of `createNote`, so two quick "new note" calls cannot draw from the same view.
 - NOT measured: how even the draw is on the real `GLib.random_int_range` source (the tests script the source); the colour is not validated by the core beyond V8 (a string), the app decides what it shows (`app/data.js`).
 - Tests: `tests/colors.test.js` (11), mutants M50-M58 in `tests/mutants.js`. The presentation side (palette, contrast, custom colour CSS) is tested in `app-tests/color.test.js`.
+
+## Unknown keys of a local save: `saveNote(id, base, {text, color, deleted, extra})` (0.2.2, card 1751509d, contract section 3)
+
+`extra` is the new, OPTIONAL fourth member of the save request. The formatting of a note is stored under the unknown key `marks` (shape and rules: `evidence/formatting-contract.md`; the core does not read or build `marks`, it only carries keys).
+
+**What changed** (only `src/store.js`; `format.js`, `constants.js`, `app/*` untouched):
+- `extra` is a plain object. A value SETS the key on the record, `null` REMOVES it, a key that is not named is LEFT ALONE (the unknown keys of the `base` the user started from are the starting point, as before). `extra` absent or `{}` = no change to the keys: a note without `marks` is written byte-identical to the old rule.
+- Validation before anything is read or written; failure is `BAD_INPUT` with the reason "bad input", no file, no copy of D, no tmp left: `extra` not a plain object (string, number, array, `null`, a `Map`, a class instance); a key outside the V10 pattern (`^[a-z0-9_]{1,32}$`) or equal to a KNOWN key of the record (`schema`, `id`, `rev`, `updated`, `created`, `device`, `color`, `text`, `deleted`, `conflict_of`: canon would write it twice); a value with no JSON form (`undefined`, a function, a symbol, a BigInt, a cycle). Values are taken through `JSON.stringify` / `JSON.parse`, so the record in memory is what a reader of the file would see and a later change of the caller's object cannot reach it.
+- The V10 limits that depend on the whole record (more than 16 unknown keys, depth above 8) are the SAME check as for every save: `classify` on the bytes about to be written, refusal `BAD_INPUT` (the existing step, unchanged). Size is the existing `fitsV11` (`TOO_LARGE`), unchanged. The order of the causes is unchanged: `<X>.json` state, text size, `REV_LIMIT`, `TOO_LARGE`, `BAD_INPUT`, then the copy slot; the `extra` argument check comes FIRST (it needs no read).
+- The "nothing changed" branch compares the unknown keys too (by their canonical text, so equal means equal bytes). Without it a formatting-only save (same text, same colour, only `marks` differs) would return `unchanged` and be lost silently. A save that changes nothing, extra included, is still not written.
+- `deleted: true` drops the `marks` key (contract rule 6) whatever `extra` says, for `deleteNote` and for `saveNote({deleted: true})`; the other unknown keys of a tombstone stay as they were. One consequence, stated: a tombstone written by an OLD client keeps its `marks` (old clients write unknown keys back unchanged); deleting such an already deleted note again would write a new tombstone without them (not reachable from the UI, which does not show deleted notes).
+- `fitsV11` and `expectedCopy` are not touched: the conflict copy of a lost version carries ITS unknown keys unchanged (tested), the winner carries the keys of the save. The retry of a refused save replays the request, `extra` included (tested).
+- `createNote` is not changed: a new note has no `marks`; formatting it is a `saveNote` after creation.
+
+**Decisions where the contract says "optional object" and nothing more** (told to Peter):
+- `extra: null` is `BAD_INPUT`, not "no extra" (a caller that means "none" passes `undefined` or `{}`): a refused save is visible, a silently ignored argument is not.
+- A known key in `extra` is refused instead of overwriting the field; `text`, `color`, `deleted` have their own members.
+
+**Tests:** `tests/extra.test.js` (31). Positive control: the same file against the OLD `store.js` (the `cetli/` tree): 30 of 31 fail, the one that passes is the control that a value 8 levels deep is allowed (the old core ignores `extra`, so it cannot refuse anything). Negative control: mutants M59-M68 in `tests/mutants.js` (the file's own numbering continues at M59; the card text said "A140", which is the range of the app mutants in `app-tests/mutants.js`).
+
+**Not measured:** the real gjs: the exception type and the depth at which SpiderMonkey's `JSON.stringify` gives up on a very deep value (the code catches every exception of `JSON.stringify` and refuses as `BAD_INPUT`, so the type does not matter, the depth at which it happens was not measured); the UI side (`app/*` passes `extra` only after the UI package adds it: today `app/window.js` calls `saveNote` without it, which is the old behaviour).
 
 ## NOT MEASURED (needs a real gjs / GLib / Syncthing run; P4 `%check` or Attila's machine)
 
