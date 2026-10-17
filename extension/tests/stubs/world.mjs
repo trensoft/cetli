@@ -73,7 +73,10 @@ export class FakeWindow {
         if (mode === 'throw')
             throw new TypeError('move_resize_frame is not a function');
         const obey = mode === 'obey' || (mode === 'ignore-first' && this.moveCalls.length > 1);
-        if (mode === 'clamp-y')
+        if (mode === 'late') {
+            // A compositor that obeys, but only after a while (a configure round trip): the signals come late.
+            world.timers.set(world.nextTimer++, {at: world.now + 300, fn: () => this.#set({x, y, w, h})});
+        } else if (mode === 'clamp-y')
             this.#set({x, y: Math.max(y, 400), w, h});
         else if (obey)
             this.#set({x, y, w, h});

@@ -59,7 +59,6 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     const version = readVersion();
     let menu = null;
     let watcher = null;
-    let started = false;
     let starting = false;
     let unresolved = 0;
     let resolveReady;
@@ -109,7 +108,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     }
 
     async function newNote(from) {
-        const res = await store.createNote({text: '', color: DEFAULT_COLOR});
+        const res = await store.createNote({text: ''});               // the core picks the base colour (src/colors.js)
         if (!res.ok) {
             from?._setMark('refused', S.markNotSaved(res.cause.code));
             return null;
@@ -199,7 +198,6 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         store.onEvent(onStoreEvent);
         await watcher.start();
         starting = false;
-        started = true;
         await showStartWindows();
     }
 
@@ -221,9 +219,14 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         });
     });
 
+    let startPromise = null;
     gtkApp.connect('activate', () => {
         gtkApp.hold();                                 // the app must live while the core starts
-        (started ? showAll() : start()).then(() => resolveReady(ctl), e => {
+        // A second activation while start() is still running waits for it and then shows all (start() must run once).
+        const first = startPromise === null;
+        if (first)
+            startPromise = start();
+        (first ? startPromise : startPromise.then(() => showAll())).then(() => resolveReady(ctl), e => {
             platform.log.warn(`start failed: ${e?.message ?? e}`);
             rejectReady(e);
             gtkApp.quit();

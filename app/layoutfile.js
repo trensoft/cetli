@@ -12,15 +12,23 @@
 // A note is shown at start unless its entry says `open: false`.
 export const shouldOpen = (layout, id) => layout[id]?.open !== false;
 
+// The core's loadLayout and saveLayout are two separate steps, so two changes of this process that overlap would lose one
+// (both read, both write). The changes of one store are therefore queued here (the core keeps `updateLayout` out).
+const queues = new WeakMap();
+
 // Returns true if the file was written.
-export async function setOpen(store, id, open) {
-    const layout = await store.loadLayout();
-    const entry = layout[id];
-    if (!entry || entry.open === open)
-        return false;
-    layout[id] = {...entry, open};
-    const r = await store.saveLayout(layout);
-    return r.ok === true;
+export function setOpen(store, id, open) {
+    const run = (queues.get(store) ?? Promise.resolve()).then(async () => {
+        const layout = await store.loadLayout();
+        const entry = layout[id];
+        if (!entry || entry.open === open)
+            return false;
+        layout[id] = {...entry, open};
+        const r = await store.saveLayout(layout);
+        return r.ok === true;
+    });
+    queues.set(store, run.catch(() => {}));
+    return run;
 }
 
 // The size a window starts with, from its entry (a Wayland client may choose its size, not its place).

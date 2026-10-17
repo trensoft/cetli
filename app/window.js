@@ -2,14 +2,35 @@
 // One note window (PLAN.md sections 3, 8, 9). It never reads or writes a file itself: every read and write goes through
 // the core (`store`), and the window title is the contract with the GNOME Shell extension (`cetli-<uuid>`, set before
 // the window is shown). Text for the user comes from strings.js only.
+import Gdk from 'gi://Gdk?version=4.0';
 import Gtk from 'gi://Gtk?version=4.0';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {SAVE_COALESCE_MS} from '../src/constants.js';
-import {COLORS, REMOTE_QUIET_MS, WINDOW_TITLE_PREFIX, cssClassOf} from './data.js';
+import {COLORS, REMOTE_QUIET_MS, WINDOW_TITLE_PREFIX, cssClassOf, customColorStyle, isCustomColor, parseCustomColor} from './data.js';
 import {changedRegion} from './textdiff.js';
 import * as S from './strings.js';
+
+// A Gdk.RGBA as the lower case `#rrggbb` of the core's custom colour.
+const hexOfRgba = c => `#${[c.red, c.green, c.blue].map(v => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, '0')).join('')}`;
+
+// One provider per custom colour in use, added the first time a window shows it (the CSS comes from data.js, built from three
+// integers). At most one per distinct colour, and a note file can only name as many colours as there are notes.
+const customProviders = new Set();
+
+function ensureCustomStyle(color) {
+    const style = customColorStyle(color);
+    if (style === null || customProviders.has(style.cls))
+        return;
+    const provider = new Gtk.CssProvider();
+    if (typeof provider.load_from_string === 'function')
+        provider.load_from_string(style.css);
+    else
+        provider.load_from_data(style.css);
+    Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+    customProviders.add(style.cls);
+}
 
 const nowMs = () => Math.floor(GLib.get_monotonic_time() / 1000);
 
@@ -29,12 +50,14 @@ export class NoteWindow {
         this.base = record;                 // the record the user started from (core 2.5)
         this.shownText = record.text;       // the text of the version last read from or written to disk (PLAN 3 (3))
         this.color = record.color;
+        this.colorClass = null;             // the CSS class of the colour now on the window
         this.applying = false;              // PLAN 3 (2): set while a remote text is put into the buffer
         this.lastKey = -Infinity;
         this.pendingRemote = null;
         this.remoteDeleted = false;
         this.deleted = false;
         this.closing = false;
+        this.closeWarned = false;           // the first close of a window with an unsaved, refused text only warns
         this.mark = null;                   // {kind, text}
         this._saveTimer = null;
         this._quietTimer = null;
@@ -70,7 +93,7 @@ export class NoteWindow {
         this.unresolved.add_css_class('cetli-unresolved');
         header.pack_start(this.unresolved);
 
-        const swatches = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 6, margin_top: 6, margin_bottom: 6, margin_start: 6, margin_end: 6});
+        const swatches = new Gtk.Box({orientation: Gtk.Orientation.HORIZONTAL, spacing: 6});
         for (const name of COLORS) {
             const b = new Gtk.Button({
                 action_name: 'win.color', action_target: GLib.Variant.new_string(name), tooltip_text: S.colorName(name),
@@ -79,10 +102,46 @@ export class NoteWindow {
             b.add_css_class('circular');
             swatches.append(b);
         }
-        const colorButton = new Gtk.MenuButton({icon_name: 'color-select-symbolic', tooltip_text: S.colorTooltip(), popover: new Gtk.Popover({child: swatches})});
+        const popoverBox = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6, margin_top: 6, margin_bottom: 6, margin_start: 6, margin_end: 6});
+        popoverBox.append(swatches);
+        popoverBox.append(this._buildCustomPicker());
+        const colorButton = new Gtk.MenuButton({icon_name: 'color-select-symbolic', tooltip_text: S.colorTooltip(), popover: new Gtk.Popover({child: popoverBox})});
         header.pack_end(new Gtk.MenuButton({icon_name: 'open-menu-symbolic', menu_model: this.ctl.menu, tooltip_text: S.menuTooltip()}));
         header.pack_end(colorButton);
         this.win.set_titlebar(header);
+    }
+
+    // Any colour, next to the palette. Gtk.ColorDialogButton is GTK 4.10 and later (RHEL 10 has 4.16); GTK 4.8 (the Debian 12
+    // test environment) has only the older Gtk.ColorButton. Chosen when the popover is built, never at module level, so the
+    // missing class cannot stop the module from loading. The choice goes through setColor like a palette colour.
+    _buildCustomPicker() {
+        const picked = rgba => {
+            if (!this.pickerSync)
+                this.setColor(hexOfRgba(rgba));
+        };
+        if (typeof Gtk.ColorDialogButton === 'function' && typeof Gtk.ColorDialog === 'function') {
+            this.customPicker = new Gtk.ColorDialogButton({dialog: new Gtk.ColorDialog({title: S.customColorTitle(), with_alpha: false})});
+            this.customPicker.connect('notify::rgba', () => picked(this.customPicker.get_rgba()));
+        } else {
+            this.customPicker = new Gtk.ColorButton({title: S.customColorTitle(), use_alpha: false});
+            this.customPicker.connect('color-set', () => picked(this.customPicker.get_rgba()));
+        }
+        this.customPicker.set_tooltip_text(S.customColorTooltip());
+        this.pickerSync = false;
+        return this.customPicker;
+    }
+
+    // The button shows the current custom colour (a palette colour leaves it as it was).
+    _syncPicker() {
+        const c = isCustomColor(this.color) ? parseCustomColor(this.color) : null;
+        if (c === null || !this.customPicker)
+            return;
+        this.pickerSync = true;       // setting the colour is not a choice by the user
+        try {
+            this.customPicker.set_rgba(new Gdk.RGBA({red: c.r / 255, green: c.g / 255, blue: c.b / 255, alpha: 1}));
+        } finally {
+            this.pickerSync = false;
+        }
     }
 
     _buildBody(text) {
@@ -117,9 +176,12 @@ export class NoteWindow {
     // ---- look ------------------------------------------------------------------------------------------------
 
     _applyColorClass() {
-        for (const name of COLORS)
-            this.win.remove_css_class(cssClassOf(name));
-        this.win.add_css_class(cssClassOf(this.color));
+        if (this.colorClass)
+            this.win.remove_css_class(this.colorClass);
+        ensureCustomStyle(this.color);
+        this.colorClass = cssClassOf(this.color);
+        this.win.add_css_class(this.colorClass);
+        this._syncPicker();
     }
 
     setDark(dark) {
@@ -164,6 +226,7 @@ export class NoteWindow {
         if (this.applying)
             return;                          // PLAN 3 (2): applying a remote text is not a user edit
         this.lastKey = nowMs();
+        this.closeWarned = false;            // new text: a refused save is a new reason to ask before closing
         this._scheduleSave();
     }
 
@@ -226,7 +289,7 @@ export class NoteWindow {
     }
 
     setColor(name) {
-        if (!COLORS.includes(name) || name === this.color)
+        if (!(COLORS.includes(name) || isCustomColor(name)) || name === this.color)
             return;
         this.color = name;
         this._applyColorClass();
@@ -299,6 +362,10 @@ export class NoteWindow {
         const region = changedRegion(this._bufferText(), rec.text);
         if (region !== null) {
             this.applying = true;
+            // A cursor (or the other end of a selection) exactly at the start of the region stays before the new text;
+            // inserting at the mark would push it behind. Marks elsewhere move by themselves (textdiff.js).
+            const marks = [this.buffer.get_insert(), this.buffer.get_selection_bound()];
+            const atStart = marks.filter(m => this.buffer.get_iter_at_mark(m).get_offset() === region.start);
             // Ctrl+Z must not bring back the other computer's text: the replacement is an irreversible action.
             this.buffer.begin_irreversible_action();
             try {
@@ -306,6 +373,8 @@ export class NoteWindow {
                 const end = this.buffer.get_iter_at_offset(region.start + region.deleteCount);
                 this.buffer.delete(start, end);
                 this.buffer.insert(this.buffer.get_iter_at_offset(region.start), region.insert, -1);
+                for (const m of atStart)
+                    this.buffer.move_mark(m, this.buffer.get_iter_at_offset(region.start));
             } finally {
                 this.buffer.end_irreversible_action();
                 this.applying = false;
@@ -325,6 +394,13 @@ export class NoteWindow {
     _onCloseRequest() {
         if (this.closing)
             return false;
+        // A refused save leaves the typed text only in the window: the first close asks again (the mark says so), the
+        // second one discards it.
+        if (this.mark?.kind === 'refused' && this._dirty() && !this.closeWarned) {
+            this.closeWarned = true;
+            this._setMark('refused', S.markCloseUnsaved());
+            return true;
+        }
         this.closing = true;
         this._cancelSaveTimer();
         if (this._quietTimer !== null) {

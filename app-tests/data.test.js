@@ -26,16 +26,60 @@ const contrast = (a, b) => {
     return (hi + 0.05) / (lo + 0.05);
 };
 
-test('PLAN 8: six colours, the plan\'s fills, text/fill contrast above 4.5 in both themes and on the header strip', () => {
-    assert.deepEqual([...COLORS], ['yellow', 'green', 'blue', 'pink', 'purple', 'gray']);
-    assert.equal(PALETTE.yellow.light, '#f6e58d');
+test('PLAN 8: eight menu colours (gray known, not offered), the fills, text/fill contrast above 4.5 in both themes and on the header strip', () => {
+    assert.deepEqual([...COLORS], ['yellow', 'pink', 'green', 'purple', 'orange', 'blue', 'mint', 'peach']);
+    assert.equal(PALETTE.yellow.light, '#fbf1b8');
     assert.equal(PALETTE.gray.dark, '#3a3a3a');
-    for (const name of COLORS) {
+    for (const name of [...COLORS, 'gray']) {
         const p = PALETTE[name];
         assert.ok(contrast(p.light, TEXT_LIGHT) > 4.5, `${name} light`);
         assert.ok(contrast(p.lightHeader, TEXT_LIGHT) > 4.5, `${name} light header`);
         assert.ok(contrast(p.dark, TEXT_DARK) > 4.5, `${name} dark`);
         assert.ok(contrast(p.darkHeader, TEXT_DARK) > 4.5, `${name} dark header`);
+    }
+});
+
+// The rules of the stylesheet as {selector: {property: value}} (buildCss writes one rule per line).
+function cssRules() {
+    const out = new Map();
+    for (const line of buildCss().split('\n').filter(Boolean)) {
+        const m = /^(.*?) \{ (.*) \}$/.exec(line);
+        assert.ok(m, `a rule per line: ${line}`);
+        out.set(m[1], Object.fromEntries(m[2].split(';').map(d => d.trim()).filter(Boolean).map(d => d.split(/:\s*/))));
+    }
+    return out;
+}
+const mix = (fg, bg, alpha) => `#${[0, 1, 2].map(i => Math.round(alpha * rgb(fg)[i] + (1 - alpha) * rgb(bg)[i]).toString(16).padStart(2, '0')).join('')}`;
+
+test('PLAN 8: the stylesheet ITSELF sets text and fill with 4.5:1 for every colour and both themes, also under the opacity of the small labels', () => {
+    const rules = cssRules();
+    const get = sel => {
+        const r = rules.get(sel);
+        assert.ok(r, `rule ${sel}`);
+        return r;
+    };
+    const mark = get('window.cetli-note label.cetli-mark');
+    const unresolved = get('window.cetli-note label.cetli-unresolved');
+    for (const name of COLORS) {
+        const p = PALETTE[name];
+        for (const [fillSel, headSel, fill, head, text] of [
+            [`window.cetli-${name}`, `window.cetli-${name} headerbar.cetli-header`, p.light, p.lightHeader, TEXT_LIGHT],
+            [`window.cetli-dark.cetli-${name}`, `window.cetli-dark.cetli-${name} headerbar.cetli-header`, p.dark, p.darkHeader, TEXT_DARK],
+        ]) {
+            const f = get(fillSel);
+            const h = get(headSel);
+            assert.equal(f['background-color'], fill, fillSel);
+            assert.equal(f.color, text, `${fillSel}: text colour`);
+            assert.equal(h['background-color'], head, headSel);
+            assert.equal(h.color, text, `${headSel}: text colour`);
+            assert.ok(contrast(f.color, f['background-color']) >= 4.5, fillSel);
+            assert.ok(contrast(h.color, h['background-color']) >= 4.5, headSel);
+            // the small labels are drawn with their opacity over the fill (the mark) or over the header strip (unresolved)
+            const m = Number(mark.opacity ?? 1);
+            const u = Number(unresolved.opacity ?? 1);
+            assert.ok(contrast(mix(f.color, f['background-color'], m), f['background-color']) >= 4.5, `${fillSel}: mark label at opacity ${m}`);
+            assert.ok(contrast(mix(h.color, h['background-color'], u), h['background-color']) >= 4.5, `${headSel}: unresolved label at opacity ${u}`);
+        }
     }
 });
 
@@ -106,6 +150,40 @@ test('layout.json: setOpen changes ONLY the open member of ONE entry and re-read
     } finally {
         env.cleanup();
     }
+});
+
+test('layout.json: setOpen calls of one store are queued: two that overlap both end up in the file, and a failed one does not block the next', async () => {
+    const [a, b, c] = [uuid(1), uuid(2), uuid(3)];
+    const entry = n => ({x: n, y: n, w: 300, h: 200, monitor: 'm', open: true});
+    let layout = {[a]: entry(1), [b]: entry(2), [c]: entry(3)};
+    let failLoads = 0;
+    const tick = () => new Promise(r => setTimeout(r, 5));
+    const store = {
+        async loadLayout() {
+            await tick();
+            if (failLoads > 0) {
+                failLoads--;
+                throw new Error('unreadable');
+            }
+            return structuredClone(layout);
+        },
+        async saveLayout(l) {
+            await tick();
+            layout = structuredClone(l);
+            return {ok: true};
+        },
+    };
+    // all three overlap: without the queue each reads the same file and the last write wins
+    await Promise.all([setOpen(store, a, false), setOpen(store, b, false), setOpen(store, c, false)]);
+    assert.deepEqual([a, b, c].map(id => layout[id].open), [false, false, false], 'no change was lost');
+    // a failure rejects its own call only
+    failLoads = 1;
+    layout[a].open = true;
+    const failing = setOpen(store, a, false);
+    const next = setOpen(store, b, true);
+    await assert.rejects(failing, /unreadable/);
+    assert.equal(await next, true, 'the next call still runs');
+    assert.equal(layout[b].open, true);
 });
 
 test('window size from the layout entry is clamped; no entry gives the fallback', () => {

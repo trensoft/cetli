@@ -76,6 +76,15 @@ test('a window that already exists when the extension is enabled is found', asyn
     ext.disable();
 });
 
+test('an exception inside a timer callback is logged and never thrown into the main loop', async () => {
+    const ext = enable();
+    const win = note(1, DEFAULT, {mapped: false});      // still polled: a timer is waiting
+    win.get_title = () => { throw new Error('boom'); };
+    await world.advance(1000);                          // a thrown error would reject advance(), as it would kill a GLib source
+    assert.ok(world.errors.some(e => e.includes('timer') && e.includes('boom')), world.errors.join('|'));
+    ext.disable();
+});
+
 test('a title that arrives late is accepted within 10 s, not after', async () => {
     world.writeLayout({[uuid(1)]: entry(SAVED), [uuid(2)]: entry(SAVED)});
     const ext = enable();
@@ -182,6 +191,21 @@ test('a compositor that never moves the window: two requests, nothing is written
     win.drag({...DEFAULT, x: 100});
     await world.advance(1000);
     assert.equal(world.readLayout()[uuid(1)].x, 100);
+    ext.disable();
+});
+
+test('a compositor that obeys late: the signals of the placement itself are not saved as a move of the user', async () => {
+    world.writeLayout({[uuid(1)]: entry(SAVED)});
+    world.moveMode = 'late';
+    const ext = enable();
+    const win = note(1);
+    await world.advance(5000);
+    assert.equal(win.moveCalls.length, 1, 'it obeyed in time: no second request');
+    assert.deepEqual(win.rect, SAVED);
+    assert.equal(world.writes(), 0, 'the late position-changed / size-changed of the placement were not taken for a drag');
+    win.drag({...SAVED, x: 120});
+    await world.advance(1000);
+    assert.equal(world.readLayout()[uuid(1)].x, 120, 'a real move afterwards is saved');
     ext.disable();
 });
 

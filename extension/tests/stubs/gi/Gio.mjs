@@ -117,12 +117,17 @@ class File {
     read_finish = finish;
 
     // GIO writes a temporary file in the same directory and renames it over the target.
-    replace_contents_bytes_async(bytes, _etag, _backup, flags, _cancel, cb) {
+    replace_contents_bytes_async(bytes, etag, backup, flags, _cancel, cb) {
         start(this, cb, () => {
             if (world.failWrite)
                 throw new GError(IOErrorEnum.FAILED, 'disk full');
             if (flags !== this.constructor.REPLACE_DESTINATION)
                 throw new Error('the write must use REPLACE_DESTINATION');
+            // No etag (the file is re-read before every write) and no backup file next to layout.json.
+            if (etag !== null)
+                throw new Error('the write must not pass an etag');
+            if (backup !== false)
+                throw new Error('the write must not make a backup file');
             const tmp = path.join(path.dirname(this.p), `.${path.basename(this.p)}.tmp`);
             fs.writeFileSync(tmp, bytes.toArray());
             fs.renameSync(tmp, this.p);

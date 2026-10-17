@@ -49,6 +49,9 @@ export function markNotSaved(code) {
     }
 }
 
+// The first close of a window whose text a refused save left only in the window.
+export const markCloseUnsaved = () => _('Not saved: closing loses this text. Close again to discard it.');
+
 export const unresolvedText = n => _('%d unresolved').replace('%d', String(n));
 export const unresolvedTooltip = () => _('Conflicting copies of notes were kept; cetli does not merge them yet');
 
@@ -60,3 +63,7 @@ const aboutAuthorship = () => _('The code of this project was written with the h
 
 // The About `comments`: the description, then the authorship sentence in a paragraph of its own (decision A5, Jenna 6763).
 export const aboutComments = () => `${aboutDescription()}\n\n${aboutAuthorship()}`;
+
+// Custom colour picker in the colour popover.
+export const customColorTooltip = () => _('Custom color');
+export const customColorTitle = () => _('Choose a color');

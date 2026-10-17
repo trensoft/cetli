@@ -7,3 +7,4 @@ export {makeFormat, entryProblem, parseUpdated, utf8Len, isoOf} from './format.j
 export {Store, createStore} from './store.js';
 export {createWatcher} from './watcher.js';
 export {parseLayout, serializeLayout} from './layout.js';
+export {NOTE_COLOR_IDS, pickNoteColor, randomIndex} from './colors.js';

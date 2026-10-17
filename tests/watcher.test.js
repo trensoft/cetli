@@ -221,6 +221,43 @@ test('V6 / 2.2 step 0: a QUARANTINED file is released by a one-shot timer at its
     }
 });
 
+test('V6: nextQuarantineRelease gives the EARLIEST release of several quarantined files', async () => {
+    const env = makeEnv({wrap: true});
+    try {
+        await env.start();
+        assert.equal(env.store.nextQuarantineRelease(), null, 'none quarantined');
+        for (const [n, hours] of [[1, 30], [2, 50], [3, 27], [4, 90]])
+            env.putRec(`${uuid(n)}.json`, rec({id: uuid(n), updated: new Date(T0 + hours * 3600000).toISOString()}));
+        await env.store.refresh();
+        assert.equal(env.store.nextQuarantineRelease(), T0 + 3 * 3600000, 'the 27 h file is released first (at +3 h)');
+        env.clock.t = T0 + 3 * 3600000 + 1;
+        await env.store.refresh();
+        assert.equal(env.store.nextQuarantineRelease(), T0 + 6 * 3600000, 'then the 30 h file');
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('3: an event that is not relevant (a dotfile, another name, a CHANGED event) starts no refresh through the monitor', async () => {
+    const {env, w, timers, refreshes, ev} = await setup();
+    try {
+        await w.start();
+        refreshes.length = 0;
+        for (const e of [{event: 'CREATED', name: '.syncthing.tmp'}, {event: 'CREATED', name: 'readme.txt'},
+            {event: 'CHANGED', name: `${uuid(1)}.json`}, {event: 'CREATED', name: null}, {event: 'ATTRIBUTE_CHANGED', name: `${uuid(1)}.json`}])
+            ev(e);
+        assert.equal(timers.pending(), 0, 'no debounce timer was armed');
+        timers.advance(1000);
+        await w.idle();
+        assert.deepEqual(refreshes, []);
+        ev({event: 'CREATED', name: `${uuid(1)}.json`});
+        assert.equal(timers.pending(), 1, 'control: a relevant event arms the timer');
+        w.stop();
+    } finally {
+        env.cleanup();
+    }
+});
+
 test('V6: the release timer is capped at 2^31-1 ms (a larger delay would fire at once); the quarantine of a year-2100 date is re-armed, not released', async () => {
     const env = makeEnv({wrap: true});
     try {

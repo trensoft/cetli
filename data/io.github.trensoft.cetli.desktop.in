@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=cetli
+Name=Cetli
 Comment=Small notes on the desktop that sync between your computers
 Exec=cetli
 Icon=io.github.trensoft.cetli

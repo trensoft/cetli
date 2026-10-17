@@ -4,7 +4,7 @@
   <id>io.github.trensoft.cetli</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <name>cetli</name>
+  <name>Cetli</name>
   <summary>Small notes on the desktop that sync between your computers</summary>
   <description>
     <p>cetli keeps short notes in small windows on the GNOME desktop. Every note is one plain file in a folder, so the folder can be kept in step between your computers with a tool such as Syncthing.</p>

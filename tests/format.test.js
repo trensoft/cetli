@@ -47,6 +47,13 @@ test('V2: UTF-8 and a JSON object', () => {
         assert.equal(state(s), ST.UNKNOWN, s);
     // the id rule of V4 uses the name, a missing field is not a valid record
     assert.equal(state({...good, text: undefined}), ST.UNKNOWN);
+    // invalid UTF-8 INSIDE a string value (the structure is intact): UNKNOWN, never repaired to U+FFFD
+    for (const bad of [[0xff, 0xfe], [0xc3, 0x28], [0xed, 0xa0, 0x80], [0xf0, 0x28, 0x8c, 0xbc]]) {
+        const bytes = jsonBytes(raw({text: 'QQ'}));
+        const at0 = bytes.indexOf(0x51);
+        const broken = Uint8Array.from([...bytes.subarray(0, at0), ...bad, ...bytes.subarray(at0 + 2)]);
+        assert.equal(state(broken), ST.UNKNOWN, `invalid UTF-8 in a value: ${bad.map(b => b.toString(16)).join(' ')}`);
+    }
 });
 
 test('V3: schema must be the integer 1; a higher integer is NEWER and its other fields are not checked', () => {
@@ -278,4 +285,9 @@ test('2.1: order of distinct versions: updated, then rev, then device, then V; t
     assert.equal(Math.sign(fmt.compare(c1, c2)), c1.v < c2.v ? -1 : 1, 'then V');
     assert.equal(fmt.compare(c1, c1), 0);
     assert.equal(fmt.compare(a, t(at(5), 1, DEV_A)), -fmt.compare(t(at(5), 1, DEV_A), a));
+    // the keys do not cross: rev decides before device, updated before rev
+    assert.ok(DEV_A < DEV_B);
+    assert.ok(fmt.compare(t(at(10), 5, DEV_A), t(at(10), 1, DEV_B)) > 0, 'rev 5 / device a beats rev 1 / device b');
+    assert.ok(fmt.compare(t(at(10), 1, DEV_B), t(at(10), 5, DEV_A)) < 0);
+    assert.ok(fmt.compare(t(at(5), 1, DEV_A), t(at(10), 9, DEV_B)) > 0, 'a later updated beats any rev and device');
 });

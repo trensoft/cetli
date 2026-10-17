@@ -278,6 +278,69 @@ test('[P2-T14] 1.4/V9/V11: size causes: text over 64 KiB, and control characters
     assert.ok(env.warned(/refused: too large/));
 }));
 
+test('1.4/V9: a deleting save writes an EMPTY text, whatever text was given', withEnv({}, async env => {
+    const created = (await env.store.createNote({text: 'secret words', color: 'green'})).record;
+    const r = await env.store.saveNote(created.id, created, {text: 'left over', color: 'green', deleted: true});
+    assert.equal(r.ok, true);
+    assert.equal(r.record.deleted, true);
+    assert.equal(r.record.text, '');
+    assert.equal(JSON.parse(env.read(`${created.id}.json`)).text, '');
+    assert.equal(env.read(`${created.id}.json`).includes('secret'), false, 'the old text is not in the tombstone');
+}));
+
+test('V9: the text limit of a local save counts UTF-8 BYTES, not characters', withEnv({}, async env => {
+    const euro = '\u20ac';                                  // 3 bytes, 1 character
+    const fits = await env.store.createNote({text: euro.repeat(21845)});           // 65535 bytes
+    assert.equal(fits.ok, true, '21845 characters = 65535 bytes');
+    const exact = await env.store.createNote({text: `${euro.repeat(21845)}a`});    // 65536 bytes
+    assert.equal(exact.ok, true, '65536 bytes are allowed');
+    const over = await env.store.createNote({text: euro.repeat(21846)});           // 65538 bytes, 21846 characters
+    assert.equal(over.ok, false, 'fewer than 65536 characters, but more than 65536 bytes');
+    assert.equal(over.cause.code, 'TOO_LARGE');
+}));
+
+test('3 (3): a save that changes only the colour is written; one that changes nothing is not', withEnv({}, async env => {
+    const created = (await env.store.createNote({text: 'same', color: 'yellow'})).record;
+    const same = await env.store.saveNote(created.id, created, {text: 'same', color: 'yellow', deleted: false});
+    assert.equal(same.unchanged, true);
+    const before = env.read(`${created.id}.json`);
+    const recolored = await env.store.saveNote(created.id, created, {text: 'same', color: 'blue', deleted: false});
+    assert.equal(recolored.ok, true);
+    assert.notEqual(recolored.unchanged, true, 'a colour change is a change');
+    assert.equal(recolored.record.color, 'blue');
+    assert.equal(recolored.record.rev, created.rev + 1);
+    assert.notEqual(env.read(`${created.id}.json`), before);
+    assert.equal(env.store.getNote(created.id).color, 'blue');
+}));
+
+test('[P2-T10] 2.5 refusal (i): the retry also runs for a QUARANTINED and for a NEWER <X>.json when it changes', async () => {
+    const future = new Date(T0 + 30 * 3600000).toISOString();
+    for (const [label, make, code] of [
+        ['QUARANTINED', env => env.putRec(S, mk({updated: future})), 'QUARANTINE'],
+        ['NEWER', env => env.put(S, {schema: 2, id: X}), 'NEWER_SCHEMA'],
+    ]) {
+        const env = makeEnv({wrap: true});
+        try {
+            await env.start();
+            make(env);
+            await env.store.refresh();
+            const r = await env.store.saveNote(X, null, mine('kept in the buffer'));
+            assert.equal(r.cause.code, code, label);
+            env.events.length = 0;
+            await env.store.refresh();
+            assert.equal(env.events.some(e => e.type === 'save-retried'), false, `${label}: nothing changed, nothing retried`);
+            const D = mk({rev: 2, text: 'valid now', updated: at(30)});
+            env.putRec(S, D);
+            await env.store.refresh({hint: [S]});
+            const retried = env.events.find(e => e.type === 'save-retried');
+            assert.ok(retried?.result.ok, `${label}: retried and saved`);
+            assert.equal(env.store.getNote(X).text, 'kept in the buffer', label);
+        } finally {
+            env.cleanup();
+        }
+    }
+});
+
 test('[P2-T14] 1.5: "move failed" and the rest of the causes carry readable text', withEnv({}, async env => {
     env.layer.hooks.before.push(op => { if (op === 'move') throw new FsError(FS.NOT_SUPPORTED, 'x'); });
     const r = await env.store.createNote({text: 'x'});
@@ -344,6 +407,23 @@ test('[P2-T14] 2.5: a save never writes a file our own reader rejects: clock bef
         assert.equal((await b.store.saveNote(created.id, created, mine('x'))).ok, true);
     } finally {
         b.cleanup();
+    }
+    // (c) the same malformed base, but a version of the other computer arrived (base.v != D.v): D would be copied first.
+    // The refusal comes before the copy: no copy file, D intact.
+    const c = makeEnv({wrap: true});
+    try {
+        await c.start();
+        const created = (await c.store.createNote({text: 'ok'})).record;
+        const D = mk({id: created.id, rev: 2, text: 'remote', device: DEV_B, updated: at(1), created: created.created});
+        c.putRec(`${created.id}.json`, D);
+        const before = c.snapshot();
+        c.layer.calls.length = 0;
+        const r = await c.store.saveNote(created.id, {...created, created: 'yesterday'}, mine('x'));
+        assert.equal(r.cause?.code, 'BAD_INPUT');
+        assert.deepEqual(c.snapshot(), before, 'no copy of D, D intact');
+        assert.equal(c.layer.calls.filter(x => ['writeTmp', 'move', 'remove'].includes(x.op)).length, 0);
+    } finally {
+        c.cleanup();
     }
 });
 

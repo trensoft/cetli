@@ -82,6 +82,55 @@ const MUTANTS = [
         find: "const ms = Math.min(Math.max(at - now() + 1, 1), MAX_TIMER_MS);", repl: "const ms = Math.max(at - now() + 1, 1);"},
     {id: 'M34', rule: '2.5: a failed copy write is not retried on a change of the copy slot', file: 'store.js',
         find: "CAUSE.COPY_PLACE_TAKEN, CAUSE.COPY_NOT_WRITTEN]);", repl: "CAUSE.COPY_PLACE_TAKEN]);"},
+    {id: 'M35', rule: 'V2: invalid UTF-8 inside a string value is repaired (TextDecoder fatal off)', file: 'format.js',
+        find: "{fatal: true, ignoreBOM: true}", repl: "{fatal: false, ignoreBOM: true}"},
+    {id: 'M36', rule: '2.1: device is compared before rev', file: 'format.js',
+        find: "if (a.rev !== b.rev)\n            return a.rev < b.rev ? -1 : 1;\n        if (a.device !== b.device)\n            return a.device < b.device ? -1 : 1;",
+        repl: "if (a.device !== b.device)\n            return a.device < b.device ? -1 : 1;\n        if (a.rev !== b.rev)\n            return a.rev < b.rev ? -1 : 1;"},
+    {id: 'M37', rule: 'V9: a deleting save keeps the text it was given', file: 'store.js',
+        find: "const text0 = deleted ? '' : text;", repl: "const text0 = text;"},
+    {id: 'M38', rule: 'V9: the text limit of a local save counts characters, not bytes', file: 'store.js',
+        find: "if (utf8Len(text0) > MAX_TEXT_BYTES)", repl: "if (text0.length > MAX_TEXT_BYTES)"},
+    {id: 'M39', rule: '3 (3): a colour change alone counts as "nothing changed"', file: 'store.js',
+        find: "base.v === d.v && d.text === text0 && d.color === color && d.deleted === deleted", repl: "base.v === d.v && d.text === text0 && d.deleted === deleted"},
+    {id: 'M40', rule: '2.5: a refused save of a QUARANTINED <X>.json is not retried', file: 'store.js',
+        find: "new Set([CAUSE.QUARANTINE, ", repl: "new Set(["},
+    {id: 'M41', rule: '2.5: a refused save of a NEWER <X>.json is not retried', file: 'store.js',
+        find: "CAUSE.NEWER_SCHEMA, CAUSE.COPY_PLACE_TAKEN, CAUSE.COPY_NOT_WRITTEN]);", repl: "CAUSE.COPY_PLACE_TAKEN, CAUSE.COPY_NOT_WRITTEN]);"},
+    {id: 'M42', rule: 'V6: nextQuarantineRelease gives the LATEST release, not the earliest', file: 'store.js',
+        find: "(next === null || e.until < next)", repl: "(next === null || e.until > next)"},
+    {id: 'M43', rule: '3: the monitor callback reacts to every event (no relevance filter)', file: 'watcher.js',
+        find: "if (!relevant(ev))\n                    return;", repl: ""},
+    {id: 'M44', rule: '1.4: the tmp write is mode 0644 (readable by others)', file: 'gio-layer.js',
+        find: "GLib.FileSetContentsFlags.DURABLE, 0o600)", repl: "GLib.FileSetContentsFlags.DURABLE, 0o644)"},
+    {id: 'M45', rule: '2.6: EVERY move carries OVERWRITE', file: 'gio-layer.js',
+        find: "(overwrite ? Gio.FileCopyFlags.OVERWRITE : Gio.FileCopyFlags.NONE)", repl: "Gio.FileCopyFlags.OVERWRITE"},
+    {id: 'M46', rule: '1.1 V1: entries are looked at WITH following links', file: 'gio-layer.js',
+        find: "const NOFOLLOW = Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS;", repl: "const NOFOLLOW = Gio.FileQueryInfoFlags.NONE;"},
+    {id: 'M47', rule: '1.4: the folders are created with mode 0755', file: 'gio-layer.js',
+        find: "GLib.mkdir_with_parents(dir, 0o700)", repl: "GLib.mkdir_with_parents(dir, 0o755)"},
+    {id: 'M48', rule: '3: the monitor watches moves (a rename in is no longer CREATED)', file: 'gio-layer.js',
+        find: "monitor_directory(Gio.FileMonitorFlags.NONE, null)", repl: "monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null)"},
+    {id: 'M49', rule: '2.5: ENOSPC is not told apart from any other I/O error', file: 'gio-layer.js',
+        find: "code = FS.NO_SPACE;", repl: "code = FS.IO;"},
+    {id: 'M50', rule: 'colours: the picker ignores the colours already in use', file: 'colors.js',
+        find: "ids.filter(id => !used.has(id))", repl: "ids.filter(id => true)"},
+    {id: 'M51', rule: 'colours: when all are used there is no fallback to the whole palette', file: 'colors.js',
+        find: "const pool = free.length > 0 ? free : ids;", repl: "const pool = free;"},
+    {id: 'M52', rule: 'colours: the biased tail of the random range is not rejected (modulo bias)', file: 'colors.js',
+        find: "if (u < limit)", repl: "if (true)"},
+    {id: 'M53', rule: 'colours: a DELETED note still occupies its colour', file: 'store.js',
+        find: "this.listNotes().filter(n => !n.deleted).map(n => n.color)", repl: "this.listNotes().map(n => n.color)"},
+    {id: 'M54', rule: 'colours: createNote ignores an explicit colour and always picks', file: 'store.js',
+        find: "const chosen = color ?? pickNoteColor(", repl: "const chosen = pickNoteColor("},
+    {id: 'M55', rule: 'colours: the draw is ignored, always the first free colour', file: 'colors.js',
+        find: "return pool[randomIndex(randomBytes, pool.length)];", repl: "return pool[0];"},
+    {id: 'M56', rule: 'colours: gray is offered in the menu list', file: 'colors.js',
+        find: "'mint', 'peach']);", repl: "'mint', 'peach', 'gray']);"},
+    {id: 'M57', rule: 'colours: the ambient Math.random instead of the injected platform source', file: 'colors.js',
+        find: "return pool[randomIndex(randomBytes, pool.length)];", repl: "return pool[Math.floor(Math.random() * pool.length)];"},
+    {id: 'M58', rule: 'colours: an unknown string / custom colour occupies a slot (used set is not filtered by the ids)', file: 'colors.js',
+        find: "const free = ids.filter(id => !used.has(id));", repl: "const free = ids.length - used.size < 1 ? [] : ids.filter(id => !used.has(id)).slice(0, ids.length - used.size);"},
 ];
 
 function copyTree(from, to) {
@@ -90,12 +139,12 @@ function copyTree(from, to) {
 
 function run(dir) {
     const r = spawnSync(process.execPath, ['--test', ...fs.readdirSync(path.join(dir, 'tests')).filter(f => f.endsWith('.test.js')).map(f => `tests/${f}`)],
-        {cwd: dir, encoding: 'utf8', env: {...process.env, CETLI_MUTANT_RUN: '1'}, maxBuffer: 1 << 28, timeout: 60000, killSignal: 'SIGKILL'});
+        {cwd: dir, encoding: 'utf8', env: {...process.env, CETLI_MUTANT_RUN: '1'}, maxBuffer: 1 << 28, timeout: Number(process.env.CETLI_MUTANT_TIMEOUT_MS) || 60000, killSignal: 'SIGKILL'});
     const failed = [...r.stdout.matchAll(/^not ok \d+ - (.*)$/gm)].map(m => m[1]);
     const pass = Number(/^# pass (\d+)/m.exec(r.stdout)?.[1] ?? NaN);
     // a hang (the mutant opens a FIFO and blocks) is a failure of the suite too
     if (r.error?.code === 'ETIMEDOUT')
-        failed.push('(suite hung and was killed after 60 s)');
+        failed.push('(suite hung and was killed after the timeout)');
     return {failed, pass, status: r.status};
 }
 

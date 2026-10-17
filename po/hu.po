@@ -18,8 +18,8 @@ msgstr ""
 
 #: data/io.github.trensoft.cetli.desktop.in
 #: data/io.github.trensoft.cetli.metainfo.xml.in
-msgid "cetli"
-msgstr "cetli"
+msgid "Cetli"
+msgstr "Cetli"
 
 #: data/io.github.trensoft.cetli.desktop.in
 #: data/io.github.trensoft.cetli.metainfo.xml.in app/strings.js
@@ -156,6 +156,10 @@ msgid "Not saved"
 msgstr "Nincs mentve"
 
 #: app/strings.js
+msgid "Not saved: closing loses this text. Close again to discard it."
+msgstr "Nincs mentve: a bezárással a szöveg elvész. A végleges bezáráshoz zárd be újra."
+
+#: app/strings.js
 #, javascript-format
 msgid "%d unresolved"
 msgstr "%d megoldatlan"
@@ -167,3 +171,11 @@ msgstr "Ütköző jegyzetmásolatok maradtak meg; a cetli még nem egyesíti ők
 #: app/strings.js
 msgid "The code of this project was written with the help of AI agents."
 msgstr "Ennek a projektnek a kódját AI-ügynökök segítségével írták."
+
+#: app/strings.js
+msgid "Custom color"
+msgstr "Egyedi szín"
+
+#: app/strings.js
+msgid "Choose a color"
+msgstr "Válassz színt"

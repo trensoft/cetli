@@ -11,6 +11,7 @@ Card 9eae7c02. Licence header: `GPL-3.0-or-later` on every source (PLAN A5 defau
 | `src/format.js` | `classify` (V1-V11), `canon`, `V`, `cid`, order, expected copy | 1.1-1.3, 2.1, 2.2 |
 | `src/store.js` | scan with cost bound, resolution, durable write, local save, own-write filter, tombstone purge, device id, layout I/O | 1.2, 1.4, 1.5, 2.2-2.6, 3, 4 (d) |
 | `src/watcher.js` | event filter, 100 ms debounce, batches | 3 |
+| `src/colors.js` | menu colour names, base colour of a new note (`pickNoteColor`, `randomIndex`) | card 0.2.0 |
 | `src/layout.js` | `layout.json` as plain data | 1.5 |
 | `src/gio-layer.js` | the ONLY `gi://` module: file layer, hashes, `Gio.FileMonitor`, timers (Gio, GLib) | 1.5, 3 |
 | `tests/` | headless tests (node:test), `run.sh`, `mutants.js` | |
@@ -37,13 +38,24 @@ Surface for the app (`src/index.js`): `createStore`, `createWatcher`, `Store` me
 
 - Quarantine release: `store.refresh()` releases a file whose time has come; `store.nextQuarantineRelease()` gives the instant; `watcher.js` arms ONE one-shot timer for it (replaceable: only `armRelease()`). The `<time>` in the refusal text is UTC ISO-8601 (`...Z`); no Europe/Budapest conversion in the core.
 - 2.5 retry watches the file that blocked the save (`RETRY_CAUSES`): `<X>.json` for refusal (i), the copy slot for refusal (ii) and for a failed copy write (`copy not written`, as the plan says); not for `move failed` (no blocking file). [P2-T10] tested.
-- PLAN 1.5 marks the durable write `H`; its premise (`CONSISTENT` fsyncs the written data) does not hold for a NEW file, and every `tmp/<uuid>.tmp` is new. The adapter therefore passes `CONSISTENT | DURABLE` (GLib doc: a target that does not exist or is empty may be left empty or full of NUL bytes after a power loss "unless DURABLE and CONSISTENT are set"). Deviation from the `H` wording of PLAN 1.5; still not measured (no gjs).
+- PLAN 1.5 marks the durable write `H`; its premise (`CONSISTENT` fsyncs the written data) does not hold for a NEW file, and every `tmp/<uuid>.tmp` is new. The adapter therefore passes `CONSISTENT | DURABLE` (GLib doc: a target that does not exist or is empty may be left empty or full of NUL bytes after a power loss "unless DURABLE and CONSISTENT are set"). Deviation from the `H` wording of PLAN 1.5; still not measured (no gjs). With `CONSISTENT | DURABLE` GLib also fsyncs the directory that holds the tmp file (`tmp/`, GLib doc of `GFileSetContentsFlags`), on every write; the later rename into `notes/` is not followed by an fsync of `notes/`. The cost of the extra fsync on a real disk is not measured (the app writes from a timer, never from a key handler, `app/window.js` `_doSave`).
 - `rev` above 1 000 000 000 and `updated` above year 2100 on a local save: refused as `REV_LIMIT` (2 small branches in `_doSave`).
 - A local save is refused as `BAD_INPUT` (reason in the log) if the bytes it is about to write do not classify as VALID with our own reader (clock before year 2000, a malformed `base` such as `created: 'yesterday'`). The record is built and checked BEFORE the copy of D is written, so a refused save leaves no file behind (`REV_LIMIT`, `TOO_LARGE` included); the order of the causes is therefore: `<X>.json` state, text size, `REV_LIMIT`, `TOO_LARGE` (canonical form), `BAD_INPUT`, then the copy slot.
 - Own-write filter: kept per id and applied ONLY to the main record `<id>.json` (so effectively (name, V)); a conflict file of version W is never dropped by it. The filter drops the event for the front end only, the group is evaluated in every refresh (no conflict file waits for the next event).
 - Two causes at once: the order of the checks in `_doSave` (quarantine/newer/unreadable `<X>.json` first, then too large, then copy slot) is the priority; the plan has none.
 - Causes for a NEWER `<X>.json`, a non-regular entry and a dangling symlink: `file needs a newer cetli` / `file not readable` (the plan names no cause for the last two); set of causes is not closed (`CAUSE`).
 - `tmp/` leftovers: only `<uuid>.tmp` regular files are deleted at start; 0600 files, 0700 directories.
+
+## Base colour of a new note (0.2.0)
+
+`createNote({text, color})`: when `color` is missing, the core picks it (`src/colors.js`); an explicit colour is kept as given (`gray`, a custom `#rrggbb`) and the random source is not touched.
+
+- The candidates are `NOTE_COLOR_IDS` (the menu order: yellow, pink, green, purple, orange, blue, mint, peach). `gray` is a known value of old notes but not a candidate.
+- Colours that a live note (`listNotes()`, not `deleted`) already shows are excluded. A custom colour, `gray`, an unknown string and a deleted note occupy nothing. When all 8 are used, the draw is over all 8 again.
+- The random source is the injected platform's `randomBytes(4)` (already in the platform contract; no new member, no `Math.random` in the core). The index is drawn by rejection sampling, so there is no modulo bias; a source that is always rejected stops after 64 draws.
+- The colour is chosen inside the serial section of `createNote`, so two quick "new note" calls cannot draw from the same view.
+- NOT measured: how even the draw is on the real `GLib.random_int_range` source (the tests script the source); the colour is not validated by the core beyond V8 (a string), the app decides what it shows (`app/data.js`).
+- Tests: `tests/colors.test.js` (11), mutants M50-M58 in `tests/mutants.js`. The presentation side (palette, contrast, custom colour CSS) is tested in `app-tests/color.test.js`.
 
 ## NOT MEASURED (needs a real gjs / GLib / Syncthing run; P4 `%check` or Attila's machine)
 

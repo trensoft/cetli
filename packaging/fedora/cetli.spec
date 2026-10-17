@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -122,6 +122,12 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Sat Oct 17 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.0-1
+- Eight note colours: yellow, pink, green, purple, orange, blue, mint, peach
+- A new note starts with a random base colour
+- Custom RGB colour picker for a note
+- The program is named Cetli
+
 * Sat Oct 17 2026 TrenSoft <trensoft@fedoraproject.org> - 0.1.0-1
 - Packaging skeleton: Makefile, gettext catalogs (hu, en), desktop file, metainfo, placeholder icon
 - Enable the GNOME Shell extension once at the first login of a user

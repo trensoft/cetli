@@ -22,6 +22,7 @@ import {
 import {FS} from './fs-error.js';
 import {entryProblem, isoOf, makeFormat, utf8Len} from './format.js';
 import {parseLayout, serializeLayout} from './layout.js';
+import {pickNoteColor} from './colors.js';
 
 const MAX_PASSES = 4;
 const TMP_NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
@@ -138,11 +139,13 @@ export class Store {
     }
 
     // Section 1.4: the 501st local "new cetli" is refused with a visible message.
-    createNote({text = '', color = 'yellow'} = {}) {
+    // `color` missing: the core picks the base colour (colors.js: a random one that no live note uses yet).
+    createNote({text = '', color} = {}) {
         return this._serial(async () => {
             if (this._admitted.size >= this.maxNotes)
                 return this._refuse(CAUSE.TOO_MANY, {});
-            return this._saveLocked({id: this.p.randomUuid(), base: null, text, color, deleted: false});
+            const chosen = color ?? pickNoteColor(this.listNotes().filter(n => !n.deleted).map(n => n.color), this.p.randomBytes);
+            return this._saveLocked({id: this.p.randomUuid(), base: null, text, color: chosen, deleted: false});
         });
     }
 

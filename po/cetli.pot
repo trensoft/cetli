@@ -18,7 +18,7 @@ msgstr ""
 
 #: data/io.github.trensoft.cetli.desktop.in
 #: data/io.github.trensoft.cetli.metainfo.xml.in
-msgid "cetli"
+msgid "Cetli"
 msgstr ""
 
 #: data/io.github.trensoft.cetli.desktop.in
@@ -148,6 +148,10 @@ msgid "Not saved"
 msgstr ""
 
 #: app/strings.js
+msgid "Not saved: closing loses this text. Close again to discard it."
+msgstr ""
+
+#: app/strings.js
 #, javascript-format
 msgid "%d unresolved"
 msgstr ""
@@ -158,4 +162,12 @@ msgstr ""
 
 #: app/strings.js
 msgid "The code of this project was written with the help of AI agents."
+msgstr ""
+
+#: app/strings.js
+msgid "Custom color"
+msgstr ""
+
+#: app/strings.js
+msgid "Choose a color"
 msgstr ""
