@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Files with translatable strings, one per line (the Makefile adds the desktop file and the metainfo itself).
+# A listed file that is not in the tree yet is skipped by "make pot"; a file with _() calls that is NOT listed
+# here fails "make check-po". Add the file here when it gets its first _().
+app/main.js
+app/strings.js
+extension/cetli@trensoft.local/extension.js

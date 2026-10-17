@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=cetli extension setup
+Exec=@LIBEXECDIR@/cetli/enable-extension
+Terminal=false
+NoDisplay=true
+OnlyShowIn=GNOME;
+X-GNOME-Autostart-Phase=Application

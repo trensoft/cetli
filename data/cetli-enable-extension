@@ -1,0 +1,27 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Run by the XDG autostart entry of the cetli package at login. Enables the cetli GNOME Shell extension
+# once per user and then never again, so that a user who turns it off later is not overruled.
+# It takes no arguments and touches nothing but the marker file below.
+set -u
+[ "$#" -eq 0 ] || exit 2
+
+uuid='cetli@trensoft.local'
+state="${XDG_STATE_HOME:-$HOME/.local/state}/cetli"
+marker="$state/extension-enabled"
+
+[ -e "$marker" ] && exit 0
+command -v gnome-extensions >/dev/null 2>&1 || exit 0
+
+# The shell may still be starting when the autostart entry runs; the marker is written only after a success,
+# so a failed attempt is repeated at the next login.
+tries=0
+while [ "$tries" -lt 10 ]; do
+    if gnome-extensions enable "$uuid" >/dev/null 2>&1; then
+        mkdir -p "$state" && : > "$marker"
+        exit 0
+    fi
+    tries=$((tries + 1))
+    sleep 3
+done
+exit 0

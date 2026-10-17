@@ -1,0 +1,7 @@
+# build output of the Makefile and of rpmbuild
+/build/
+*.src.rpm
+*.rpm
+*.mo
+/po/*.new
+node_modules/

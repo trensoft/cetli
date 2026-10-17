@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=cetli
+Comment=Small notes on the desktop that sync between your computers
+Exec=cetli
+Icon=io.github.trensoft.cetli
+Terminal=false
+Categories=GNOME;GTK;Utility;
+Keywords=notes;sticky;memo;
+StartupNotify=true
+StartupWMClass=io.github.trensoft.cetli

@@ -1,0 +1,7 @@
+{
+  "uuid": "cetli@trensoft.local",
+  "name": "cetli",
+  "description": "Puts the cetli note windows back where you left them. Reads and writes only ~/.local/state/cetli/layout.json. No network.",
+  "shell-version": ["47", "48", "49"],
+  "version": 1
+}

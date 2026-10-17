@@ -1,0 +1,161 @@
+# English translation of cetli (the source language: nothing to translate).
+# Copyright (C) 2026 TrenSoft
+# This file is distributed under the same license as the cetli package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cetli 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/trensoft/cetli/issues\n"
+"POT-Creation-Date: 2026-10-17 07:13+0000\n"
+"PO-Revision-Date: 2026-10-17 07:13+0000\n"
+"Last-Translator: TrenSoft\n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid "cetli"
+msgstr ""
+
+#: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in app/strings.js
+msgid "Small notes on the desktop that sync between your computers"
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"cetli keeps short notes in small windows on the GNOME desktop. Every note is "
+"one plain file in a folder, so the folder can be kept in step between your "
+"computers with a tool such as Syncthing."
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"If two computers change the same note before they meet, cetli keeps both "
+"versions and shows the second one as a note of its own."
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid "TrenSoft"
+msgstr ""
+
+#: app/strings.js
+msgid "New note"
+msgstr ""
+
+#: app/strings.js
+msgid "Delete note"
+msgstr ""
+
+#: app/strings.js
+msgid "About cetli"
+msgstr ""
+
+#: app/strings.js
+msgid "Main menu"
+msgstr ""
+
+#: app/strings.js
+msgid "Color"
+msgstr ""
+
+#: app/strings.js
+msgid "Note text"
+msgstr ""
+
+#: app/strings.js
+msgid "Yellow"
+msgstr ""
+
+#: app/strings.js
+msgid "Green"
+msgstr ""
+
+#: app/strings.js
+msgid "Blue"
+msgstr ""
+
+#: app/strings.js
+msgid "Pink"
+msgstr ""
+
+#: app/strings.js
+msgid "Purple"
+msgstr ""
+
+#: app/strings.js
+msgid "Gray"
+msgstr ""
+
+#: app/strings.js
+msgid "A newer version arrived from the other computer"
+msgstr ""
+
+#: app/strings.js
+msgid "Deleted on the other computer"
+msgstr ""
+
+#: app/strings.js
+msgid "The note file is gone"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the file has a date in the future, waiting"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the note file cannot be read"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the note file needs a newer cetli"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the other version could not be kept"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the other version could not be kept (disk full?)"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the file could not be written"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the note is too large"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: too many notes"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: revision limit reached"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: this note cannot be saved"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved"
+msgstr ""
+
+#: app/strings.js
+#, javascript-format
+msgid "%d unresolved"
+msgstr ""
+
+#: app/strings.js
+msgid "Conflicting copies of notes were kept; cetli does not merge them yet"
+msgstr ""
+
+#: app/strings.js
+msgid "The code of this project was written with the help of AI agents."
+msgstr ""

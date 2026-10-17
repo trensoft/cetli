@@ -1,0 +1,169 @@
+# Hungarian translation of cetli.
+# Copyright (C) 2026 TrenSoft
+# This file is distributed under the same license as the cetli package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cetli 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/trensoft/cetli/issues\n"
+"POT-Creation-Date: 2026-10-17 07:13+0000\n"
+"PO-Revision-Date: 2026-10-17 07:13+0000\n"
+"Last-Translator: TrenSoft\n"
+"Language-Team: Hungarian\n"
+"Language: hu\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid "cetli"
+msgstr "cetli"
+
+#: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in app/strings.js
+msgid "Small notes on the desktop that sync between your computers"
+msgstr ""
+"Kis jegyzetek az asztalon, amelyek a számítógépeid között szinkronban "
+"maradnak"
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"cetli keeps short notes in small windows on the GNOME desktop. Every note is "
+"one plain file in a folder, so the folder can be kept in step between your "
+"computers with a tool such as Syncthing."
+msgstr ""
+"A cetli rövid jegyzeteket tart kis ablakokban a GNOME asztalon. Minden "
+"jegyzet egy sima fájl egy mappában, így a mappát egy olyan eszközzel, mint a "
+"Syncthing, szinkronban tarthatod a számítógépeid között."
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"If two computers change the same note before they meet, cetli keeps both "
+"versions and shows the second one as a note of its own."
+msgstr ""
+"Ha két számítógép ugyanazt a jegyzetet módosítja, mielőtt találkoznának, a "
+"cetli mindkét változatot megőrzi, és a másodikat külön jegyzetként mutatja."
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid "TrenSoft"
+msgstr "TrenSoft"
+
+#: app/strings.js
+msgid "New note"
+msgstr "Új jegyzet"
+
+#: app/strings.js
+msgid "Delete note"
+msgstr "Jegyzet törlése"
+
+#: app/strings.js
+msgid "About cetli"
+msgstr "A cetli névjegye"
+
+#: app/strings.js
+msgid "Main menu"
+msgstr "Főmenü"
+
+#: app/strings.js
+msgid "Color"
+msgstr "Szín"
+
+#: app/strings.js
+msgid "Note text"
+msgstr "Jegyzet szövege"
+
+#: app/strings.js
+msgid "Yellow"
+msgstr "Sárga"
+
+#: app/strings.js
+msgid "Green"
+msgstr "Zöld"
+
+#: app/strings.js
+msgid "Blue"
+msgstr "Kék"
+
+#: app/strings.js
+msgid "Pink"
+msgstr "Rózsaszín"
+
+#: app/strings.js
+msgid "Purple"
+msgstr "Lila"
+
+#: app/strings.js
+msgid "Gray"
+msgstr "Szürke"
+
+#: app/strings.js
+msgid "A newer version arrived from the other computer"
+msgstr "Újabb változat érkezett a másik számítógépről"
+
+#: app/strings.js
+msgid "Deleted on the other computer"
+msgstr "A másik számítógépen törölték"
+
+#: app/strings.js
+msgid "The note file is gone"
+msgstr "A jegyzet fájlja eltűnt"
+
+#: app/strings.js
+msgid "Not saved: the file has a date in the future, waiting"
+msgstr "Nincs mentve: a fájl dátuma a jövőben van, várakozás"
+
+#: app/strings.js
+msgid "Not saved: the note file cannot be read"
+msgstr "Nincs mentve: a jegyzet fájlja nem olvasható"
+
+#: app/strings.js
+msgid "Not saved: the note file needs a newer cetli"
+msgstr "Nincs mentve: a jegyzet fájljához újabb cetli kell"
+
+#: app/strings.js
+msgid "Not saved: the other version could not be kept"
+msgstr "Nincs mentve: a másik változatot nem sikerült megőrizni"
+
+#: app/strings.js
+msgid "Not saved: the other version could not be kept (disk full?)"
+msgstr ""
+"Nincs mentve: a másik változatot nem sikerült megőrizni (megtelt a lemez?)"
+
+#: app/strings.js
+msgid "Not saved: the file could not be written"
+msgstr "Nincs mentve: a fájlt nem sikerült megírni"
+
+#: app/strings.js
+msgid "Not saved: the note is too large"
+msgstr "Nincs mentve: a jegyzet túl nagy"
+
+#: app/strings.js
+msgid "Not saved: too many notes"
+msgstr "Nincs mentve: túl sok jegyzet"
+
+#: app/strings.js
+msgid "Not saved: revision limit reached"
+msgstr "Nincs mentve: elérte a változatok számának korlátját"
+
+#: app/strings.js
+msgid "Not saved: this note cannot be saved"
+msgstr "Nincs mentve: a jegyzet nem menthető el"
+
+#: app/strings.js
+msgid "Not saved"
+msgstr "Nincs mentve"
+
+#: app/strings.js
+#, javascript-format
+msgid "%d unresolved"
+msgstr "%d megoldatlan"
+
+#: app/strings.js
+msgid "Conflicting copies of notes were kept; cetli does not merge them yet"
+msgstr "Ütköző jegyzetmásolatok maradtak meg; a cetli még nem egyesíti őket"
+
+#: app/strings.js
+msgid "The code of this project was written with the help of AI agents."
+msgstr "Ennek a projektnek a kódját AI-ügynökök segítségével írták."

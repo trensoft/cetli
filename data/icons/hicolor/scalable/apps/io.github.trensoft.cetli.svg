@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- cetli placeholder icon, drawn for this project: a yellow slip of paper with a folded corner. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <path d="M20 14h88a6 6 0 0 1 6 6v64L84 114H20a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6z" fill="#f6d32d"/>
+  <path d="M114 84L84 114V90a6 6 0 0 1 6-6z" fill="#e5a50a"/>
+  <g stroke="#865e3c" stroke-width="5" stroke-linecap="round">
+    <path d="M32 40h64"/>
+    <path d="M32 58h64"/>
+    <path d="M32 76h36"/>
+  </g>
+</svg>

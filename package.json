@@ -1,0 +1,8 @@
+{
+  "name": "cetli-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "description": "cetli P2 core: save layer, validation, conflict function (front-end independent)"
+}
