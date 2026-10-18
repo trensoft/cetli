@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.3
+Version:        0.2.4
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -122,6 +122,12 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.4-1
+- A new note is red (RHEL red, #ee0000), and the red is the first circle of the colour grid; no existing note changes colour
+- The header of a red note shows the title "Important" (white, bold, larger than the text, in the middle, cut with an ellipsis on a very small window, as readable in a window that is not active); the title is translated in the language catalogs, the other texts of the new catalogs stay English until they are translated
+- The text of a red note is bold (a look of the colour: nothing is stored in the note)
+- Fix: a note with a custom colour (the red, #3f3d3c, #336699 ...) drew black text when it started from its file; the text colour is right now
+
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.3-1
 - No change to the application: the app/ code is identical to 0.2.2
 - Tests only: the All notes bulk smoke test now uses 50 notes (not 1000 files) with stricter limits (build 250 ms, refresh 10 ms) and exits after its result instead of hanging
