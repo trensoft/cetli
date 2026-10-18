@@ -157,6 +157,8 @@ const MUTANTS = [
         find: "gone: !g || (!g.main && g.conflicts.length === 0)}", repl: "gone: true}"},
     {id: 'M70', rule: '0.2.6: "gone" is negated (a vanished file is not gone)', file: 'store.js',
         find: "gone: !g || (!g.main && g.conflicts.length === 0)}", repl: "gone: !!g?.main}"},
+    {id: 'M71', rule: '0.2.6: "gone" ignores the conflict copies (a vanished main file with a conflict copy is gone)', file: 'store.js',
+        find: "gone: !g || (!g.main && g.conflicts.length === 0)}", repl: "gone: !g || !g.main}"},
 ];
 
 function copyTree(from, to) {
