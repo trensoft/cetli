@@ -252,7 +252,7 @@ test('static: the user-visible strings are literal msgids that xgettext can see 
     const calls = [...c.matchAll(/\b_\(('[^'\\]*'|[^'][^)]*)\)/g)].map(m => m[1].trim());
     assert.ok(calls.length >= 20);
     for (const arg of calls)
-        assert.match(arg, /^'[^'\\]*'$/, `_(${arg}) is not a plain single-quoted literal`);
+        assert.match(arg, /^('[^'\\]*'|"[^"\\]*")$/, `_(${arg}) is not a plain quoted literal`);   // double quotes only for a text that holds an apostrophe
 });
 
 // ---- 0.2.1 "All notes" ----------------------------------------------------------------------------------------------

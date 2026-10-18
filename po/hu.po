@@ -339,7 +339,10 @@ msgid ""
 "Sync needs the Syncthing program, and it is not installed on this computer. "
 "Install it with the commands below, then press Check again. cetli does not "
 "run them for you."
-msgstr "A szinkronizáláshoz a Syncthing program kell, és az nincs telepítve ezen a számítógépen. Telepítsd az alábbi parancsokkal, aztán nyomd meg az Ellenőrzés újra gombot. A cetli nem futtatja le őket helyetted."
+msgstr ""
+"A szinkronizáláshoz a Syncthing program kell, és az nincs telepítve ezen a "
+"számítógépen. Telepítsd az alábbi parancsokkal, aztán nyomd meg az "
+"Ellenőrzés újra gombot. A cetli nem futtatja le őket helyetted."
 
 #: app/strings.js
 msgid "Set up sync"
@@ -353,7 +356,14 @@ msgid ""
 "ID and IP address) but not your notes: those are encrypted between your "
 "computers. cetli opens a network port and announces itself on the local "
 "network. Nothing is changed until you press the button."
-msgstr "Ez a Syncthing programot háttérszolgáltatásként indítja el a felhasználódnak, és minden bejelentkezéskor futtatja. A számítógépeid nyilvános Syncthing-kiszolgálókon és közvetítőkön keresztül találják meg egymást; ezek azt tudják meg, hogy a számítógépek léteznek (eszközazonosító és IP-cím), a jegyzeteidet viszont nem: azok titkosítva mennek a két számítógéped között. A cetli megnyit egy hálózati portot, és bejelentkezik a helyi hálózaton. Amíg meg nem nyomod a gombot, semmi sem változik."
+msgstr ""
+"Ez a Syncthing programot háttérszolgáltatásként indítja el a "
+"felhasználódnak, és minden bejelentkezéskor futtatja. A számítógépeid "
+"nyilvános Syncthing-kiszolgálókon és közvetítőkön keresztül találják meg "
+"egymást; ezek azt tudják meg, hogy a számítógépek léteznek (eszközazonosító "
+"és IP-cím), a jegyzeteidet viszont nem: azok titkosítva mennek a két "
+"számítógéped között. A cetli megnyit egy hálózati portot, és bejelentkezik a "
+"helyi hálózaton. Amíg meg nem nyomod a gombot, semmi sem változik."
 
 #: app/strings.js
 msgid "Set up sync on this computer"
@@ -393,6 +403,22 @@ msgid "Waiting for the notes"
 msgstr "Várakozás a jegyzetekre"
 
 #: app/strings.js
+msgid "Stopping additions from other computers"
+msgstr "Más számítógépek hozzáadásainak leállítása"
+
+#: app/strings.js
+msgid "Removing the computers"
+msgstr "A számítógépek eltávolítása"
+
+#: app/strings.js
+msgid "Checking the removal"
+msgstr "Az eltávolítás ellenőrzése"
+
+#: app/strings.js
+msgid "Waiting to see whether one comes back"
+msgstr "Várakozás: nem tér-e vissza valamelyik"
+
+#: app/strings.js
 msgid "Connect two computers"
 msgstr "Két számítógép összekapcsolása"
 
@@ -403,7 +429,21 @@ msgstr "Ez a számítógép"
 #: app/strings.js
 msgid ""
 "To connect, enter this ID on the other computer. This window waits for it."
-msgstr "Az összekapcsoláshoz írd be ezt az azonosítót a másik számítógépen. Ez az ablak arra vár."
+msgstr ""
+"Az összekapcsoláshoz írd be ezt az azonosítót a másik számítógépen. Ez az "
+"ablak arra vár."
+
+#: app/strings.js
+msgid ""
+"To add this computer to a group, open cetli on a computer that is already in "
+"the group and press Add a computer there. Then enter that computer's ID here."
+msgstr "Ha ezt a számítógépet egy csoporthoz akarod adni, nyisd meg a cetlit egy olyan számítógépen, amely már a csoportban van, és nyomd meg ott a Számítógép hozzáadása gombot. Utána ide írd be annak a számítógépnek az azonosítóját."
+
+#: app/strings.js
+msgid ""
+"This computer will join the group of the other computer. The other computers "
+"of that group will appear here without asking you."
+msgstr "Ez a számítógép a másik számítógép csoportjához csatlakozik. A csoport többi számítógépe is megjelenik itt, anélkül, hogy megkérdezne."
 
 #: app/strings.js
 msgid "Copy the ID"
@@ -435,7 +475,9 @@ msgstr "Ez nem érvényes azonosító. Ellenőrizd, és próbáld újra."
 
 #: app/strings.js
 msgid "This is the ID of this computer. Enter the ID of the other computer."
-msgstr "Ez ennek a számítógépnek az azonosítója. A másik számítógép azonosítóját írd be."
+msgstr ""
+"Ez ennek a számítógépnek az azonosítója. A másik számítógép azonosítóját írd "
+"be."
 
 #: app/strings.js
 msgid "Another computer wants to connect"
@@ -454,12 +496,26 @@ msgstr "Név: %s"
 msgid ""
 "Accept only if the other computer shows the same ID. Compare at least the "
 "first two groups."
-msgstr "Csak akkor fogadd el, ha a másik számítógép ugyanezt az azonosítót mutatja. Hasonlítsd össze legalább az első két csoportot."
+msgstr ""
+"Csak akkor fogadd el, ha a másik számítógép ugyanezt az azonosítót mutatja. "
+"Hasonlítsd össze legalább az első két csoportot."
 
 #: app/strings.js
 #, javascript-format
 msgid "Accept %s (ID starts %s)"
 msgstr "%s elfogadása (az azonosító eleje: %s)"
+
+#: app/strings.js
+msgid ""
+"Once accepted, this computer can also add other computers to your group, "
+"without asking you again."
+msgstr "Elfogadás után ez a számítógép újabb számítógépeket is felvehet a csoportodba, anélkül, hogy újra megkérdezne."
+
+#: app/strings.js
+msgid ""
+"A computer you accept can add other computers to your group without asking "
+"you again. Remove a lost computer on all your computers."
+msgstr "Egy elfogadott számítógép újabb számítógépeket vehet fel a csoportodba anélkül, hogy újra megkérdezne. Az elveszett számítógépet az összes számítógépeden távolítsd el."
 
 #: app/strings.js
 msgid "Connecting…"
@@ -469,7 +525,10 @@ msgstr "Kapcsolódás…"
 msgid ""
 "The other computer must also have the ID of this computer entered, and its "
 "sync window must be open. This is the ID of this computer:"
-msgstr "A másik számítógépen is be kell írni ennek a számítógépnek az azonosítóját, és a szinkronablakának nyitva kell lennie. Ez ennek a számítógépnek az azonosítója:"
+msgstr ""
+"A másik számítógépen is be kell írni ennek a számítógépnek az azonosítóját, "
+"és a szinkronablakának nyitva kell lennie. Ez ennek a számítógépnek az "
+"azonosítója:"
 
 #: app/strings.js
 msgid "Connected"
@@ -496,11 +555,45 @@ msgid ""
 "Now open cetli on the other computer. It must also say Connected. If it does "
 "not, or if the ID shown here is not the one the other computer shows as This "
 "computer, press Stop syncing here."
-msgstr "Most nyisd meg a cetlit a másik számítógépen. Ott is ezt kell látnod: Kapcsolódva. Ha nem, vagy ha az itt látható azonosító nem az, amit a másik számítógép Ez a számítógép alatt mutat, nyomd meg itt a Szinkron leállítása gombot."
+msgstr ""
+"Most nyisd meg a cetlit a másik számítógépen. Ott is ezt kell látnod: "
+"Kapcsolódva. Ha nem, vagy ha az itt látható azonosító nem az, amit a másik "
+"számítógép Ez a számítógép alatt mutat, nyomd meg itt a Szinkron leállítása "
+"gombot."
 
 #: app/strings.js
-msgid "Sync"
-msgstr "Szinkron"
+msgid "Your computers"
+msgstr "A számítógépeid"
+
+#: app/strings.js
+#, javascript-format
+msgid "%s / %s computers"
+msgstr "%s / %s számítógép"
+
+#: app/strings.js
+msgid "Add a computer"
+msgstr "Számítógép hozzáadása"
+
+#: app/strings.js
+msgid "You accepted this computer"
+msgstr "Ezt a számítógépet te fogadtad el"
+
+#: app/strings.js
+#, javascript-format
+msgid "Added through %s (ID starts %s)"
+msgstr "%s vette fel (az azonosító eleje: %s)"
+
+#: app/strings.js
+msgid "Added through a computer that is no longer here"
+msgstr "Olyan számítógép vette fel, amely már nincs itt"
+
+#: app/strings.js
+msgid "Limited: nothing is taken over from it"
+msgstr "Korlátozott: nem veszek át tőle semmit"
+
+#: app/strings.js
+msgid "Another computer in the list has the same name. Compare the ID."
+msgstr "A lista egy másik számítógépének ugyanez a neve. Hasonlítsd össze az azonosítót."
 
 #: app/strings.js
 msgid "The connection is not confirmed yet"
@@ -511,50 +604,159 @@ msgid "Not connected right now"
 msgstr "Jelenleg nincs kapcsolat"
 
 #: app/strings.js
-msgid "Checking the connection…"
-msgstr "A kapcsolat ellenőrzése…"
-
-#: app/strings.js
-msgid "This computer could not open its sync port. Connecting may still work, but may take longer."
-msgstr "Ez a számítógép nem tudta megnyitni a szinkronizálási portját. A csatlakozás ettől még működhet, de tovább tarthat."
+msgid ""
+"This computer could not open its sync port. Connecting may still work, but "
+"may take longer."
+msgstr ""
+"Ez a számítógép nem tudta megnyitni a szinkronizálási portját. A csatlakozás "
+"ettől még működhet, de tovább tarthat."
 
 #: app/strings.js
 msgid "The sync program does not answer right now."
 msgstr "A szinkronizáló program jelenleg nem válaszol."
 
 #: app/strings.js
-msgid "Other computer"
-msgstr "Másik számítógép"
+#, javascript-format
+msgid "This group already has %s computers. Remove one first."
+msgstr "Ebben a csoportban már %s számítógép van. Előbb távolíts el egyet."
+
+#: app/strings.js
+#, javascript-format
+msgid ""
+"This group has %s computers, more than the %s that cetli allows. New "
+"computers cannot be added until you remove some."
+msgstr "Ebben a csoportban %s számítógép van, több, mint a cetli által megengedett %s. Új számítógépet addig nem adhatsz hozzá, amíg nem távolítasz el néhányat."
+
+#: app/strings.js
+#, javascript-format
+msgid ""
+"%s computers were added to your group since you last looked. Check that you "
+"know all of them."
+msgstr "%s számítógép került a csoportba, mióta utoljára megnézted. Ellenőrizd, hogy mindegyiket ismered."
+
+#: app/strings.js
+msgid "They are all mine"
+msgstr "Mind az enyém"
+
+#: app/strings.js
+msgid "Not mine, remove"
+msgstr "Nem az enyém, eltávolítás"
+
+#: app/strings.js
+msgid ""
+"Since version 0.2.6, a computer you accepted can add other computers to your "
+"group without asking you again. Allow this for the computers you already "
+"accepted? Do it on each of your computers."
+msgstr "A 0.2.6 verziótól az általad elfogadott számítógép újabb számítógépeket vehet fel a csoportodba, anélkül, hogy újra megkérdezne. Engedélyezed ezt a már elfogadott számítógépeknél? Minden számítógépeden el kell végezned."
+
+#: app/strings.js
+msgid "Allow"
+msgstr "Engedélyezem"
+
+#: app/strings.js
+msgid "Not now"
+msgstr "Most nem"
+
+#: app/strings.js
+msgid ""
+"A removal is not finished on this computer. New computers cannot be added "
+"until you press Finish."
+msgstr "Az eltávolítás ezen a számítógépen még nincs befejezve. Új számítógépet addig nem adhatsz hozzá, amíg meg nem nyomod a Kész gombot."
+
+#: app/strings.js
+#, javascript-format
+msgid "A removed computer is back (ID starts %s). Remove it again?"
+msgstr "Egy eltávolított számítógép visszatért (az azonosító eleje: %s). Eltávolítod újra?"
+
+#: app/strings.js
+msgid "Remove"
+msgstr "Eltávolítás"
 
 #: app/strings.js
 msgid "Show the ID of this computer"
 msgstr "Ennek a számítógépnek az azonosítója"
 
 #: app/strings.js
-msgid "Stop syncing with this computer"
-msgstr "Szinkron leállítása ezzel a számítógéppel"
-
-#: app/strings.js
 msgid "Stop syncing"
 msgstr "Szinkron leállítása"
 
 #: app/strings.js
-msgid "Stop syncing with this computer?"
-msgstr "Leállítod a szinkront ezzel a számítógéppel?"
-
-#: app/strings.js
-msgid "Your notes stay on both computers. They will not be exchanged any more."
-msgstr "A jegyzeteid mindkét számítógépen megmaradnak. A továbbiakban nem cserélődnek."
-
-#: app/strings.js
-msgid "Not finished"
-msgstr "Nincs befejezve"
+msgid "Stop syncing with all computers"
+msgstr "A szinkron leállítása az összes számítógéppel"
 
 #: app/strings.js
 msgid ""
-"This computer was set up to connect to another computer, but the connection "
-"was never completed. Stop syncing, then start again."
-msgstr "Ezt a számítógépet beállítottuk egy másikhoz való kapcsolódásra, de a kapcsolat sosem jött létre. Állítsd le a szinkront, aztán kezdd újra."
+"Your notes stay on all your computers. They will not be exchanged any more."
+msgstr "A jegyzeteid minden számítógépen megmaradnak. A továbbiakban nem cserélődnek."
+
+#: app/strings.js
+msgid "Remove a computer"
+msgstr "Számítógép eltávolítása"
+
+#: app/strings.js
+msgid "I still have this computer"
+msgstr "Megvan még ez a számítógép"
+
+#: app/strings.js
+msgid ""
+"Syncing with it stops on this computer. Its notes stay on it. Computers that "
+"got it through this one drop it too."
+msgstr "Ezen a számítógépen leáll vele a szinkron. A jegyzetei megmaradnak rajta. Azok is eltávolítják, amelyek ezen keresztül kapták."
+
+#: app/strings.js
+msgid "It is lost or stolen, or I do not know it"
+msgstr "Elveszett, ellopták, vagy nem ismerem"
+
+#: app/strings.js
+msgid ""
+"cetli first stops this computer from taking anything over from the others, "
+"then removes the computer. After that you must do the same on each of your "
+"other computers."
+msgstr "A cetli először megakadályozza, hogy ez a számítógép bármit átvegyen a többitől, majd eltávolítja a számítógépet. Utána ugyanezt meg kell csinálnod a többi számítógépeden is."
+
+#: app/strings.js
+msgid "Also remove these, if they are not yours:"
+msgstr "Távolítsd el ezeket is, ha nem a tieid:"
+
+#: app/strings.js
+#, javascript-format
+msgid "Select at most %s computers at once."
+msgstr "Egyszerre legfeljebb %s számítógépet jelölhetsz ki."
+
+#: app/strings.js
+msgid "Removing…"
+msgstr "Eltávolítás…"
+
+#: app/strings.js
+#, javascript-format
+msgid ""
+"Removed on this computer: %s. Your notes can still reach it through other "
+"computers that have not removed it yet."
+msgstr "Ezen a számítógépen eltávolítva: %s. A jegyzeteid még elérhetik, amíg van olyan számítógép, amelyen még nem távolítottad el."
+
+#: app/strings.js
+#, javascript-format
+msgid ""
+"These computers were offline just now: %s. If one of them still knows the "
+"removed computer, it can bring it back to every computer that has not done "
+"this removal yet. It cannot bring it back here while this computer is "
+"limited. Open cetli on it and do the same there."
+msgstr "Ezek a számítógépek az előbb nem voltak elérhetők: %s. Ha valamelyik még ismeri az eltávolított számítógépet, visszahozhatja minden olyan számítógépre, amelyen még nem végezted el az eltávolítást. Erre a számítógépre nem tudja visszahozni, amíg ez korlátozott. Nyisd meg rajta a cetlit, és csináld meg ott is ugyanezt."
+
+#: app/strings.js
+msgid ""
+"To be sure, open this list on each of your other computers and choose the "
+"same action there. Press Finish here only when you have done it everywhere. "
+"Until then this computer takes no additions from other computers."
+msgstr "A biztonság kedvéért nyisd meg ezt a listát a többi számítógépeden is, és válaszd ott ugyanezt. A Kész gombot itt csak akkor nyomd meg, ha mindenhol elvégezted. Addig ez a számítógép nem vesz át újabb számítógépeket másoktól."
+
+#: app/strings.js
+msgid "Finish: I did this on all my computers"
+msgstr "Kész: mindegyik számítógépemen elvégeztem"
+
+#: app/strings.js
+msgid "Finish"
+msgstr "Kész"
 
 #: app/strings.js
 msgid "Sync is already set up here"
@@ -565,13 +767,19 @@ msgid ""
 "The notes of this computer are already synchronised by another Syncthing. "
 "cetli leaves it exactly as it is, and your sync keeps working as you set it "
 "up."
-msgstr "Ennek a számítógépnek a jegyzeteit már egy másik Syncthing szinkronizálja. A cetli pontosan úgy hagyja, ahogy van, és a szinkronod úgy működik tovább, ahogy beállítottad."
+msgstr ""
+"Ennek a számítógépnek a jegyzeteit már egy másik Syncthing szinkronizálja. A "
+"cetli pontosan úgy hagyja, ahogy van, és a szinkronod úgy működik tovább, "
+"ahogy beállítottad."
 
 #: app/strings.js
 msgid ""
 "If that Syncthing does not sync this folder any more, delete the hidden "
 "folder .stfolder inside the notes folder and open this window again."
-msgstr "Ha az a Syncthing már nem szinkronizálja ezt a mappát, töröld a jegyzetmappában lévő rejtett .stfolder mappát, és nyisd meg újra ezt az ablakot."
+msgstr ""
+"Ha az a Syncthing már nem szinkronizálja ezt a mappát, töröld a "
+"jegyzetmappában lévő rejtett .stfolder mappát, és nyisd meg újra ezt az "
+"ablakot."
 
 #: app/strings.js
 msgid "Nothing was changed"
@@ -581,7 +789,10 @@ msgstr "Semmi sem változott"
 msgid ""
 "The sync program of cetli contains a computer or a folder that was not set "
 "up here. cetli leaves everything as it is and shows no connection."
-msgstr "A cetli szinkronprogramjában olyan számítógép vagy mappa szerepel, amelyet nem itt állítottak be. A cetli mindent úgy hagy, ahogy van, és nem jelez kapcsolatot."
+msgstr ""
+"A cetli szinkronprogramjában olyan számítógép vagy mappa szerepel, amelyet "
+"nem itt állítottak be. A cetli mindent úgy hagy, ahogy van, és nem jelez "
+"kapcsolatot."
 
 #: app/strings.js
 msgid "Sync did not work"
@@ -595,17 +806,23 @@ msgstr "A Syncthing nincs telepítve ezen a számítógépen."
 msgid ""
 "The background service could not be started: this session has no user "
 "service manager."
-msgstr "A háttérszolgáltatás nem indítható: ebben a munkamenetben nincs felhasználói szolgáltatáskezelő."
+msgstr ""
+"A háttérszolgáltatás nem indítható: ebben a munkamenetben nincs felhasználói "
+"szolgáltatáskezelő."
 
 #: app/strings.js
 msgid ""
 "Sync was started but does not answer. Try again. To see the log, run: "
 "journalctl --user -u cetli-syncthing"
-msgstr "A szinkron elindult, de nem válaszol. Próbáld újra. A napló megtekintéséhez futtasd: journalctl --user -u cetli-syncthing"
+msgstr ""
+"A szinkron elindult, de nem válaszol. Próbáld újra. A napló megtekintéséhez "
+"futtasd: journalctl --user -u cetli-syncthing"
 
 #: app/strings.js
 msgid "The sync settings could not be prepared safely. Nothing was changed."
-msgstr "A szinkron beállításai nem készíthetők elő biztonságosan. Semmi sem változott."
+msgstr ""
+"A szinkron beállításai nem készíthetők elő biztonságosan. Semmi sem "
+"változott."
 
 #: app/strings.js
 msgid "The sync program refused a step. Try again."
@@ -615,12 +832,16 @@ msgstr "A szinkronprogram elutasított egy lépést. Próbáld újra."
 msgid ""
 "This computer is already set up with another computer. Stop syncing with it "
 "first."
-msgstr "Ez a számítógép már be van állítva egy másikkal. Előbb állítsd le vele a szinkront."
+msgstr ""
+"Ez a számítógép már be van állítva egy másikkal. Előbb állítsd le vele a "
+"szinkront."
 
 #: app/strings.js
 msgid ""
 "This computer is set up for a different computer. Stop syncing with it first."
-msgstr "Ez a számítógép egy másik számítógéphez van beállítva. Előbb állítsd le vele a szinkront."
+msgstr ""
+"Ez a számítógép egy másik számítógéphez van beállítva. Előbb állítsd le vele "
+"a szinkront."
 
 #: app/strings.js
 msgid ""
@@ -629,7 +850,17 @@ msgid ""
 "there is right. A firewall on either computer can also be the cause: the "
 "ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may "
 "still come up, but may take longer."
-msgstr "Még várunk. A másik számítógépen is be kell írni ennek a számítógépnek az azonosítóját, és a szinkronablakának nyitva kell lennie; aztán ellenőrizd, hogy az ott látható azonosító helyes-e. Ok lehet bármelyik számítógép tűzfala is: a portok a TCP és UDP 22100, valamint az UDP 21127. Közvetítőn keresztül még létrejöhet a kapcsolat, de tovább tarthat."
+msgstr ""
+"Még várunk. A másik számítógépen is be kell írni ennek a számítógépnek az "
+"azonosítóját, és a szinkronablakának nyitva kell lennie; aztán ellenőrizd, "
+"hogy az ott látható azonosító helyes-e. Ok lehet bármelyik számítógép "
+"tűzfala is: a portok a TCP és UDP 22100, valamint az UDP 21127. Közvetítőn "
+"keresztül még létrejöhet a kapcsolat, de tovább tarthat."
+
+#: app/strings.js
+msgid ""
+"If the other computer says its group is full, remove a computer there first."
+msgstr "Ha a másik számítógép azt írja, hogy betelt a csoportja, ott előbb távolíts el egy számítógépet."
 
 #: app/strings.js
 msgid "Stopped waiting after 15 minutes."
@@ -639,17 +870,22 @@ msgstr "15 perc után abbahagytuk a várakozást."
 msgid ""
 "Too many connection attempts were seen to judge them safely. Nothing was "
 "accepted."
-msgstr "Túl sok kapcsolódási kísérlet látszott ahhoz, hogy biztonságosan el lehessen bírálni őket. Semmit sem fogadtunk el."
+msgstr ""
+"Túl sok kapcsolódási kísérlet látszott ahhoz, hogy biztonságosan el lehessen "
+"bírálni őket. Semmit sem fogadtunk el."
 
 #: app/strings.js
 msgid "More than one computer is knocking. Close this window and try again."
-msgstr "Egynél több számítógép kopogtat. Zárd be ezt az ablakot, és próbáld újra."
+msgstr ""
+"Egynél több számítógép kopogtat. Zárd be ezt az ablakot, és próbáld újra."
 
 #: app/strings.js
 msgid ""
 "A computer that was not added here is listed in the sync program of cetli. "
 "Nothing was connected."
-msgstr "A cetli szinkronprogramjában szerepel egy számítógép, amelyet nem itt adtak hozzá. Semmit sem kapcsoltunk össze."
+msgstr ""
+"A cetli szinkronprogramjában szerepel egy számítógép, amelyet nem itt adtak "
+"hozzá. Semmit sem kapcsoltunk össze."
 
 #: app/strings.js
 msgid "Another sync step is still running."
@@ -658,6 +894,22 @@ msgstr "Egy másik szinkronlépés még fut."
 #: app/strings.js
 msgid "Something went wrong, see the log."
 msgstr "Hiba történt, nézd meg a naplót."
+
+#~ msgid "Sync"
+#~ msgstr "Szinkron"
+
+#~ msgid "Stop syncing with this computer?"
+#~ msgstr "Leállítod a szinkront ezzel a számítógéppel?"
+
+#~ msgid "Not finished"
+#~ msgstr "Nincs befejezve"
+
+#~ msgid ""
+#~ "This computer was set up to connect to another computer, but the "
+#~ "connection was never completed. Stop syncing, then start again."
+#~ msgstr ""
+#~ "Ezt a számítógépet beállítottuk egy másikhoz való kapcsolódásra, de a "
+#~ "kapcsolat sosem jött létre. Állítsd le a szinkront, aztán kezdd újra."
 
 #~ msgid "TrenSoft"
 #~ msgstr "TrenSoft"

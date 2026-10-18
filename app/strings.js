@@ -144,6 +144,10 @@ export function syncStepText(step) {
     case 'share': return _('Sharing the notes');
     case 'connect': return _('Connecting');
     case 'sync': return _('Waiting for the notes');
+    case 'freeze': return _('Stopping additions from other computers');
+    case 'remove': return _('Removing the computers');
+    case 'verify': return _('Checking the removal');
+    case 'dwell': return _('Waiting to see whether one comes back');
     default: return '';
     }
 }
@@ -151,6 +155,9 @@ export function syncStepText(step) {
 export const syncIdsTitle = () => _('Connect two computers');
 export const syncOwnIdHeading = () => _('This computer');
 export const syncOwnIdHint = () => _('To connect, enter this ID on the other computer. This window waits for it.');
+// A computer with no other computer yet: where to start, and what joining means (the typing field is only on this page).
+export const syncNewStart = () => _("To add this computer to a group, open cetli on a computer that is already in the group and press Add a computer there. Then enter that computer's ID here.");
+export const syncGuestNote = () => _('This computer will join the group of the other computer. The other computers of that group will appear here without asking you.');
 export const syncCopyId = () => _('Copy the ID');
 export const syncWaiting = () => _('Waiting for the other computer…');
 export const syncEnterIdHeading = () => _('Or enter the ID shown on the other computer');
@@ -164,6 +171,9 @@ export const syncNameUnreadable = () => _('(name not readable)');
 export const syncCandidateName = name => fill(_('Name: %s'), name);
 export const syncCompareText = () => _('Accept only if the other computer shows the same ID. Compare at least the first two groups.');
 export const syncAcceptButton = (name, group) => fill(_('Accept %s (ID starts %s)'), name, group);
+export const syncAcceptNote = () => _('Once accepted, this computer can also add other computers to your group, without asking you again.');
+// The sentence about the accepted computer and the exception (Nicole, verbatim): on the accept card and in the footnote of the group page.
+export const syncTrustSentence = () => _('A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all your computers.');
 
 export const syncConnectingTitle = () => _('Connecting…');
 export const syncConnectingText = () => _('The other computer must also have the ID of this computer entered, and its sync window must be open. This is the ID of this computer:');
@@ -177,13 +187,20 @@ export const syncDonePeerId = () => _('ID of the other computer:');
 // "Connected", "This computer" and "Stop syncing".
 export const syncCheckOther = () => _('Now open cetli on the other computer. It must also say Connected. If it does not, or if the ID shown here is not the one the other computer shows as This computer, press Stop syncing here.');
 
-export const syncPairedTitle = () => _('Sync');
+// ---- the group (0.2.6): one row per computer ----
+export const syncGroupTitle = () => _('Your computers');
+export const syncGroupCount = (n, max) => fill(_('%s / %s computers'), String(n), String(max));
+export const syncAddButton = () => _('Add a computer');
+export const syncRowAccepted = () => _('You accepted this computer');
+export const syncRowThrough = (name, idStart) => fill(_('Added through %s (ID starts %s)'), name, idStart);
+export const syncRowGone = () => _('Added through a computer that is no longer here');
+export const syncRowLimited = () => _('Limited: nothing is taken over from it');
+export const syncRowSameName = () => _('Another computer in the list has the same name. Compare the ID.');
 export function syncLinkText(key) {
     switch (key) {
     case 'connected': return _('Connected');
     case 'unstable': return _('The connection is not confirmed yet');
     case 'offline': return _('Not connected right now');
-    case 'checking': return _('Checking the connection…');
     default: return '';
     }
 }
@@ -195,14 +212,36 @@ export function syncListenerText(state) {
     default: return '';
     }
 }
-export const syncPeerHeading = () => _('Other computer');
+export const syncGroupFull = max => fill(_('This group already has %s computers. Remove one first.'), String(max));
+export const syncOverLimit = (n, max) => fill(_('This group has %s computers, more than the %s that cetli allows. New computers cannot be added until you remove some.'), String(n), String(max));
+export const syncNewBanner = n => fill(_('%s computers were added to your group since you last looked. Check that you know all of them.'), String(n));
+export const syncNewAllMine = () => _('They are all mine');
+export const syncNewNotMine = () => _('Not mine, remove');
+export const syncPromoteBanner = () => _('Since version 0.2.6, a computer you accepted can add other computers to your group without asking you again. Allow this for the computers you already accepted? Do it on each of your computers.');
+export const syncPromoteAllow = () => _('Allow');
+export const syncPromoteLater = () => _('Not now');
+export const syncFreezeBanner = () => _('A removal is not finished on this computer. New computers cannot be added until you press Finish.');
+export const syncReturned = idStart => fill(_('A removed computer is back (ID starts %s). Remove it again?'), idStart);
+export const syncRemoveButton = () => _('Remove');
 export const syncShowOwnId = () => _('Show the ID of this computer');
-export const syncStop = () => _('Stop syncing with this computer');
 export const syncStopShort = () => _('Stop syncing');
-export const syncStopConfirmTitle = () => _('Stop syncing with this computer?');
-export const syncStopConfirmBody = () => _('Your notes stay on both computers. They will not be exchanged any more.');
-export const syncHalfTitle = () => _('Not finished');
-export const syncHalfText = () => _('This computer was set up to connect to another computer, but the connection was never completed. Stop syncing, then start again.');
+export const syncStopAll = () => _('Stop syncing with all computers');
+export const syncStopConfirmBody = () => _('Your notes stay on all your computers. They will not be exchanged any more.');
+
+// ---- removing a computer ----
+export const syncRemoveTitle = () => _('Remove a computer');
+export const syncRemoveHave = () => _('I still have this computer');
+export const syncRemoveHaveDetail = () => _('Syncing with it stops on this computer. Its notes stay on it. Computers that got it through this one drop it too.');
+export const syncRemoveLost = () => _('It is lost or stolen, or I do not know it');
+export const syncRemoveLostDetail = () => _('cetli first stops this computer from taking anything over from the others, then removes the computer. After that you must do the same on each of your other computers.');
+export const syncRemoveOthers = () => _('Also remove these, if they are not yours:');
+export const syncRemoveTooMany = max => fill(_('Select at most %s computers at once.'), String(max));
+export const syncRevokingTitle = () => _('Removing…');
+export const syncRevokeRemoved = list => fill(_('Removed on this computer: %s. Your notes can still reach it through other computers that have not removed it yet.'), list);
+export const syncRevokeOffline = list => fill(_('These computers were offline just now: %s. If one of them still knows the removed computer, it can bring it back to every computer that has not done this removal yet. It cannot bring it back here while this computer is limited. Open cetli on it and do the same there.'), list);
+export const syncRevokeNext = () => _('To be sure, open this list on each of your other computers and choose the same action there. Press Finish here only when you have done it everywhere. Until then this computer takes no additions from other computers.');
+export const syncFinishButton = () => _('Finish: I did this on all my computers');
+export const syncFinishShort = () => _('Finish');
 
 export const syncInfoStfolderTitle = () => _('Sync is already set up here');
 export const syncInfoStfolderText = () => _('The notes of this computer are already synchronised by another Syncthing. cetli leaves it exactly as it is, and your sync keeps working as you set it up.');
@@ -212,7 +251,7 @@ export const syncInfoForeignText = () => _('The sync program of cetli contains a
 
 export const syncErrorTitle = () => _('Sync did not work');
 // The text of an error code. Information codes (a neutral page) are the same function; the window decides the look.
-export function syncErrorText(code) {
+export function syncErrorText(code, max = null) {
     switch (code) {
     case 'E_NO_SYNCTHING': return _('Syncthing is not installed on this computer.');
     case 'E_NO_USER_SYSTEMD': return _('The background service could not be started: this session has no user service manager.');
@@ -222,10 +261,12 @@ export function syncErrorText(code) {
     case 'E_STFOLDER_EXISTS': return syncInfoStfolderText();
     case 'E_ALREADY_PAIRED': return _('This computer is already set up with another computer. Stop syncing with it first.');
     case 'E_HALF_STATE_OTHER': return _('This computer is set up for a different computer. Stop syncing with it first.');
-    case 'E_PEER_TIMEOUT': return _('Still waiting. The other computer must also have the ID of this computer entered, and its sync window must be open; then check that the ID shown there is right. A firewall on either computer can also be the cause: the ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may still come up, but may take longer.');
+    case 'E_PEER_TIMEOUT': return _('Still waiting. The other computer must also have the ID of this computer entered, and its sync window must be open; then check that the ID shown there is right. A firewall on either computer can also be the cause: the ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may still come up, but may take longer.') + ' ' + _('If the other computer says its group is full, remove a computer there first.');
     case 'E_EXPIRED': return _('Stopped waiting after 15 minutes.');
     case 'E_PENDING_TOO_LARGE': return _('Too many connection attempts were seen to judge them safely. Nothing was accepted.');
     case 'E_PENDING_AMBIGUOUS': return _('More than one computer is knocking. Close this window and try again.');
+    case 'E_GROUP_FULL': return syncGroupFull(max);
+    case 'E_REVOCATION_OPEN': return syncFreezeBanner();
     case 'E_FOREIGN_DEVICE': return _('A computer that was not added here is listed in the sync program of cetli. Nothing was connected.');
     case 'E_BUSY': return _('Another sync step is still running.');
     default: return _('Something went wrong, see the log.');
