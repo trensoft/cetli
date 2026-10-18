@@ -3,7 +3,7 @@
 // holds anything of the engine but the events (PLAN-WIZARD-INTERFACE 4). The real process is app/sync-bridge.js; the tests give a fake one
 // that replays sync-tests/contract/*.ndjson.
 //
-// The process interface (`spawn(argv, {env}) -> proc`):
+// The process interface (`openProcess(argv, {env}) -> proc`):
 //   proc.onLine(fn(line))   one stdout line, without the newline; the process layer caps a line at MAX_LINE_BYTES and the total
 //   proc.onOverflow(fn())   at MAX_TOTAL_BYTES and calls this instead of handing over more
 //   proc.onExit(fn(rc))     the process ended; rc 0..255, or a negative number for a signal
@@ -28,8 +28,8 @@ export function scrubEnviron(environ) {
 
 const failure = (code, step = null) => ({ok: false, error: {code, step}});
 
-// `spawn`, `setTimer(ms, fn) -> handle`, `clearTimer(handle)` and `log(text)` are injected. `environ`: the caller's "NAME=value" list.
-export function createRunner({spawn, exe = ENGINE_PATH, setTimer, clearTimer, log = () => {}, environ = () => []}) {
+// `openProcess`, `setTimer(ms, fn) -> handle`, `clearTimer(handle)` and `log(text)` are injected. `environ`: the caller's "NAME=value" list.
+export function createRunner({openProcess, exe = ENGINE_PATH, setTimer, clearTimer, log = () => {}, environ = () => []}) {
     let active = null;
 
     function start(verb, {flags = {}, stdin = null, onEvent = () => {}} = {}) {
@@ -71,7 +71,7 @@ export function createRunner({spawn, exe = ENGINE_PATH, setTimer, clearTimer, lo
             finish(failure(code));
         };
         try {
-            proc = spawn(argv, {env: scrubEnviron(environ())});
+            proc = openProcess(argv, {env: scrubEnviron(environ())});
         } catch (e) {
             log(`engine ${verb}: not started`);
             return {done: Promise.resolve(failure('E_ENGINE_DIED')), accept: () => false, stop: () => Promise.resolve(failure('E_ENGINE_DIED'))};

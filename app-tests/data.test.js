@@ -197,7 +197,13 @@ test('window size from the layout entry is clamped; no entry gives the fallback'
     assert.deepEqual(sizeOf({[id]: {w: 0, h: NaN}}, id, fb, 120, 4000), fb);
 });
 
-test('static: SPDX header everywhere, _() only in strings.js, no network, process, eval or secret in app/', () => {
+// The two exceptions of PLAN-WIZARD 0F.2 / 0H (B), nothing wider: app/sync-bridge.js starts the engine, so it is exempt from the
+// PROCESS pattern only; app/strings.js names the program in the consent and install texts, so it is exempt from the WORD `syncthing`
+// only. password, token, secret, credential and api key stay forbidden in every file, and the network and eval patterns in all.
+const EXEMPT_PROCESS = ['sync-bridge.js'];
+const EXEMPT_PROGRAM_WORD = ['strings.js'];
+
+test('static: SPDX header everywhere, _() only in strings.js, no network, process, eval or secret in app/ (two narrow exceptions)', () => {
     const files = fs.readdirSync(path.join(root, 'app')).filter(f => f.endsWith('.js'));
     assert.ok(files.length >= 6);
     const code = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
@@ -207,14 +213,38 @@ test('static: SPDX header everywhere, _() only in strings.js, no network, proces
         const c = code(text);
         if (f !== 'strings.js')
             assert.equal(/(^|[^A-Za-z0-9_.])(_|gettext|ngettext)\(/.test(c), false, `${f}: a translatable text outside strings.js`);
-        for (const [re, what] of [
-            [/\b(Subprocess|spawn|exec|child_process|launch)\b/, 'process'],
-            [/\b(fetch|XMLHttpRequest|WebSocket|Soup|http:)\b/, 'network'],
-            [/\beval\s*\(|new\s+Function\b/, 'dynamic code'],
-            [/syncthing|api[_-]?key|password|secret|token|credential/i, 'transport or credential'],
+        const credential = EXEMPT_PROGRAM_WORD.includes(f) ? /api[_-]?key|password|secret|token|credential/i : /syncthing|api[_-]?key|password|secret|token|credential/i;
+        for (const [re, what, exempt] of [
+            [/\b(Subprocess|spawn|exec|child_process|launch)\b/, 'process', EXEMPT_PROCESS.includes(f)],
+            [/\b(fetch|XMLHttpRequest|WebSocket|Soup|http:)\b/, 'network', false],
+            [/\beval\s*\(|new\s+Function\b/, 'dynamic code', false],
+            [credential, 'transport or credential', false],
         ])
-            assert.equal(re.test(c), false, `${f}: ${what}`);
+            assert.equal(exempt ? false : re.test(c), false, `${f}: ${what}`);
     }
+});
+
+test('static: the bridge uses the process API only with an argv array and the literal engine path (the exception is a whitelist, not a switch)', () => {
+    const text = fs.readFileSync(path.join(root, 'app/sync-bridge.js'), 'utf8');
+    const c = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+    assert.match(c, /const ENGINE = '\/usr\/bin\/cetli-sync';/);
+    assert.equal((c.match(/\/usr\/bin\//g) ?? []).length, 1, 'one literal path, the engine');
+    assert.match(c, /launcher\.spawnv\(argv\)/);
+    assert.equal(/Subprocess\.new|\.spawn\(|\bsh\b|\bbash\b|'-c'|"-c"|\/bin\/sh/.test(c), false, 'no shell, no string command');
+    assert.equal(/getenv|setenv|apikey/i.test(c), false, 'no environment lookup, no key');
+    assert.equal(/\bST[A-Z]{3,}/.test(c.replace(/Gio\.SubprocessFlags\.STD\w+/g, '')), false, 'no ST* variable name');
+    assert.equal(/process\.env|GLib\.get_environ\(\)\.|environ\s*=/.test(c), false);
+    const code = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+    const other = fs.readdirSync(path.join(root, 'app')).filter(f => f.endsWith('.js') && f !== 'sync-bridge.js');
+    for (const f of other)
+        assert.equal(/\bSubprocess\b/.test(code(fs.readFileSync(path.join(root, 'app', f), 'utf8'))), false, `${f} starts a process`);
+});
+
+test('static: the word for the sync program is in strings.js alone; no other app file says it', () => {
+    const files = fs.readdirSync(path.join(root, 'app')).filter(f => f.endsWith('.js'));
+    const code = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+    for (const f of files)
+        assert.equal(/syncthing/i.test(code(fs.readFileSync(path.join(root, 'app', f), 'utf8'))), EXEMPT_PROGRAM_WORD.includes(f), f);
 });
 
 test('static: the user-visible strings are literal msgids that xgettext can see (no concatenation, no template literal)', () => {
@@ -284,7 +314,8 @@ test('"All notes": the row style of a custom colour comes from three numbers; an
 
 test('i18n: the "All notes" texts are in the template and in both catalogs, in Hungarian with accents; the three catalogs agree', () => {
     const read = f => fs.readFileSync(path.join(root, f), 'utf8');
-    const ids = text => new Set([...text.matchAll(/^msgid "(.+)"$/gm)].map(m => m[1]));
+    // A long msgid is wrapped by gettext over several quoted lines: join them.
+    const ids = text => new Set([...text.matchAll(/^msgid ((?:".*"\n)+)/gm)].map(m => m[1].trim().split('\n').map(l => l.slice(1, -1)).join('')));
     const strings = read('app/strings.js');
     const fromCode = new Set([...strings.matchAll(/\b_\('([^'\\]*)'\)/g)].map(m => m[1]));
     const pot = ids(read('po/cetli.pot')), en = ids(read('po/en.po')), hu = ids(read('po/hu.po'));

@@ -8,7 +8,7 @@
 //   - the executable is an absolute literal, the arguments are an array (no shell), and `--home=<dedicated home>` is put in by the port;
 //     a caller cannot pass a home, a GUI address or an API key flag (flags are not a defence, 0E row 8; there is no key, S-2).
 //   - systemctl is reachable only for the closed list of calls on our own unit.
-import {SYNCTHING_EXE, SYSTEMCTL_EXE, UNIT_NAME} from './paths.js';
+import {BACKEND_EXE, SYSTEMCTL_EXE, UNIT_NAME} from './paths.js';
 
 const ENV_NAMES = Object.freeze(['PATH', 'HOME', 'LANG', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR']);
 const ENV_PREFIXES = Object.freeze(['XDG_']);
@@ -58,7 +58,7 @@ export function createRunPort({spawn, hostEnv, home}) {
                 throw new TypeError('syncthing: subcommand or arguments not allowed');
             if (args.some(a => FORBIDDEN_FLAGS.test(a)))
                 throw new TypeError('syncthing: this flag is set by the port only');
-            return start([SYNCTHING_EXE, sub, `--home=${home}`, ...args], opts);
+            return start([BACKEND_EXE, sub, `--home=${home}`, ...args], opts);
         },
         systemctl(args, opts = {}) {
             if (!Array.isArray(args) || !SYSTEMCTL_CALLS.includes(JSON.stringify(args)))

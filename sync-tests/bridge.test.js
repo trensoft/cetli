@@ -28,9 +28,9 @@ function harness(extra = {}) {
     const argvs = [];
     const timers = [];
     const logs = [];
-    const spawn = (argv, opts) => { const p = fakeProc(); procs.push(p); argvs.push({argv, opts}); return p; };
+    const openProcess = (argv, opts) => { const p = fakeProc(); procs.push(p); argvs.push({argv, opts}); return p; };
     const runner = createRunner({
-        spawn, setTimer: (ms, fn) => { const t = {ms, fn, cleared: false}; timers.push(t); return t; }, clearTimer: t => { t.cleared = true; },
+        openProcess, setTimer: (ms, fn) => { const t = {ms, fn, cleared: false}; timers.push(t); return t; }, clearTimer: t => { t.cleared = true; },
         log: m => logs.push(m), environ: () => ['PATH=/usr/bin', 'HOME=/home/u', 'STGUIAPIKEY=k', 'STHOMEDIR=/x', 'XDG_RUNTIME_DIR=/run/user/1', 'JUNK'], ...extra,
     });
     return {runner, procs, argvs, timers, logs};
@@ -177,7 +177,7 @@ test('overflow from the process layer, a failed spawn, a missing terminal line a
     o.procs[0].overflowCb();
     assert.equal(o.procs[0].killed, true);
     assert.equal((await r.done).error.code, 'E_PROTOCOL');
-    const bad = createRunner({spawn: () => { throw new Error('boom'); }, setTimer() {}, clearTimer() {}});
+    const bad = createRunner({openProcess: () => { throw new Error('boom'); }, setTimer() {}, clearTimer() {}});
     assert.deepEqual(await bad.start('status').done, {ok: false, error: {code: 'E_ENGINE_DIED', step: null}});
     assert.equal(bad.busy, false);
     const n = harness();

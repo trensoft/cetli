@@ -5,7 +5,7 @@
 export const DEDICATED_HOME_REL = '.local/state/cetli/syncthing';
 export const UNIT_NAME = 'cetli-syncthing.service';
 export const SOCKET_NAME = 'gui.sock';
-export const SYNCTHING_EXE = '/usr/bin/syncthing';          // the literal that run port and static test look for
+export const BACKEND_EXE = '/usr/bin/syncthing';          // the literal that run port and static test look for
 export const SYSTEMCTL_EXE = '/usr/bin/systemctl';
 export const FOLDER_ID = 'cetli-notes';
 

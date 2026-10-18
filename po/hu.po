@@ -17,38 +17,15 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: data/io.github.trensoft.cetli.desktop.in
-#: data/io.github.trensoft.cetli.metainfo.xml.in
 msgid "Cetli"
 msgstr "Cetli"
 
-#: data/io.github.trensoft.cetli.desktop.in
-#: data/io.github.trensoft.cetli.metainfo.xml.in app/strings.js
+#. Translators: the short description in the About window.
+#: data/io.github.trensoft.cetli.desktop.in app/strings.js
 msgid "Small notes on the desktop that sync between your computers"
 msgstr ""
 "Kis jegyzetek az asztalon, amelyek a számítógépeid között szinkronban "
 "maradnak"
-
-#: data/io.github.trensoft.cetli.metainfo.xml.in
-msgid ""
-"cetli keeps short notes in small windows on the GNOME desktop. Every note is "
-"one plain file in a folder, so the folder can be kept in step between your "
-"computers with a tool such as Syncthing."
-msgstr ""
-"A cetli rövid jegyzeteket tart kis ablakokban a GNOME asztalon. Minden "
-"jegyzet egy sima fájl egy mappában, így a mappát egy olyan eszközzel, mint a "
-"Syncthing, szinkronban tarthatod a számítógépeid között."
-
-#: data/io.github.trensoft.cetli.metainfo.xml.in
-msgid ""
-"If two computers change the same note before they meet, cetli keeps both "
-"versions and shows the second one as a note of its own."
-msgstr ""
-"Ha két számítógép ugyanazt a jegyzetet módosítja, mielőtt találkoznának, a "
-"cetli mindkét változatot megőrzi, és a másodikat külön jegyzetként mutatja."
-
-#: data/io.github.trensoft.cetli.metainfo.xml.in
-msgid "TrenSoft"
-msgstr "TrenSoft"
 
 #: app/strings.js
 msgid "New note"
@@ -63,12 +40,17 @@ msgid "About cetli"
 msgstr "A cetli névjegye"
 
 #: app/strings.js
-msgid "Main menu"
-msgstr "Főmenü"
+msgid "All notes"
+msgstr "Összes jegyzet"
+
+#. Translators: shown in the "All notes" list for a note that has no text.
+#: app/strings.js
+msgid "(empty note)"
+msgstr "(üres jegyzet)"
 
 #: app/strings.js
-msgid "Color"
-msgstr "Szín"
+msgid "Main menu"
+msgstr "Főmenü"
 
 #: app/strings.js
 msgid "Note text"
@@ -174,7 +156,9 @@ msgstr "Nincs mentve"
 
 #: app/strings.js
 msgid "Not saved: closing loses this text. Close again to discard it."
-msgstr "Nincs mentve: a bezárással a szöveg elvész. A végleges bezáráshoz zárd be újra."
+msgstr ""
+"Nincs mentve: a bezárással a szöveg elvész. A végleges bezáráshoz zárd be "
+"újra."
 
 #: app/strings.js
 #, javascript-format
@@ -185,6 +169,7 @@ msgstr "%d megoldatlan"
 msgid "Conflicting copies of notes were kept; cetli does not merge them yet"
 msgstr "Ütköző jegyzetmásolatok maradtak meg; a cetli még nem egyesíti őket"
 
+#. Translators: how the code was written; shown in the About window below the description.
 #: app/strings.js
 msgid "The code of this project was written with the help of AI agents."
 msgstr "Ennek a projektnek a kódját AI-ügynökök segítségével írták."
@@ -197,17 +182,7 @@ msgstr "Egyedi szín"
 msgid "Choose a color"
 msgstr "Válassz színt"
 
-#: app/strings.js
-msgid "All notes"
-msgstr "Összes jegyzet"
-
-#. Translators: shown in the "All notes" list for a note that has no text.
-#: app/strings.js
-msgid "(empty note)"
-msgstr "(üres jegyzet)"
-
 # ---- All notes: search, cards, delete (0.2.2) ----
-
 #: app/strings.js
 msgid "Search notes…"
 msgstr "Jegyzetek keresése…"
@@ -298,3 +273,441 @@ msgstr "Áthúzott (Ctrl+Shift+X)"
 #: app/strings.js
 msgid "Ctrl+Z does not undo formatting."
 msgstr "A Ctrl+Z a formázást nem vonja vissza."
+
+#: app/strings.js
+msgid "Sync…"
+msgstr "Szinkron…"
+
+#: app/strings.js
+msgid "Sync with another computer"
+msgstr "Szinkronizálás másik számítógéppel"
+
+#: app/strings.js
+msgid "Checking…"
+msgstr "Ellenőrzés…"
+
+#: app/strings.js
+msgid "Check again"
+msgstr "Ellenőrzés újra"
+
+#: app/strings.js
+msgid "Copy"
+msgstr "Másolás"
+
+#: app/strings.js
+msgid "Copied"
+msgstr "Kimásolva"
+
+#: app/strings.js
+msgid "Later"
+msgstr "Később"
+
+#: app/strings.js
+msgid "Try again"
+msgstr "Újra"
+
+#: app/strings.js
+msgid "Close"
+msgstr "Bezárás"
+
+#: app/strings.js
+msgid "Syncthing is not installed"
+msgstr "A Syncthing nincs telepítve"
+
+#: app/strings.js
+msgid ""
+"Sync needs the Syncthing program, and it is not installed on this computer. "
+"Install it with the commands below, then press Check again. cetli does not "
+"run them for you."
+msgstr ""
+"A szinkronizáláshoz a Syncthing program kell, és az nincs telepítve ezen a "
+"számítógépen. Telepítsd az alábbi parancsokkal, aztán nyomd meg az "
+"Ellenőrzés újra gombot. A cetli nem futtatja le őket helyetted."
+
+#: app/strings.js
+msgid "Set up sync"
+msgstr "Szinkron beállítása"
+
+#: app/strings.js
+msgid ""
+"This starts Syncthing as a background service for your user and keeps it "
+"running at every login. Your computers find each other through public "
+"Syncthing servers and relays, which learn that the computers exist (device "
+"ID and IP address) but not your notes: those are encrypted between your "
+"computers. cetli opens a network port and announces itself on the local "
+"network. Nothing is changed until you press the button."
+msgstr ""
+"Ez a Syncthing programot háttérszolgáltatásként indítja el a "
+"felhasználódnak, és minden bejelentkezéskor futtatja. A számítógépeid "
+"nyilvános Syncthing-kiszolgálókon és közvetítőkön keresztül találják meg "
+"egymást; ezek azt tudják meg, hogy a számítógépek léteznek (eszközazonosító "
+"és IP-cím), a jegyzeteidet viszont nem: azok titkosítva mennek a két "
+"számítógéped között. A cetli megnyit egy hálózati portot, és bejelentkezik a "
+"helyi hálózaton. Amíg meg nem nyomod a gombot, semmi sem változik."
+
+#: app/strings.js
+msgid "Set up sync on this computer"
+msgstr "Szinkron beállítása ezen a számítógépen"
+
+#: app/strings.js
+msgid "Setting up…"
+msgstr "Beállítás…"
+
+#: app/strings.js
+msgid "Preparing the sync program"
+msgstr "A szinkronprogram előkészítése"
+
+#: app/strings.js
+msgid "Adding the notes folder"
+msgstr "A jegyzetmappa hozzáadása"
+
+#: app/strings.js
+msgid "Starting the background service"
+msgstr "A háttérszolgáltatás indítása"
+
+#: app/strings.js
+msgid "Adding the other computer"
+msgstr "A másik számítógép hozzáadása"
+
+# ---- All notes: search, cards, delete (0.2.2) ----
+#: app/strings.js
+msgid "Sharing the notes"
+msgstr "A jegyzetek megosztása"
+
+#: app/strings.js
+msgid "Connecting"
+msgstr "Kapcsolódás"
+
+#: app/strings.js
+msgid "Waiting for the notes"
+msgstr "Várakozás a jegyzetekre"
+
+#: app/strings.js
+msgid "Connect two computers"
+msgstr "Két számítógép összekapcsolása"
+
+#: app/strings.js
+msgid "This computer"
+msgstr "Ez a számítógép"
+
+#: app/strings.js
+msgid ""
+"To connect, enter this ID on the other computer. This window waits for it."
+msgstr ""
+"Az összekapcsoláshoz írd be ezt az azonosítót a másik számítógépen. Ez az "
+"ablak arra vár."
+
+#: app/strings.js
+msgid "Copy the ID"
+msgstr "Azonosító másolása"
+
+#: app/strings.js
+msgid "Waiting for the other computer…"
+msgstr "Várakozás a másik számítógépre…"
+
+#: app/strings.js
+msgid "Or enter the ID shown on the other computer"
+msgstr "Vagy írd be a másik számítógépen látható azonosítót"
+
+#: app/strings.js
+msgid "ID of the other computer"
+msgstr "A másik számítógép azonosítója"
+
+#: app/strings.js
+msgid "Connect"
+msgstr "Kapcsolódás"
+
+#: app/strings.js
+msgid "Paste the ID with Ctrl+V"
+msgstr "Illeszd be az azonosítót a Ctrl+V-vel"
+
+#: app/strings.js
+msgid "This is not a valid ID. Check it and try again."
+msgstr "Ez nem érvényes azonosító. Ellenőrizd, és próbáld újra."
+
+#: app/strings.js
+msgid "This is the ID of this computer. Enter the ID of the other computer."
+msgstr ""
+"Ez ennek a számítógépnek az azonosítója. A másik számítógép azonosítóját írd "
+"be."
+
+#: app/strings.js
+msgid "Another computer wants to connect"
+msgstr "Egy másik számítógép kapcsolódni akar"
+
+#: app/strings.js
+msgid "(name not readable)"
+msgstr "(a név nem olvasható)"
+
+#: app/strings.js
+#, javascript-format
+msgid "Name: %s"
+msgstr "Név: %s"
+
+#: app/strings.js
+msgid ""
+"Accept only if the other computer shows the same ID. Compare at least the "
+"first two groups."
+msgstr ""
+"Csak akkor fogadd el, ha a másik számítógép ugyanezt az azonosítót mutatja. "
+"Hasonlítsd össze legalább az első két csoportot."
+
+#: app/strings.js
+#, javascript-format
+msgid "Accept %s (ID starts %s)"
+msgstr "%s elfogadása (az azonosító eleje: %s)"
+
+#: app/strings.js
+msgid "Connecting…"
+msgstr "Kapcsolódás…"
+
+#: app/strings.js
+msgid ""
+"The other computer must also have the ID of this computer entered, and its "
+"sync window must be open. This is the ID of this computer:"
+msgstr ""
+"A másik számítógépen is be kell írni ennek a számítógépnek az azonosítóját, "
+"és a szinkronablakának nyitva kell lennie. Ez ennek a számítógépnek az "
+"azonosítója:"
+
+#: app/strings.js
+msgid "Connected"
+msgstr "Kapcsolódva"
+
+#: app/strings.js
+#, javascript-format
+msgid "Connected to %s."
+msgstr "Kapcsolódva ehhez: %s."
+
+#: app/strings.js
+msgid "ID of the other computer:"
+msgstr "A másik számítógép azonosítója:"
+
+#. Translators: the quoted words are the names of the texts and the button in this window, keep them the same as the translations of
+#. "Connected", "This computer" and "Stop syncing".
+#: app/strings.js
+msgid ""
+"Now open cetli on the other computer. It must also say Connected. If it does "
+"not, or if the ID shown here is not the one the other computer shows as This "
+"computer, press Stop syncing here."
+msgstr ""
+"Most nyisd meg a cetlit a másik számítógépen. Ott is ezt kell látnod: "
+"Kapcsolódva. Ha nem, vagy ha az itt látható azonosító nem az, amit a másik "
+"számítógép Ez a számítógép alatt mutat, nyomd meg itt a Szinkron leállítása "
+"gombot."
+
+#: app/strings.js
+msgid "Sync"
+msgstr "Szinkron"
+
+#: app/strings.js
+msgid "Connected, the notes are still arriving"
+msgstr "Kapcsolódva, a jegyzetek még érkeznek"
+
+#: app/strings.js
+msgid "The connection is unstable"
+msgstr "A kapcsolat nem stabil"
+
+#: app/strings.js
+msgid "Not connected right now"
+msgstr "Jelenleg nincs kapcsolat"
+
+#: app/strings.js
+msgid "Checking the connection…"
+msgstr "A kapcsolat ellenőrzése…"
+
+#: app/strings.js
+msgid "Other computer"
+msgstr "Másik számítógép"
+
+#: app/strings.js
+msgid "Show the ID of this computer"
+msgstr "Ennek a számítógépnek az azonosítója"
+
+#: app/strings.js
+msgid "Stop syncing with this computer"
+msgstr "Szinkron leállítása ezzel a számítógéppel"
+
+#: app/strings.js
+msgid "Stop syncing"
+msgstr "Szinkron leállítása"
+
+#: app/strings.js
+msgid "Stop syncing with this computer?"
+msgstr "Leállítod a szinkront ezzel a számítógéppel?"
+
+#: app/strings.js
+msgid "Your notes stay on both computers. They will not be exchanged any more."
+msgstr ""
+"A jegyzeteid mindkét számítógépen megmaradnak. A továbbiakban nem "
+"cserélődnek."
+
+#: app/strings.js
+msgid "Not finished"
+msgstr "Nincs befejezve"
+
+#: app/strings.js
+msgid ""
+"This computer was set up to connect to another computer, but the connection "
+"was never completed. Stop syncing, then start again."
+msgstr ""
+"Ezt a számítógépet beállítottuk egy másikhoz való kapcsolódásra, de a "
+"kapcsolat sosem jött létre. Állítsd le a szinkront, aztán kezdd újra."
+
+#: app/strings.js
+msgid "Sync is already set up here"
+msgstr "A szinkron itt már be van állítva"
+
+#: app/strings.js
+msgid ""
+"The notes of this computer are already synchronised by another Syncthing. "
+"cetli leaves it exactly as it is, and your sync keeps working as you set it "
+"up."
+msgstr ""
+"Ennek a számítógépnek a jegyzeteit már egy másik Syncthing szinkronizálja. A "
+"cetli pontosan úgy hagyja, ahogy van, és a szinkronod úgy működik tovább, "
+"ahogy beállítottad."
+
+#: app/strings.js
+msgid ""
+"If that Syncthing does not sync this folder any more, delete the hidden "
+"folder .stfolder inside the notes folder and open this window again."
+msgstr ""
+"Ha az a Syncthing már nem szinkronizálja ezt a mappát, töröld a "
+"jegyzetmappában lévő rejtett .stfolder mappát, és nyisd meg újra ezt az "
+"ablakot."
+
+#: app/strings.js
+msgid "Nothing was changed"
+msgstr "Semmi sem változott"
+
+#: app/strings.js
+msgid ""
+"The sync program of cetli lists a computer that was not added here. cetli "
+"leaves everything as it is and shows no connection."
+msgstr ""
+"A cetli szinkronprogramjában szerepel egy számítógép, amelyet nem itt adtak "
+"hozzá. A cetli mindent úgy hagy, ahogy van, és nem jelez kapcsolatot."
+
+#: app/strings.js
+msgid "Sync did not work"
+msgstr "A szinkron nem sikerült"
+
+#: app/strings.js
+msgid "Syncthing is not installed on this computer."
+msgstr "A Syncthing nincs telepítve ezen a számítógépen."
+
+#: app/strings.js
+msgid ""
+"The background service could not be started: this session has no user "
+"service manager."
+msgstr ""
+"A háttérszolgáltatás nem indítható: ebben a munkamenetben nincs felhasználói "
+"szolgáltatáskezelő."
+
+#: app/strings.js
+msgid ""
+"Sync was started but does not answer. Try again. To see the log, run: "
+"journalctl --user -u cetli-syncthing"
+msgstr ""
+"A szinkron elindult, de nem válaszol. Próbáld újra. A napló megtekintéséhez "
+"futtasd: journalctl --user -u cetli-syncthing"
+
+#: app/strings.js
+msgid "The sync settings could not be prepared safely. Nothing was changed."
+msgstr ""
+"A szinkron beállításai nem készíthetők elő biztonságosan. Semmi sem "
+"változott."
+
+#: app/strings.js
+msgid "The sync program refused a step. Try again."
+msgstr "A szinkronprogram elutasított egy lépést. Próbáld újra."
+
+#: app/strings.js
+msgid ""
+"This computer is already set up with another computer. Stop syncing with it "
+"first."
+msgstr ""
+"Ez a számítógép már be van állítva egy másikkal. Előbb állítsd le vele a "
+"szinkront."
+
+#: app/strings.js
+msgid ""
+"This computer is set up for a different computer. Stop syncing with it first."
+msgstr ""
+"Ez a számítógép egy másik számítógéphez van beállítva. Előbb állítsd le vele "
+"a szinkront."
+
+#: app/strings.js
+msgid ""
+"Still waiting. The other computer must also have the ID of this computer "
+"entered, and its sync window must be open; then check that the ID shown "
+"there is right. A firewall on either computer can also be the cause: the "
+"ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may "
+"still come up, but may take longer."
+msgstr ""
+"Még várunk. A másik számítógépen is be kell írni ennek a számítógépnek az "
+"azonosítóját, és a szinkronablakának nyitva kell lennie; aztán ellenőrizd, "
+"hogy az ott látható azonosító helyes-e. Ok lehet bármelyik számítógép "
+"tűzfala is: a portok a TCP és UDP 22100, valamint az UDP 21127. Közvetítőn "
+"keresztül még létrejöhet a kapcsolat, de tovább tarthat."
+
+#: app/strings.js
+msgid "The computers are connected, but the notes have not arrived yet."
+msgstr "A számítógépek kapcsolódtak, de a jegyzetek még nem érkeztek meg."
+
+#: app/strings.js
+msgid "Stopped waiting after 15 minutes."
+msgstr "15 perc után abbahagytuk a várakozást."
+
+#: app/strings.js
+msgid ""
+"Too many connection attempts were seen to judge them safely. Nothing was "
+"accepted."
+msgstr ""
+"Túl sok kapcsolódási kísérlet látszott ahhoz, hogy biztonságosan el lehessen "
+"bírálni őket. Semmit sem fogadtunk el."
+
+#: app/strings.js
+msgid "More than one computer is knocking. Close this window and try again."
+msgstr ""
+"Egynél több számítógép kopogtat. Zárd be ezt az ablakot, és próbáld újra."
+
+#: app/strings.js
+msgid ""
+"A computer that was not added here is listed in the sync program of cetli. "
+"Nothing was connected."
+msgstr ""
+"A cetli szinkronprogramjában szerepel egy számítógép, amelyet nem itt adtak "
+"hozzá. Semmit sem kapcsoltunk össze."
+
+#: app/strings.js
+msgid "Another sync step is still running."
+msgstr "Egy másik szinkronlépés még fut."
+
+#: app/strings.js
+msgid "Something went wrong, see the log."
+msgstr "Hiba történt, nézd meg a naplót."
+
+#~ msgid ""
+#~ "cetli keeps short notes in small windows on the GNOME desktop. Every note "
+#~ "is one plain file in a folder, so the folder can be kept in step between "
+#~ "your computers with a tool such as Syncthing."
+#~ msgstr ""
+#~ "A cetli rövid jegyzeteket tart kis ablakokban a GNOME asztalon. Minden "
+#~ "jegyzet egy sima fájl egy mappában, így a mappát egy olyan eszközzel, "
+#~ "mint a Syncthing, szinkronban tarthatod a számítógépeid között."
+
+#~ msgid ""
+#~ "If two computers change the same note before they meet, cetli keeps both "
+#~ "versions and shows the second one as a note of its own."
+#~ msgstr ""
+#~ "Ha két számítógép ugyanazt a jegyzetet módosítja, mielőtt találkoznának, "
+#~ "a cetli mindkét változatot megőrzi, és a másodikat külön jegyzetként "
+#~ "mutatja."
+
+#~ msgid "TrenSoft"
+#~ msgstr "TrenSoft"
+
+#~ msgid "Color"
+#~ msgstr "Szín"

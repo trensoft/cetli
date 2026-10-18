@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
 import {createRunPort, scrubEnv, FORBIDDEN_FLAGS, SYNCTHING_SUBCOMMANDS} from '../sync/runport.js';
-import {dedicatedHome, socketPath, DEDICATED_HOME_REL, SYNCTHING_EXE, SYSTEMCTL_EXE, UNIT_NAME} from '../sync/paths.js';
+import {dedicatedHome, socketPath, DEDICATED_HOME_REL, BACKEND_EXE, SYSTEMCTL_EXE, UNIT_NAME} from '../sync/paths.js';
 
 const HOME = '/home/u/.local/state/cetli/syncthing';
 const CALLER = {
@@ -47,9 +47,9 @@ test('the argv: an absolute executable, the subcommand, --home put in by the por
     const port = createRunPort({spawn: s.spawn, hostEnv: CALLER, home: HOME});
     await port.syncthing('cli', ['config', 'folders', 'cetli-notes', 'devices', 'list']);
     await port.syncthing('generate');
-    assert.deepEqual(s.calls[0].argv, [SYNCTHING_EXE, 'cli', `--home=${HOME}`, 'config', 'folders', 'cetli-notes', 'devices', 'list']);
-    assert.deepEqual(s.calls[1].argv, [SYNCTHING_EXE, 'generate', `--home=${HOME}`]);
-    assert.equal(SYNCTHING_EXE, '/usr/bin/syncthing');
+    assert.deepEqual(s.calls[0].argv, [BACKEND_EXE, 'cli', `--home=${HOME}`, 'config', 'folders', 'cetli-notes', 'devices', 'list']);
+    assert.deepEqual(s.calls[1].argv, [BACKEND_EXE, 'generate', `--home=${HOME}`]);
+    assert.equal(BACKEND_EXE, '/usr/bin/syncthing');
     assert.equal(s.calls[0].argv.filter(a => a.startsWith('--home')).length, 1);
 });
 

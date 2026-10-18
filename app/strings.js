@@ -106,3 +106,120 @@ export const formatItalicTooltip = () => _('Italic (Ctrl+I)');
 export const formatUnderlineTooltip = () => _('Underline (Ctrl+U)');
 export const formatStrikethroughTooltip = () => _('Strikethrough (Ctrl+Shift+X)');
 export const formatUndoNote = () => _('Ctrl+Z does not undo formatting.');
+
+// ---- "Sync with another computer" (0.2.5) ----------------------------------------------------------------------------
+// The engine's own words never reach the window: only its codes, mapped here. A name from the other computer is shown as plain text
+// (`fill` puts the values in by splitting the template, so a `$&` or a `%s` inside a name stays literal).
+const fill = (template, ...values) => {
+    const parts = template.split('%s');
+    return parts.map((p, i) => p + (i < parts.length - 1 ? String(values[i] ?? '') : '')).join('');
+};
+export const menuSync = () => _('Sync…');
+export const syncTitle = () => _('Sync with another computer');
+export const syncChecking = () => _('Checking…');
+export const syncCheckAgain = () => _('Check again');
+export const syncCopy = () => _('Copy');
+export const syncCopied = () => _('Copied');
+export const syncCancel = () => _('Cancel');
+export const syncLater = () => _('Later');
+export const syncTryAgain = () => _('Try again');
+export const syncClose = () => _('Close');
+
+export const syncMissingTitle = () => _('Syncthing is not installed');
+export const syncMissingText = () => _('Sync needs the Syncthing program, and it is not installed on this computer. Install it with the commands below, then press Check again. cetli does not run them for you.');
+// The commands are not translated; the window only shows them and offers to copy them.
+export const syncInstallCommands = 'sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm\nsudo dnf install syncthing';
+
+export const syncConsentTitle = () => _('Set up sync');
+export const syncConsentText = () => _('This starts Syncthing as a background service for your user and keeps it running at every login. Your computers find each other through public Syncthing servers and relays, which learn that the computers exist (device ID and IP address) but not your notes: those are encrypted between your computers. cetli opens a network port and announces itself on the local network. Nothing is changed until you press the button.');
+export const syncConsentButton = () => _('Set up sync on this computer');
+
+export const syncSettingUp = () => _('Setting up…');
+export function syncStepText(step) {
+    switch (step) {
+    case 'instance': return _('Preparing the sync program');
+    case 'folder': return _('Adding the notes folder');
+    case 'service': return _('Starting the background service');
+    case 'device': return _('Adding the other computer');
+    case 'share': return _('Sharing the notes');
+    case 'connect': return _('Connecting');
+    case 'sync': return _('Waiting for the notes');
+    default: return '';
+    }
+}
+
+export const syncIdsTitle = () => _('Connect two computers');
+export const syncOwnIdHeading = () => _('This computer');
+export const syncOwnIdHint = () => _('To connect, enter this ID on the other computer. This window waits for it.');
+export const syncCopyId = () => _('Copy the ID');
+export const syncWaiting = () => _('Waiting for the other computer…');
+export const syncEnterIdHeading = () => _('Or enter the ID shown on the other computer');
+export const syncEnterIdPlaceholder = () => _('ID of the other computer');
+export const syncConnectButton = () => _('Connect');
+export const syncPasteHint = () => _('Paste the ID with Ctrl+V');
+export const syncBadId = () => _('This is not a valid ID. Check it and try again.');
+export const syncOwnIdEntered = () => _('This is the ID of this computer. Enter the ID of the other computer.');
+export const syncCandidateTitle = () => _('Another computer wants to connect');
+export const syncNameUnreadable = () => _('(name not readable)');
+export const syncCandidateName = name => fill(_('Name: %s'), name);
+export const syncCompareText = () => _('Accept only if the other computer shows the same ID. Compare at least the first two groups.');
+export const syncAcceptButton = (name, group) => fill(_('Accept %s (ID starts %s)'), name, group);
+
+export const syncConnectingTitle = () => _('Connecting…');
+export const syncConnectingText = () => _('The other computer must also have the ID of this computer entered, and its sync window must be open. This is the ID of this computer:');
+
+export const syncDoneTitle = () => _('Connected');
+export const syncDoneText = name => fill(_('Connected to %s.'), name);
+export const syncDonePeerId = () => _('ID of the other computer:');
+// Translators: the quoted words are the names of the texts and the button in this window, keep them the same as the translations of
+// "Connected", "This computer" and "Stop syncing".
+export const syncCheckOther = () => _('Now open cetli on the other computer. It must also say Connected. If it does not, or if the ID shown here is not the one the other computer shows as This computer, press Stop syncing here.');
+
+export const syncPairedTitle = () => _('Sync');
+export function syncLinkText(key) {
+    switch (key) {
+    case 'connected': return _('Connected');
+    case 'catching-up': return _('Connected, the notes are still arriving');
+    case 'unstable': return _('The connection is unstable');
+    case 'offline': return _('Not connected right now');
+    case 'checking': return _('Checking the connection…');
+    default: return '';
+    }
+}
+export const syncPeerHeading = () => _('Other computer');
+export const syncShowOwnId = () => _('Show the ID of this computer');
+export const syncStop = () => _('Stop syncing with this computer');
+export const syncStopShort = () => _('Stop syncing');
+export const syncStopConfirmTitle = () => _('Stop syncing with this computer?');
+export const syncStopConfirmBody = () => _('Your notes stay on both computers. They will not be exchanged any more.');
+export const syncHalfTitle = () => _('Not finished');
+export const syncHalfText = () => _('This computer was set up to connect to another computer, but the connection was never completed. Stop syncing, then start again.');
+
+export const syncInfoStfolderTitle = () => _('Sync is already set up here');
+export const syncInfoStfolderText = () => _('The notes of this computer are already synchronised by another Syncthing. cetli leaves it exactly as it is, and your sync keeps working as you set it up.');
+export const syncInfoStfolderHint = () => _('If that Syncthing does not sync this folder any more, delete the hidden folder .stfolder inside the notes folder and open this window again.');
+export const syncInfoForeignTitle = () => _('Nothing was changed');
+export const syncInfoForeignText = () => _('The sync program of cetli lists a computer that was not added here. cetli leaves everything as it is and shows no connection.');
+
+export const syncErrorTitle = () => _('Sync did not work');
+// The text of an error code. Information codes (a neutral page) are the same function; the window decides the look.
+export function syncErrorText(code) {
+    switch (code) {
+    case 'E_NO_SYNCTHING': return _('Syncthing is not installed on this computer.');
+    case 'E_NO_USER_SYSTEMD': return _('The background service could not be started: this session has no user service manager.');
+    case 'E_SERVICE_TIMEOUT': return _('Sync was started but does not answer. Try again. To see the log, run: journalctl --user -u cetli-syncthing');
+    case 'E_CONFIG_UNSAFE': return _('The sync settings could not be prepared safely. Nothing was changed.');
+    case 'E_CLI_FAILED': return _('The sync program refused a step. Try again.');
+    case 'E_STFOLDER_EXISTS': return syncInfoStfolderText();
+    case 'E_ALREADY_PAIRED': return _('This computer is already set up with another computer. Stop syncing with it first.');
+    case 'E_HALF_STATE_OTHER': return _('This computer is set up for a different computer. Stop syncing with it first.');
+    case 'E_PEER_TIMEOUT': return _('Still waiting. The other computer must also have the ID of this computer entered, and its sync window must be open; then check that the ID shown there is right. A firewall on either computer can also be the cause: the ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may still come up, but may take longer.');
+    case 'E_NOT_UP_TO_DATE': return _('The computers are connected, but the notes have not arrived yet.');
+    case 'E_EXPIRED': return _('Stopped waiting after 15 minutes.');
+    case 'E_PENDING_TOO_LARGE': return _('Too many connection attempts were seen to judge them safely. Nothing was accepted.');
+    case 'E_PENDING_AMBIGUOUS': return _('More than one computer is knocking. Close this window and try again.');
+    case 'E_FOREIGN_DEVICE': return _('A computer that was not added here is listed in the sync program of cetli. Nothing was connected.');
+    case 'E_BUSY': return _('Another sync step is still running.');
+    default: return _('Something went wrong, see the log.');
+    }
+}

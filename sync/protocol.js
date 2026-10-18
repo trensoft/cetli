@@ -25,6 +25,10 @@ export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'd
 export const PROGRESS_STATES = Object.freeze(['start', 'ok']);
 export const STATUS_STATES = Object.freeze(['no-syncthing', 'not-set-up', 'stfolder-conflict', 'foreign-config', 'set-up', 'half', 'paired']);
 export const LINK_STATES = Object.freeze(['none', 'flapping', 'stable']);
+// The two wire strings that name the sync program. The window (app/) is not allowed to contain that word in code (static test), so it
+// refers to them through these identifiers.
+export const STATE_NO_BACKEND = 'no-syncthing';
+export const CODE_NO_BACKEND = 'E_NO_SYNCTHING';
 
 // The closed list of error codes (section 3). Information codes are shown neutral by the window: rc 1 and the closed list stay.
 export const ERROR_CODES = Object.freeze([

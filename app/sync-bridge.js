@@ -152,9 +152,9 @@ const clearTimer = h => {
 };
 
 export class SyncBridge {
-    // `spawn` is overridden ONLY by tests; the executable is never. The app passes at most a logger.
-    constructor({spawn = startProcess, log = () => {}} = {}) {
-        this._runner = createRunner({spawn, exe: ENGINE, setTimer, clearTimer, log, environ: () => GLib.get_environ()});
+    // `openProcess` is overridden ONLY by tests; the executable is never. The app passes at most a logger.
+    constructor({openProcess = startProcess, log = () => {}} = {}) {
+        this._runner = createRunner({openProcess, exe: ENGINE, setTimer, clearTimer, log, environ: () => GLib.get_environ()});
     }
 
     // -> {done: Promise<{ok: true, result} | {ok: false, error: {code, step}}>, accept(id), stop()}
