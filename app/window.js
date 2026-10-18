@@ -499,13 +499,23 @@ export class NoteWindow {
 
     // ---- a version from the other computer (PLAN 3) -------------------------------------------------------------
 
+    // Nothing in this window that the file does not hold: no unsaved text, formatting or colour, and no save waiting for its timer.
+    _clean() {
+        return !this._dirty() && this._saveTimer === null;
+    }
+
     onRemote(record) {
         if (this.deleted || record.v === this.base.v)
             return;
         if (record.deleted) {
-            // The window is NOT closed and the unsaved text is not lost; typing or saving brings the note back (2.5).
-            this.remoteDeleted = true;
+            // A window with nothing unsaved closes by itself (the note is gone, the window would only show a dead note); a window with
+            // unsaved text or a pending save is NOT closed and the text is not lost: a mark says so, and typing or saving brings the note back (2.5).
             this.pendingRemote = null;
+            if (this._clean()) {
+                this._closeGone();
+                return;
+            }
+            this.remoteDeleted = true;
             this._setMark('deleted', S.markDeletedElsewhere());
             return;
         }
@@ -513,9 +523,21 @@ export class NoteWindow {
         this._tryApplyRemote();
     }
 
+    // The note file is gone: the same rule as for a deletion on the other computer (a clean window closes, an unsaved one stays with the mark).
     onRemoved() {
-        if (!this.deleted)
-            this._setMark('deleted', S.markFileGone());
+        if (this.deleted)
+            return;
+        if (this._clean()) {
+            this._closeGone();
+            return;
+        }
+        this._setMark('deleted', S.markFileGone());
+    }
+
+    // Closing keeps the usual path (_onCloseRequest): nothing differs from the file, so nothing is written back and the note is not brought back.
+    _closeGone() {
+        if (!this.closing)
+            this.win.close();
     }
 
     _tryApplyRemote() {

@@ -137,21 +137,22 @@ async function scenario() {
     check(fileRec(id).text.endsWith('!'), 'local text won');
     check(noteFiles().length === 2, `the other version was kept as a copy (${noteFiles().length} files)`);
 
-    // a remote tombstone: window stays, mark shown
-    const t = fileRec(id);
-    remoteWrite(id, {rev: t.rev + 1, updated: new Date(Date.now() + 5000).toISOString(), device: 'b5b5b5b5', text: '', deleted: true});
-    await sleep(2300);
-    check(windows.has(id) && w.mark?.kind === 'deleted', 'remote tombstone: window stays with a mark');
+    // a remote tombstone while the window holds unsaved text (the save timer is pending): the window stays with the mark and the text is not lost
     w.buffer.insert_at_cursor('x', -1);
-    await sleep(700);
-    check(fileRec(id).deleted === false, 'typing brings the note back');
+    w.onRemote({...w.base, v: 'tombstone-for-the-test', deleted: true});
+    check(windows.has(id) && w.win.get_visible() && w.mark?.kind === 'deleted' && w._bufferText().endsWith('x'), 'remote tombstone with unsaved text: window stays with a mark, the text is there');
+    await until(() => fileRec(id).text.endsWith('x'));
+    check(fileRec(id).deleted === false && fileRec(id).text.endsWith('x') && windows.has(id), 'and the typed text is saved: typing brings the note back');
 
-    // a conflict file: kept and counted
+    // a conflict file (0.2.5.4: the product resolves them): the file is gone, nothing is counted as unresolved, and no text is lost
     const cf = `${dirs.notes}/${id}.sync-conflict-20261017-120000-ABCDEFG.json`;
+    const textBefore = fileRec(id).text;
     GLib.file_set_contents(cf, `${JSON.stringify({...fileRec(id), rev: 99, text: 'conflict'})}\n`);
-    await sleep(800);
-    check(exists(cf), 'conflict file is kept');
-    check(w.unresolved.get_visible() && w.unresolved.get_label() === '1 unresolved', `unresolved mark (${w.unresolved.get_label()})`);
+    await until(() => !exists(cf), 6000);
+    check(!exists(cf), 'the conflict file is resolved (deleted) by the product');
+    check(!w.unresolved.get_visible(), 'and no "unresolved" mark is shown');
+    const texts = noteFiles().filter(n => /^[0-9a-f-]{36}\.json$/.test(n)).map(n => JSON.parse(readText(`${dirs.notes}/${n}`))).filter(r => !r.deleted).map(r => r.text);
+    check(texts.includes('conflict') && texts.includes(textBefore), 'both texts are notes: the conflict version and the one it replaced');
 
     // new note through the application action
     const sizeBefore = windows.size;
@@ -256,6 +257,32 @@ async function scenario() {
     w5.win.close();
     await sleep(500);
     check(!windows.has(id5), 'the second close closes the window');
+
+    // 0.2.6: the other computer deletes a note and this window holds nothing unsaved: the window closes by itself. Attila's case: the note is open
+    // on both computers, the other one types (the text arrives here and is applied: the window must be clean again), then deletes it.
+    const [id6, w6] = await freshNote();
+    remoteWrite(id6, {rev: fileRec(id6).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'typed on the other computer'});
+    await until(() => w6._bufferText() === 'typed on the other computer', 6000);
+    check(w6._bufferText() === 'typed on the other computer' && !w6._dirty() && w6._saveTimer === null, 'the remote text was applied and the window is clean again');
+    remoteWrite(id6, {rev: fileRec(id6).rev + 1, updated: new Date(Date.now() + 5000).toISOString(), device: 'b5b5b5b5', text: '', deleted: true});
+    await until(() => !windows.has(id6), 6000);
+    check(!windows.has(id6), 'the remote tombstone closes the clean window');
+    await sleep(500);
+    check(fileRec(id6).deleted === true, 'and the note stays deleted (nothing was written back)');
+
+    // the file of a note vanishes: a clean window closes, a window with unsaved text stays with the mark and its text
+    const [id7, w7] = await freshNote();
+    w7.buffer.insert_at_cursor('saved text', -1);
+    await until(() => fileRec(id7).text === 'saved text' && !w7._dirty());
+    GLib.unlink(`${dirs.notes}/${id7}.json`);
+    await until(() => !windows.has(id7), 6000);
+    check(!windows.has(id7), 'the vanished file closes the clean window');
+    const [id8, w8] = await freshNote();
+    w8.buffer.insert_at_cursor('keep me', -1);
+    w8.onRemoved();
+    check(windows.has(id8) && w8.mark?.kind === 'deleted' && w8.mark?.text === S.markFileGone() && w8._bufferText() === 'keep me', 'a vanished file with unsaved text: the window stays with the mark and the text');
+    await until(() => exists(`${dirs.notes}/${id8}.json`) && fileRec(id8).text === 'keep me');
+    check(fileRec(id8).text === 'keep me', 'and saving brings the note back');
 
     // About
     const before = Gtk.Window.list_toplevels().length;
