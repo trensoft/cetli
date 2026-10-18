@@ -51,6 +51,7 @@ export class SyncWizard {
         this.ids = initialIdsState;
         this.status = null;
         this.closed = false;
+        this.restartTried = false;                   // one automatic restart per opening (see _restart)
         this.retry = null;
         this.w = {};
         this.win = new Gtk.ApplicationWindow({application: ctl.gtkApp, title: S.syncTitle(), default_width: 480, default_height: 600});

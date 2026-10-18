@@ -40,6 +40,7 @@ export function createWorld(opts = {}) {
         hung: false,                               // the unit is active but the daemon never answers (the failure of 0.2.5.2)
         enabled: true,                             // `systemctl --user is-enabled`: false = the unit was disabled by the user (`forget --stop`)
         unitFailed: false,                         // the unit is in the failed state (start limit): starting it is refused until `reset-failed`
+        afterDisable: null,                        // (world) -> void: runs while `systemctl --user disable` is working (a path swapped during the wait)
         failSystemctl: new Set(),                  // `systemctl` argument strings (after --user) that fail with rc 1
         failCli: new Set(),                        // exact `config devices add`-style prefixes that fail (rc 1)
         ownId: opts.ownId ?? OWN,
@@ -249,6 +250,7 @@ export function createWorld(opts = {}) {
                 return {rc: 0, out: ''};
             }
             if (key.startsWith('--user disable')) {
+                w.afterDisable?.(w);
                 w.daemon = false;
                 w.enabled = false;
                 w.timeline.push('systemctl disable');

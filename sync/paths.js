@@ -9,7 +9,8 @@ export const BACKEND_EXE = '/usr/bin/syncthing';          // the literal that ru
 export const SYSTEMCTL_EXE = '/usr/bin/systemctl';
 export const FOLDER_ID = 'cetli-notes';
 // What Syncthing may leave inside its own `.stfolder` marker directory: a hint file. The engine's `reset` takes the marker away only when it
-// holds nothing else than these (NOT measured on the real binary: it is the only thing besides an empty directory that is accepted).
+// holds nothing else than these. Measured on the real binary (Syncthing 2.1.6, John, 0.2.5.2): the marker is a directory with ONE plain file,
+// syncthing-folder-90ca15.txt (117 bytes). Not measured: the names of other Syncthing versions (then the marker is left where it is).
 export const MARKER_HINT_FILE = /^syncthing-folder-[0-9a-z]{1,32}\.txt$/;
 
 const absolute = p => typeof p === 'string' && /^\/[^\0-\x1f\x7f]+$/.test(p) && !p.includes('//') && !p.endsWith('/');

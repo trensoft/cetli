@@ -130,6 +130,19 @@ export function createEngine(ports) {
         }
     }
 
+    // The names inside a marker directory when it is no link, its notes directory is no link, and it holds nothing or only plain hint files; else null.
+    // Asked again right before the marker is taken away (the leaving of the unit can take long, and a path can be swapped meanwhile).
+    function plainMarkerNames(path) {
+        try {
+            if (files.isSymlink(dirs.notes) || !files.exists(path) || files.isSymlink(path) || !files.isDir(path))
+                return null;
+            const names = files.listNames(path);
+            return names.every(n => MARKER_HINT_FILE.test(n) && !files.isSymlink(`${path}/${n}`) && !files.isDir(`${path}/${n}`)) ? names : null;
+        } catch {
+            return null;
+        }
+    }
+
     // The marker of OUR folder in the notes directory, or null. Ours means: our own config.xml holds `cetli-notes` with exactly the notes path,
     // the notes path and the marker are no links, and the marker is a directory that holds nothing or only Syncthing's hint file(s) as plain files.
     // Anything else (a foreign marker, a link, a file of unknown name) is null and stays where it is. Read BEFORE the instance is moved.
@@ -139,12 +152,8 @@ export function createEngine(ports) {
             const folder = readFolders(files.readText(configPath)).find(f => f.id === FOLDER_ID);
             if (!folder || folder.path !== dirs.notes || files.isSymlink(dirs.notes))
                 return null;
-            if (!files.exists(path) || files.isSymlink(path) || !files.isDir(path))
-                return null;
-            const names = files.listNames(path);
-            if (!names.every(n => MARKER_HINT_FILE.test(n) && !files.isSymlink(`${path}/${n}`) && !files.isDir(`${path}/${n}`)))
-                return null;
-            return {path, names};
+            const names = plainMarkerNames(path);
+            return names === null ? null : {path, names};
         } catch {
             return null;
         }
@@ -517,6 +526,8 @@ export function createEngine(ports) {
             recheckConfig();
             const was = await run.systemctl(['--user', 'is-enabled', UNIT_NAME], {timeoutMs: t.systemctlMs});
             const disabled = was.rc !== 0 && was.out.trim() === 'disabled';
+            if (was.rc !== 0 && !disabled)
+                throw new Fail('E_NO_USER_SYSTEMD');                              // masked, not found, timed out, unreadable: nothing is started (fail closed)
             if (disabled && !enable) {
                 state = 'disabled';
                 return;
@@ -566,7 +577,12 @@ export function createEngine(ports) {
         if (marker !== null) {
             await step('folder', async () => {
                 try {
-                    for (const n of marker.names)
+                    const names = plainMarkerNames(marker.path);                // measured again now, not the list from before the unit was stopped
+                    if (names === null) {
+                        log('reset: the marker changed, it is left');
+                        return;
+                    }
+                    for (const n of names)
                         files.removeFile(`${marker.path}/${n}`);
                     files.removeDir(marker.path);                              // only an empty directory goes
                 } catch {

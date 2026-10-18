@@ -109,12 +109,18 @@ async function scenario() {
     check(c.lines.join() === 'no newline at the end', 'a last line without a newline is delivered at EOF');
     check(scrubEnviron(['STGUIAPIKEY=k', 'PATH=/usr/bin']).join() === 'PATH=/usr/bin', 'the bridge scrubs the environment too');
 
-    // ---- a real main.js run: usage error, no sync program on this machine, stdin plumbing for join and host
+    // ---- a real main.js run: usage error, the state of this machine, stdin plumbing for join and host. The run gets an EMPTY home of its own (nothing of
+    // the developer's own cetli, Syncthing or notes is read) and the answer follows the machine: the engine looks for the literal /usr/bin/syncthing
+    // (no PATH is involved), so on a machine WITH Syncthing an empty home is "not-set-up", without it "no-syncthing".
     const gjs = which('gjs');
-    const run = (args, stdin) => real.spawn([gjs, '-m', `${here}/sync/main.js`, ...args], {PATH: GLib.getenv('PATH'), HOME: GLib.get_home_dir(), LD_LIBRARY_PATH: GLib.getenv('LD_LIBRARY_PATH') ?? '', GI_TYPELIB_PATH: GLib.getenv('GI_TYPELIB_PATH') ?? '', XDG_RUNTIME_DIR: GLib.getenv('XDG_RUNTIME_DIR') ?? ''}, {stdin, maxBytes: 65536, timeoutMs: 30000});
+    const emptyHome = `${base}/emptyhome`;
+    f.mkdirp(emptyHome, 0o700);
+    const haveBackend = GLib.file_test('/usr/bin/syncthing', GLib.FileTest.EXISTS);
+    const run = (args, stdin) => real.spawn([gjs, '-m', `${here}/sync/main.js`, ...args], {PATH: GLib.getenv('PATH'), HOME: emptyHome, LD_LIBRARY_PATH: GLib.getenv('LD_LIBRARY_PATH') ?? '', GI_TYPELIB_PATH: GLib.getenv('GI_TYPELIB_PATH') ?? '', XDG_RUNTIME_DIR: GLib.getenv('XDG_RUNTIME_DIR') ?? ''}, {stdin, maxBytes: 65536, timeoutMs: 30000});
     r = await run(['status']);
     const line = r.out.trim().split('\n').filter(l => l.startsWith('{'));
-    check(r.rc === 0 && line.length === 1 && JSON.parse(line[0]).state === 'no-syncthing' && JSON.parse(line[0]).v === 1, 'main.js status: one result line, rc 0');
+    check(r.rc === 0 && line.length === 1 && JSON.parse(line[0]).state === (haveBackend ? 'not-set-up' : 'no-syncthing') && JSON.parse(line[0]).v === 1,
+        `main.js status: one result line, rc 0, state ${haveBackend ? 'not-set-up (Syncthing is installed here)' : 'no-syncthing'}`);
     r = await run(['frob']);
     check(r.rc === 2, 'main.js: an unknown verb is a usage error, rc 2');
     r = await run(['reset', '--stop']);

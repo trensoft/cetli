@@ -75,13 +75,16 @@ const SECONDARY = Object.freeze({
 
 // A restart (the automatic one or the button) that ends on one of these codes leaves a dead end: the config of the sync program is not what cetli
 // wrote, so no restart will ever work. The window then offers "Reset sync" as well (with its confirmation).
-const RESET_AFTER_RESTART = Object.freeze(['E_CONFIG_UNSAFE']);
+const RESET_AFTER_RESTART = Object.freeze(['E_CONFIG_UNSAFE', 'E_NO_USER_SYSTEMD']);
 
 export function errorView(code, {afterRestart = false} = {}) {
     const known = Object.hasOwn(ACTIONS, code);
     const c = known ? code : 'E_INTERNAL';
     const secondary = Object.hasOwn(SECONDARY, c) ? SECONDARY[c] : afterRestart && RESET_AFTER_RESTART.includes(c) ? 'reset' : null;
-    return {code: c, neutral: isNeutralCode(c), action: ACTIONS[c], ...(secondary !== null ? {secondary} : {})};
+    // E_NO_USER_SYSTEMD after a restart (the unit is masked or missing, systemctl refused): no longer a page without a way out; the first try may have
+    // been a one-off, so "Try again" asks the status again, and "Reset sync" follows.
+    const action = afterRestart && c === 'E_NO_USER_SYSTEMD' ? 'retry' : ACTIONS[c];
+    return {code: c, neutral: isNeutralCode(c), action, ...(secondary !== null ? {secondary} : {})};
 }
 
 // The ID in two rows of four groups for a monospace label, and the short line to compare (the first two groups).
