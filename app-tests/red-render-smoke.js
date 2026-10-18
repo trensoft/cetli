@@ -165,10 +165,23 @@ async function bold(scheme) {
 // 2. the title in a window that is not active, and the buttons of the bar: still dimmed to 50 % there
 async function backdrop(scheme) {
     // the farthest pixel of the buttons of a bar and the strip colour of that bar
-    const buttons = async w => {
+    const buttons1 = async w => {
         const s = await shotOf(w.win), strip = s.at(Math.floor(s.width / 2), 3);
         const a = ink(s, area(w.addButton, w.win, s.width, s.height), strip), b = ink(s, area(w.menuButton, w.win, s.width, s.height), strip);
         return {s, strip, add: a.far, menu: b.far};
+    };
+    // A window that has just become (in)active is redrawn a frame or more later, later still on a loaded machine: take pictures until two in
+    // a row agree (at most 10 s). The thresholds below are unchanged; only the moment of measuring waits for the picture to settle.
+    const buttons = async w => {
+        let prev = await buttons1(w);
+        for (let i = 0; i < 50; i++) {
+            await sleep(200);
+            const cur = await buttons1(w);
+            if (hex(cur.add) === hex(prev.add) && hex(cur.menu) === hex(prev.menu) && hex(cur.strip) === hex(prev.strip))
+                return cur;
+            prev = cur;
+        }
+        return prev;
     };
     const alpha = (now, active, strip) => Math.abs(grey(now) - grey(strip)) / Math.abs(grey(active) - grey(strip));
     const y = await open(1, 'yellow', DEFAULT);
