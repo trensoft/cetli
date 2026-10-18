@@ -11,7 +11,7 @@
 #   make check-complete        app/main.js and the extension are in the tree (an RPM without them is a skeleton)
 #   make check                 all of the above except check-complete
 #   make                       compile the catalogs and generate the desktop files, the metainfo and the launcher
-#   make install DESTDIR= PREFIX=/usr
+#   make install DESTDIR= PREFIX=/usr [USERUNITDIR=/usr/lib/systemd/user]
 #   make clean
 #
 # VERSION is the one source of the version number: this file, the metainfo and the metadata.json of the extension
@@ -30,6 +30,7 @@ PREFIX     ?= /usr
 BINDIR     ?= $(PREFIX)/bin
 DATADIR    ?= $(PREFIX)/share
 LIBEXECDIR ?= $(PREFIX)/libexec
+USERUNITDIR ?= $(PREFIX)/lib/systemd/user
 SYSCONFDIR ?= /etc
 LOCALEDIR  ?= $(DATADIR)/locale
 INSTALL    ?= install
@@ -106,7 +107,7 @@ newlang:
 # ---------------------------------------------------------------------------------------------- generated files
 
 data: $(BUILD)/$(APP_ID).desktop $(BUILD)/$(APP_ID).metainfo.xml $(BUILD)/$(APP_ID).enable-extension.desktop \
-      $(BUILD)/$(NAME)
+      $(BUILD)/$(NAME) $(BUILD)/$(NAME)-sync
 
 $(BUILD)/$(APP_ID).desktop: $(DESKTOP_IN) po/LINGUAS $(wildcard po/*.po)
 	mkdir -p $(BUILD)
@@ -126,6 +127,11 @@ $(BUILD)/$(NAME): Makefile
 	mkdir -p $(BUILD)
 	printf '%s\n' '#!/bin/sh' 'exec gjs -m $(DATADIR)/$(NAME)/app/main.js "$$@"' > $@
 
+# The engine of the sync window (sync/main.js): started by the window's bridge, or by hand in a terminal.
+$(BUILD)/$(NAME)-sync: Makefile
+	mkdir -p $(BUILD)
+	printf '%s\n' '#!/bin/sh' 'exec gjs -m $(DATADIR)/$(NAME)/sync/main.js "$$@"' > $@
+
 # ---------------------------------------------------------------------------------------------- install
 
 # Every file of the tree $(1) is installed under $(2) with mode 0644 (the directories 0755). A symbolic link is
@@ -144,8 +150,11 @@ install: all
 	    '$(DESTDIR)$(DATADIR)/gnome-shell/extensions/$(UUID)'
 	$(call install_tree,src,$(DATADIR)/$(NAME)/src)
 	@if test -d app; then $(call install_tree,app,$(DATADIR)/$(NAME)/app); fi
+	@if test -d sync; then $(INSTALL) -d -m 0755 '$(DESTDIR)$(DATADIR)/$(NAME)/sync' && $(call install_tree,sync,$(DATADIR)/$(NAME)/sync); fi
 	$(INSTALL) -D -m 0644 VERSION '$(DESTDIR)$(DATADIR)/$(NAME)/VERSION'
 	$(INSTALL) -D -m 0755 $(BUILD)/$(NAME) '$(DESTDIR)$(BINDIR)/$(NAME)'
+	$(INSTALL) -D -m 0755 $(BUILD)/$(NAME)-sync '$(DESTDIR)$(BINDIR)/$(NAME)-sync'
+	$(INSTALL) -D -m 0644 data/$(NAME)-syncthing.service '$(DESTDIR)$(USERUNITDIR)/$(NAME)-syncthing.service'
 	$(INSTALL) -D -m 0644 $(BUILD)/$(APP_ID).desktop '$(DESTDIR)$(DATADIR)/applications/$(APP_ID).desktop'
 	$(INSTALL) -D -m 0644 $(BUILD)/$(APP_ID).metainfo.xml '$(DESTDIR)$(DATADIR)/metainfo/$(APP_ID).metainfo.xml'
 	$(INSTALL) -D -m 0644 data/icons/hicolor/scalable/apps/$(APP_ID).svg \
@@ -207,5 +216,5 @@ check-version:
 	echo 'check-version: VERSION is $(VERSION)'
 
 check-complete:
-	@miss=; for f in app/main.js $(EXT_SRC)/metadata.json $(EXT_SRC)/extension.js; do test -f $$f || miss="$$miss $$f"; done; \
+	@miss=; for f in app/main.js sync/main.js data/$(NAME)-syncthing.service $(EXT_SRC)/metadata.json $(EXT_SRC)/extension.js; do test -f $$f || miss="$$miss $$f"; done; \
 	test -z "$$miss" || { echo "check-complete: missing:$$miss" >&2; exit 1; }; echo 'check-complete: ok'

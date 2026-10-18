@@ -111,7 +111,9 @@ test('the port is the only file under sync/ that names the syncthing or systemct
         const names = /\/usr\/bin\/(syncthing|systemctl)|\bSubprocess\b|\bspawn\(|child_process/.test(text);
         assert.equal(names, ['paths.js', 'runport.js', 'gio-ports.js'].includes(f) ? names : false, `${f} must not start a process`);
         if (f !== 'runport.js')
-            assert.equal(/STGUI|STHOME|apikey|api_key|getenv|environ\b/i.test(text), false, `${f} touches an environment or key name`);
+            assert.equal(/STGUI|STHOME|apikey|api_key|getenv/i.test(text), false, `${f} touches an ST* or key name`);
+        if (!['runport.js', 'gio-ports.js'].includes(f))
+            assert.equal(/environ\b/i.test(text), false, `${f} builds or applies an environment`);       // gio-ports.js only applies the scrubbed one
     }
 });
 

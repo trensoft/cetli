@@ -24,8 +24,8 @@
 #
 # Decisions that are not in this repository (Jenna 6638/6644, Attila approved, 2026-10-17):
 #   - The name is cetli everywhere; the owner shown outside is TrenSoft; License GPL-3.0-or-later.
-#   - The package recommends syncthing and does not configure it: the program writes the notes folder and
-#     Syncthing is set up by hand (the automation waits for a decision of the fleet lead).
+#   - The package recommends syncthing. Since 0.2.5 the sync window of cetli (menu: Sync...) can set up a Syncthing instance of its own
+#     after the user presses a button (A7, Attila via Jenna 8322); the package itself configures, enables and starts nothing.
 #   - The build root of record is the epel-10 chroot of COPR (RHEL 10, GNOME Shell 47 to 49); the Fedora chroots
 #     are built too. The version comes from the file VERSION of the repository: .copr/Makefile writes it into
 #     Version: of the spec it builds from, and %%check stops the build when the two differ.
@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.4
+Version:        0.2.5
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -60,10 +60,14 @@ BuildRequires:  gettext
 BuildRequires:  desktop-file-utils
 BuildRequires:  appstream
 BuildRequires:  glib2-devel
+BuildRequires:  systemd-rpm-macros
 # [K] make: the Makefile builds and installs; gettext: msgfmt, xgettext, msgcmp; desktop-file-utils:
 # desktop-file-validate; appstream: appstreamcli; glib2-devel: glib-compile-schemas, only if the extension gets a
 # schema (Makefile, install). [M] all five names exist in CentOS Stream 10 (make, gettext in BaseOS; the others in
 # AppStream; repodata read 2026-10-17); libappstream-glib exists there too (0.8.3) and is not needed.
+# systemd-rpm-macros (0.2.5): only for the macro %%{_userunitdir}, where the unit file of the sync window is installed (the EPEL spec of
+# syncthing does the same). [H] it is in the COPR chroots: the first build tells. No %%systemd_user_* scriptlet is used: the package enables
+# and restarts nothing; the sync window enables the unit after the user's click.
 
 Requires:       gnome-shell >= 47
 Requires:       gjs
@@ -79,9 +83,10 @@ Recommends:     syncthing
 %description
 cetli keeps short notes in small windows on the GNOME desktop. Every note is
 one plain file in a folder, so the folder can be kept in step between
-computers with a tool such as Syncthing (the package recommends it, and does
-not set it up). If two computers change the same note before they meet, cetli
-keeps both versions.
+computers with a tool such as Syncthing (the package recommends it). The sync
+window of cetli (menu: Sync) sets up a Syncthing instance of its own after you
+press a button; the package itself starts nothing. If two computers change the
+same note before they meet, cetli keeps both versions.
 
 The package also holds a GNOME Shell extension that puts the note windows back
 where they were. It is enabled once, at the first login of each user.
@@ -94,7 +99,7 @@ where they were. It is enabled once, at the first login of each user.
 # "pot" writes po/cetli.pot from the sources (the template is made in the build, not only read)
 
 %install
-%make_install PREFIX=%{_prefix} SYSCONFDIR=%{_sysconfdir} LIBEXECDIR=%{_libexecdir} LOCALEDIR=%{_datadir}/locale
+%make_install PREFIX=%{_prefix} SYSCONFDIR=%{_sysconfdir} LIBEXECDIR=%{_libexecdir} LOCALEDIR=%{_datadir}/locale USERUNITDIR=%{_userunitdir}
 %find_lang %{name}
 
 %check
@@ -103,6 +108,8 @@ make check-po
 make check-complete
 %endif
 test "$(cat %{buildroot}%{_datadir}/%{name}/VERSION)" = "%{version}"
+test -f %{buildroot}%{_userunitdir}/%{name}-syncthing.service
+test -f %{buildroot}%{_datadir}/%{name}/sync/main.js
 grep -q '<release version="%{version}" ' %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xml
 sh -n %{buildroot}%{_libexecdir}/%{name}/enable-extension
 desktop-file-validate %{buildroot}%{_datadir}/applications/%{app_id}.desktop
@@ -113,6 +120,8 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %license LICENSE
 %doc README.md
 %{_bindir}/%{name}
+%{_bindir}/%{name}-sync
+%{_userunitdir}/%{name}-syncthing.service
 %{_datadir}/%{name}/
 %{_libexecdir}/%{name}/
 %{_datadir}/gnome-shell/extensions/%{uuid}/
@@ -122,6 +131,14 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1
+- New: a sync window (main menu: Sync, and once at the first start): it sets up a Syncthing instance of its own for the notes folder after you press a button, and connects two computers by their device IDs. Both computers show their ID; on the waiting computer one button accepts the computer that knocks, and only after you have compared the ID shown there with the one on the other computer; or the ID of the other computer is typed in. cetli opens a network port and announces itself on the local network while the service runs
+- Supported and measured: two computers. Three or more through one middle computer worked on loopback (the middle computer must be on for the other two to meet); every computer paired with the same middle computer can see and change the notes of all the others. Not measured: a real network behind a default firewall or NAT, connections through relays, a real RHEL 10 with a user service manager. A firewall on either computer can stop the pairing: the ports are TCP and UDP 22100 and UDP 21127
+- A machine whose notes folder is already synchronised by a Syncthing you set up by hand is detected and left exactly as it is; the window says so. Two Syncthings on one folder can lose an update (measured)
+- The window says Connected only when the engine has proof from the other computer's side; until a way to read that proof is measured, the connection check ends with "still waiting"
+- The package installs the unit cetli-syncthing.service and the program cetli-sync as data; nothing is enabled or started by the package
+- Tests: the engine and the window have their own tests (sync-tests/, app-tests/sync-wizard-smoke.js)
+
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.4-1
 - The very first note (when no note exists yet) is red (RHEL red, #ee0000); every later new note gets a colour as before. The red is the first circle of the colour grid; no existing note changes colour
 - The header of a red note shows the title "Important" (white, bold, larger than the text, in the middle, cut with an ellipsis on a very small window, as readable in a window that is not active); the title is translated in the language catalogs, the other texts of the new catalogs stay English until they are translated

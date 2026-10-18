@@ -1,0 +1,14 @@
+# The Syncthing instance that cetli keeps for itself (own home, GUI on a unix socket in that home). Installed by the package as data and NOT
+# enabled by it: the sync window of cetli runs `systemctl --user enable --now cetli-syncthing.service` after the user's click (PLAN-WIZARD 0F.1).
+# The text of ExecStart is a contract with sync/paths.js (the home) and with PLAN-WIZARD 0E (an explicit environment instead of
+# UnsetEnvironment=, which takes names and would miss STCONFDIR, STDATADIR and any future ST* variable); a test holds them together.
+[Unit]
+Description=cetli: the Syncthing instance that keeps the notes in step between your computers
+Documentation=https://github.com/trensoft/cetli
+
+[Service]
+ExecStart=/usr/bin/env -i HOME=%h PATH=/usr/bin /usr/bin/syncthing serve --home=%h/.local/state/cetli/syncthing --no-browser --no-restart --no-upgrade
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

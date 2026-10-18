@@ -18,12 +18,27 @@ msgstr ""
 "(n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 #: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in
 msgid "Cetli"
 msgstr ""
 
 #. Translators: the short description in the About window.
-#: data/io.github.trensoft.cetli.desktop.in app/strings.js
+#: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in app/strings.js
 msgid "Small notes on the desktop that sync between your computers"
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"cetli keeps short notes in small windows on the GNOME desktop. Every note is "
+"one plain file in a folder, so the folder can be kept in step between your "
+"computers with a tool such as Syncthing."
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"If two computers change the same note before they meet, cetli keeps both "
+"versions and shows the second one as a note of its own."
 msgstr ""
 
 #: app/strings.js

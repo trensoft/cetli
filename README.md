@@ -20,18 +20,21 @@ up. On RHEL 10 / CentOS Stream 10 `syncthing` comes from EPEL 10; the notes work
 
 ## Sync between two machines
 
-cetli only writes plain files to `~/.local/share/cetli/notes/`. It does not configure or start Syncthing, and there is
-no automatic pairing: the pairing is done once by hand, in the stock Syncthing browser GUI. The steps below are not
-tested by us on cetli [H].
+cetli writes plain files to `~/.local/share/cetli/notes/`. Since 0.2.5 it can set up the sync itself: open the main menu and
+choose **Sync…** (the window also opens once at the first start). After you press the button it starts a Syncthing instance of its
+own for your user (`cetli-syncthing.service`, its own home in `~/.local/state/cetli/syncthing`, ports TCP and UDP 22100 and UDP
+21127) and shares only the notes folder. It needs the `syncthing` program (RHEL 10: from EPEL 10); the window shows the commands
+when it is missing and runs none of them.
 
-1. Install Syncthing on both machines (RHEL 10: enable EPEL 10 first), start it, and open its GUI (by default
-   `http://127.0.0.1:8384`) [H].
-2. On each machine, copy the own device ID (Actions, Show ID) [H].
-3. On machine A, add machine B as a remote device with B's device ID; do the same on B for A [H].
-4. On machine A, add the folder `~/.local/share/cetli/notes/` and share it with machine B [H].
-5. On machine B, accept the offered share and set its folder path to `~/.local/share/cetli/notes/` [H].
+To connect two computers, open **Sync…** on both. Each shows its own ID. On the waiting computer, a button accepts the computer
+that knocks, after you have compared the ID shown there with the ID on the other computer (compare at least the first two
+groups); or type the ID of the other computer into the field. The window says *Connected* only when the program has proof from
+the other computer's side. **Stop syncing** removes the other computer and its share; it never removes the folder or a note.
 
-Share only the `notes/` folder; the `tmp/` folder beside it is local scratch space and does not need to be shared [H].
+What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): two computers are the supported case. Three
+or more through one middle computer worked on loopback only. Not measured: a real network behind a default firewall or NAT,
+relays, a real RHEL 10 session. A computer whose notes folder is already synchronised by a Syncthing you set up by hand is
+left exactly as it is.
 
 ## Authorship
 
