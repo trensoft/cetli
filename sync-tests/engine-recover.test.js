@@ -237,13 +237,13 @@ test('reset: the marker is measured again right before it goes: a path swapped f
     const w = await stuck();
     const marker = `${w.notes}/.stfolder`;
     w.put(`${marker}/syncthing-folder-abc123.txt`, 'hint');
-    const inMarker = () => JSON.stringify([...w.fsMap.entries()].filter(([k]) => k === marker || k.startsWith(`${marker}/`)).sort());
+    const inMarker = () => JSON.stringify([...w.fsMap.entries()].filter(([k]) => k === marker || k.startsWith(`${marker}/`)).map(([k, v]) => [k, {...v, link: undefined}]).sort());
     w.afterDisable = x => { x.fsMap.get(marker).link = true; };                     // the swap, while `disable --now` works
     const before = inMarker();
     const r = await perform(w, 'reset');
     assert.deepEqual(r, {result: {event: 'result', state: 'not-set-up'}}, 'the instance is still moved aside');
     assert.equal(w.fsMap.has(marker), true, 'the marker stays');
-    assert.equal(inMarker().replace('"link":true', ''), before.replace('"link":true', ''), 'and nothing inside it was removed');
+    assert.equal(inMarker(), before, 'and nothing inside it was removed (the link flag aside)');
     assert.equal(w.timeline.some(e => e.startsWith('remove') || e.startsWith('rmdir')), false, 'no removal at all');
     assert.ok(w.journal.some(l => /marker changed/.test(l)), 'and the journal says so');
 });
