@@ -244,12 +244,16 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
             show = notes;
         for (const n of show)
             await openWindow(n, layout);
-        if (windows.size === 0 && !synced())
-            await newNote(null);
+        if (windows.size === 0) {
+            if (synced())
+                showAllNotes();                        // 0.2.5.1: a window must open (GTK quits without one), but not a new note
+            else
+                await newNote(null);
+        }
     }
 
     // 0.2.5.1: a synchronised notes folder gets no note of its own at the start (it may fill a moment later, and the new note would reach
-    // every computer). A failure of the query counts as synchronised. Starting the program again by hand (showAll) still makes one.
+    // every computer). A failure of the query counts as synchronised. Both starts open the list instead (without a window GTK quits).
     function synced() {
         try {
             return notesSynced({dirs, homeDir});
@@ -270,8 +274,12 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
                 ctl.setOpen(n.id, true);
             }
         }
-        if (windows.size === 0)
-            await newNote(null);
+        if (windows.size === 0) {
+            if (synced())
+                showAllNotes();                        // 0.2.5.1: no note of its own on a synchronised folder; the list shows that it runs
+            else
+                await newNote(null);
+        }
     }
 
     function onStoreEvent(ev) {
