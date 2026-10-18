@@ -253,7 +253,7 @@ export function createWorld(opts = {}) {
         input: {lines: () => stdin.queue.splice(0), eof: () => stdin.eofFlag},
         emit: ev => w.events.push(ev),
         log: m => w.journal.push(m),
-        timing: opts.timing,
+        timing: opts.timing, linkRule: opts.linkRule,
     });
     w.engine = () => createEngine(w.ports());
     // convenience for the states a test starts from

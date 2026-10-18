@@ -12,6 +12,11 @@ import {argvFor, emit} from './protocol.js';
 import {createRunPort} from './runport.js';
 import GLib from 'gi://GLib';
 
+// How `stable` is decided (PLAN-WIZARD 0G.2). 'evidence' fails closed: with no measured `cli` signal for "the other computer has our folder", host
+// and join cannot finish. 'samples' is option (a) of 0G.2 (Attila via Jenna 8447): ten unbroken connected samples, and the window must say
+// "Connected", never "Synced". Flip this one word only when Robert's Interface text and Peter say so.
+const LINK_RULE = 'evidence';
+
 const out = line => print(line);
 
 function usage() {
@@ -51,6 +56,7 @@ async function main(args) {
         // The positive "the other computer has our folder" signal: there is NO measured way to read it with `syncthing cli` yet (John, M-W6b). Until
         // there is one, the engine can never say `stable`, so host and join end in E_PEER_TIMEOUT instead of claiming a connection.
         evidence: async () => null,
+        linkRule: LINK_RULE,
         input, emit: emitEvent, log: real.log,
     });
     const arg = verb === 'forget' ? flags : verb === 'join' ? await input.firstLine() : undefined;

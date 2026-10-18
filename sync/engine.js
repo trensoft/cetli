@@ -13,6 +13,11 @@
 //   input:    {lines() -> string[], eof() -> bool}       host only: what the window wrote on stdin
 //   emit(event), log(text)              events of the protocol (without v), a journal line (codes and field names only)
 //   timing?:  overrides of the constants below (tests)
+//   linkRule?: 'evidence' (default) | 'samples'. How `stable` is decided (PLAN-WIZARD 0G.2). 'evidence': `linkSamples` unbroken connected
+//             samples AND the positive signal of ports.evidence(); with no way to read it (null) the link is never stable and host/join end in
+//             E_PEER_TIMEOUT (fails closed). 'samples': option (a) of 0G.2, the unbroken connected samples alone (K x 1 s, above the 4.8 s
+//             longest wrong-ID burst measured, reserve about 2x); `up_to_date` is then not measurable and is taken as true, so the window
+//             must not say "synced". The choice is main.js's one constant; it waits for Robert's Interface text (up_to_date, "for N seconds").
 // }
 import {NAME_MAIN} from '../src/constants.js';
 import {ConfigEditError, PORTS_OWN, editConfig, readFolderIds, verifyConfig} from './confedit.js';
@@ -67,6 +72,9 @@ export function folderAnomaly(folders, notesPath) {
 export function createEngine(ports) {
     const {run, files, dirs, emit, log} = ports;
     const t = {...TIMING, ...(ports.timing ?? {})};
+    const linkRule = ports.linkRule ?? 'evidence';
+    if (linkRule !== 'evidence' && linkRule !== 'samples')
+        throw new RangeError('linkRule');
     const configPath = `${dirs.home}/config.xml`;
     const sock = socketPath(dirs.home);
     const editArgs = {socketPath: sock, ports: PORTS_OWN};
@@ -209,7 +217,10 @@ export function createEngine(ports) {
                 consecutive++;
                 v.link = 'flapping';
                 v.upToDate = false;
-                if (consecutive >= t.linkSamples) {
+                if (consecutive >= t.linkSamples && linkRule === 'samples') {
+                    v.link = 'stable';
+                    v.upToDate = true;
+                } else if (consecutive >= t.linkSamples) {
                     let ev = null;
                     try {
                         ev = await ports.evidence(peerId);

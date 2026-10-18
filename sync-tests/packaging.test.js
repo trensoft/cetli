@@ -58,3 +58,26 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
     assert.match(entry, /TCP and UDP 22100 and UDP 21127/);
     assert.match(entry, /cannot|can lose an update/);
 });
+
+test('0H.12: env -i is mandatory in ExecStart with exactly HOME and PATH; no EnvironmentFile, PassEnvironment or UnsetEnvironment', () => {
+    const exec = unit.match(/^ExecStart=(.*)$/m)[1];
+    assert.equal(exec.startsWith('/usr/bin/env -i HOME=%h PATH=/usr/bin /usr/bin/syncthing serve '), true);
+    const env = exec.slice('/usr/bin/env -i '.length, exec.indexOf(' /usr/bin/syncthing'));
+    assert.equal(env, 'HOME=%h PATH=/usr/bin');
+    assert.equal(/^\s*(EnvironmentFile|PassEnvironment|UnsetEnvironment|Environment)=/m.test(unit), false);
+});
+
+test('0H.12: the literal STGUIADDRESS is nowhere in the shipped tree (the allowlist never names it), and a serve address is never given on the command line', async () => {
+    const {readdirSync, statSync} = await import('node:fs');
+    const root = new URL('../', import.meta.url);
+    const walk = dir => readdirSync(new URL(dir, root)).flatMap(n => {
+        const rel = `${dir}${n}`;
+        return statSync(new URL(rel, root)).isDirectory() ? walk(`${rel}/`) : [rel];
+    });
+    const shipped = [...walk('sync/'), ...walk('app/'), ...walk('data/'), ...walk('packaging/'), 'Makefile', 'README.md'];
+    for (const f of shipped) {
+        const text = read(f);
+        assert.equal(/STGUIADDRESS|STGUIAPIKEY|STHOMEDIR|STCONFDIR|STDATADIR/.test(text), false, f);
+    }
+    assert.equal(/--gui-address|--gui-apikey/.test(unit), false);
+});

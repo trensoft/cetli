@@ -375,3 +375,56 @@ test('the journal carries codes, steps and field names only: no ID, no name, no 
         assert.equal(j.includes(s), false, s);
     assert.ok(w.journal.length >= 1);
 });
+
+// ---- option (a) of 0G.2: the link decided by unbroken connected samples alone ------------------------------------------------------
+
+test('samples rule: ten unbroken connected samples at 1 s are stable, with no evidence at all; the default rule is the strict one', async () => {
+    const w = await ready({linkRule: 'samples'});
+    knock(w, 3000);
+    accept(w, 7000);
+    connect(w, 7000);
+    const r = await perform(w, 'host');
+    assert.deepEqual([r.result.link, r.result.up_to_date], ['stable', true]);
+    assert.ok(w.mono >= 7000 + 9 * 1000, 'not before ten samples');
+    const strict = await ready();
+    knock(strict, 3000);
+    accept(strict, 7000);
+    connect(strict, 7000);
+    assert.equal((await perform(strict, 'host')).error.code, 'E_PEER_TIMEOUT', 'without the option the engine needs the evidence');
+    const { readFileSync } = await import('node:fs');
+    assert.match(readFileSync(new URL('../sync/main.js', import.meta.url), 'utf8'), /const LINK_RULE = 'evidence';/, 'the product ships the strict rule until it is decided');
+    const base = (await ready()).ports();
+    assert.throws(() => createEngine({...base, linkRule: 'nonsense'}), RangeError);
+});
+
+test('samples rule: the wrong-ID shape of M-W6b (a 4.8 s burst, then 0.9 s bursts every 20 s) never gives stable; a flicker shorter than ten samples neither', async () => {
+    const w = await ready({linkRule: 'samples'});
+    knock(w, 3000);
+    accept(w, 7000);
+    const t0 = 7000;
+    w.connections.set(PEER, ms => { const d = ms - t0; return (d >= 0 && d < 4800) || (d >= 17000 && d < 17900) || (d >= 37000 && d < 37900) || (d >= 57000 && d < 57900); });
+    const r = await perform(w, 'host');
+    assert.deepEqual(r.error, {code: 'E_PEER_TIMEOUT', step: 'connect'});
+    assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
+    // nine good samples and a drop, over and over: flapping, never stable (mutant: threshold 9 or less)
+    const v = await ready({linkRule: 'samples'});
+    knock(v, 3000);
+    accept(v, 7000);
+    v.connections.set(PEER, ms => (ms - 7000) % 10_000 < 9_000);
+    assert.equal((await perform(v, 'host')).error.code, 'E_PEER_TIMEOUT');
+    assert.equal(v.events.some(e => e.event === 'link' && e.state === 'stable'), false);
+    // the same shapes for join and for status
+    const j = await ready({linkRule: 'samples'});
+    j.connections.set(PEER, ms => ms % 20_000 < 4800);
+    assert.equal((await perform(j, 'join', PEER)).error.code, 'E_PEER_TIMEOUT');
+    const st = await ready({linkRule: 'samples'});
+    st.pair(PEER);
+    st.connections.set(PEER, ms => ms < 4800);
+    const s = (await perform(st, 'status')).result;
+    assert.deepEqual([s.link, s.up_to_date], ['flapping', false]);
+    const ok = await ready({linkRule: 'samples'});
+    ok.pair(PEER);
+    ok.connections.set(PEER, true);
+    const o = (await perform(ok, 'status')).result;
+    assert.deepEqual([o.link, o.up_to_date, o.state], ['stable', true, 'paired']);
+});
