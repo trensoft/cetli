@@ -315,6 +315,7 @@ export class SyncWizard {
         const w = this.w;
         w.ownId.set(this.ownId ?? '');
         this.ids = initialIdsState;
+        this.acceptSent = false;
         w.cand.set_visible(false);
         w.entryError.set_visible(message !== null);
         w.entryError.set_label(message ?? '');
@@ -363,9 +364,10 @@ export class SyncWizard {
 
     _accept() {
         const c = this.ids.candidate;
-        if (!c || !this.hostRun)
+        if (!c || !this.hostRun || this.acceptSent)
             return;
         if (this.hostRun.accept(c.id)) {
+            this.acceptSent = true;                                  // ONE accept per opening
             this.w.candAccept.set_sensitive(false);
             this._showConnecting({event: 'progress', step: 'device', state: 'start'});
         }

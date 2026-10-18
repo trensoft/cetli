@@ -92,3 +92,11 @@ test('the ID page reducer: a candidate, its replacement, the accept, the link', 
     assert.equal(idsReducer(s, {event: 'nothing'}), s);
     assert.equal(Object.isFrozen(initialIdsState), true);
 });
+
+test('the product turns the first-start sync window on in main.js; the notes tests leave it off', async () => {
+    const {readFileSync} = await import('node:fs');
+    assert.match(readFileSync(new URL('../app/main.js', import.meta.url), 'utf8'), /createApp\(\{firstStartSync: true\}\)/);
+    const app = readFileSync(new URL('../app/application.js', import.meta.url), 'utf8');
+    assert.match(app, /firstStartSync = false/);
+    assert.match(app, /firstStartSync && wantsFirstStart/);
+});

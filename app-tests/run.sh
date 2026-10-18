@@ -14,7 +14,7 @@ if [ -z "${CETLI_GTKENV:-}" ]; then
 fi
 . "$CETLI_GTKENV/gjsenv.sh"
 # CETLI_BULK=1 adds the 50-note list test (it starts the program with 50 files in the folder).
-smokes="gtk-smoke.js allnotes-smoke.js preview-marks-smoke.js marks-gjs-smoke.js color-picker-smoke.js color-render-smoke.js color-start-render-smoke.js red-render-smoke.js color-grid-render-smoke.js format-bar-smoke.js format-bar-render-smoke.js"
+smokes="gtk-smoke.js allnotes-smoke.js preview-marks-smoke.js marks-gjs-smoke.js color-picker-smoke.js color-render-smoke.js color-start-render-smoke.js red-render-smoke.js sync-wizard-smoke.js color-grid-render-smoke.js format-bar-smoke.js format-bar-render-smoke.js"
 [ "${CETLI_BULK:-}" = 1 ] && smokes="$smokes allnotes-bulk-smoke.js"
 for smoke in $smokes; do
     echo "== $smoke"

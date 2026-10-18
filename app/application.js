@@ -16,6 +16,9 @@ import {
 } from './data.js';
 import {AllNotesWindow} from './allnotes.js';
 import {setOpen, shouldOpen, sizeOf} from './layoutfile.js';
+import {SyncBridge} from './sync-bridge.js';
+import {wantsFirstStart, writeDismissed} from './sync-hook.js';
+import {SyncWizard} from './sync-wizard.js';
 import {NoteWindow} from './window.js';
 import * as S from './strings.js';
 
@@ -43,6 +46,7 @@ function buildMenu() {
     notes.append(S.menuDeleteNote(), 'win.delete');
     menu.append_section(null, notes);
     const more = new Gio.Menu();
+    more.append(S.menuSync(), 'app.sync-setup');
     more.append(S.menuAbout(), 'win.about');
     menu.append_section(null, more);
     return menu;
@@ -58,12 +62,16 @@ function loadCss() {
     Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
-// `dirs`, `fs` and `platform` can be given by a test; the product uses the defaults of the core's Gio layer.
-export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform} = {}) {
+// `dirs`, `fs` and `platform` can be given by a test; the product uses the defaults of the core's Gio layer. `bridge` and `homeDir` are given
+// by a test too (a fake bridge replays the engine; the home is where the first-start hook looks for `.stfolder` markers).
+// `firstStartSync`: the product (main.js) turns the first-start sync window on; the tests of the notes leave it off.
+export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false} = {}) {
     const gtkApp = new Adw.Application({application_id: APP_ID, flags: Gio.ApplicationFlags.DEFAULT_FLAGS});
     const store = createStore({fs, platform, dirs});          // resolveConflicts stays at its default: off
     const windows = new Map();
     const version = readVersion();
+    const syncBridge = bridge ?? new SyncBridge({log: m => platform.log.warn(m)});
+    let syncWin = null;                  // the one sync window, while it is open
     let menu = null;
     let watcher = null;
     let allNotes = null;                 // the one "All notes" window, while it is open
@@ -100,6 +108,18 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         onAllNotesClosed: win => {
             if (allNotes === win)
                 allNotes = null;
+        },
+        onSyncClosed: win => {
+            if (syncWin === win)
+                syncWin = null;
+        },
+        // "Later" on the consent page of the first-start window: the answer is written (no ID, no label), so it does not come back.
+        dismissSync: () => {
+            try {
+                writeDismissed(dirs.state);
+            } catch (e) {
+                platform.log.warn(`sync-wizard.json not written: ${e?.message ?? e}`);
+            }
         },
     };
 
@@ -194,6 +214,25 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         allNotes.present();
     }
 
+    // The menu item and the first start. A window that is already open is brought to the front.
+    function showSync({firstStart = false} = {}) {
+        if (syncWin === null)
+            syncWin = new SyncWizard({ctl, bridge: syncBridge, firstStart});
+        syncWin.present();
+        return syncWin;
+    }
+
+    // The first start (PLAN-WIZARD 0H.11): no state file and no `.stfolder` anywhere from notes/ up to $HOME. Nothing runs before the
+    // user presses the button in the window; a failure here must never block the notes.
+    function maybeShowFirstStartSync() {
+        try {
+            if (firstStartSync && wantsFirstStart({dirs, homeDir}))
+                showSync({firstStart: true});
+        } catch (e) {
+            platform.log.warn(`sync window not opened: ${e?.message ?? e}`);
+        }
+    }
+
     const alive = () => store.listNotes().filter(n => !n.deleted);
 
     // First activation: the notes that are not marked closed; when none would show, all of them; when there are none, a new one.
@@ -277,6 +316,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         await watcher.start();
         starting = false;
         await showStartWindows();
+        maybeShowFirstStartSync();
     }
 
     const ready = new Promise((res, rej) => {
@@ -293,6 +333,9 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         const all = new Gio.SimpleAction({name: 'all-notes'});
         all.connect('activate', () => showAllNotes());
         gtkApp.add_action(all);
+        const sync = new Gio.SimpleAction({name: 'sync-setup'});
+        sync.connect('activate', () => showSync());
+        gtkApp.add_action(sync);
         gtkApp.set_accels_for_action('app.new-note', ['<Control>n']);
         gtkApp.set_accels_for_action('app.all-notes', ['<Control>h']);
         Adw.StyleManager.get_default().connect('notify::dark', () => {
@@ -316,7 +359,10 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         }).finally(() => gtkApp.release());
     });
 
-    gtkApp.connect('shutdown', () => watcher?.stop());
+    gtkApp.connect('shutdown', () => {
+        watcher?.stop();
+        syncBridge.stop();
+    });
 
-    return {gtkApp, store, windows, ctl, ready, run: argv => gtkApp.run(argv), showAllNotes, get allNotes() { return allNotes; }};
+    return {gtkApp, store, windows, ctl, ready, run: argv => gtkApp.run(argv), showAllNotes, showSync, get allNotes() { return allNotes; }, get syncWindow() { return syncWin; }};
 }

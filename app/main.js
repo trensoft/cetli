@@ -4,5 +4,5 @@ import System from 'system';
 
 import {createApp} from './application.js';
 
-const app = createApp();
+const app = createApp({firstStartSync: true});
 System.exit(app.run([System.programInvocationName, ...ARGV]));
