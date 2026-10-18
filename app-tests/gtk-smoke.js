@@ -154,6 +154,11 @@ async function scenario() {
     const texts = noteFiles().filter(n => /^[0-9a-f-]{36}\.json$/.test(n)).map(n => JSON.parse(readText(`${dirs.notes}/${n}`))).filter(r => !r.deleted).map(r => r.text);
     check(texts.includes('conflict') && texts.includes(textBefore), 'both texts are notes: the conflict version and the one it replaced');
 
+    // the resolved copy is a new note: its window opens a moment after the conflict file is gone ('added' -> loadLayout -> openWindow).
+    // Count the windows only when every live note has its own, or that late window is counted as the one the next step opens.
+    await until(() => windows.size === texts.length, 6000);
+    check(windows.size === texts.length, `every note has its window before the next step (${windows.size} windows, ${texts.length} notes)`);
+
     // new note through the application action
     const sizeBefore = windows.size;
     gtkApp.activate_action('new-note', null);
