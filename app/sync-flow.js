@@ -73,10 +73,15 @@ const SECONDARY = Object.freeze({
     E_SERVICE_TIMEOUT: 'reset',
 });
 
-export function errorView(code) {
+// A restart (the automatic one or the button) that ends on one of these codes leaves a dead end: the config of the sync program is not what cetli
+// wrote, so no restart will ever work. The window then offers "Reset sync" as well (with its confirmation).
+const RESET_AFTER_RESTART = Object.freeze(['E_CONFIG_UNSAFE']);
+
+export function errorView(code, {afterRestart = false} = {}) {
     const known = Object.hasOwn(ACTIONS, code);
     const c = known ? code : 'E_INTERNAL';
-    return {code: c, neutral: isNeutralCode(c), action: ACTIONS[c], ...(Object.hasOwn(SECONDARY, c) ? {secondary: SECONDARY[c]} : {})};
+    const secondary = Object.hasOwn(SECONDARY, c) ? SECONDARY[c] : afterRestart && RESET_AFTER_RESTART.includes(c) ? 'reset' : null;
+    return {code: c, neutral: isNeutralCode(c), action: ACTIONS[c], ...(secondary !== null ? {secondary} : {})};
 }
 
 // The ID in two rows of four groups for a monospace label, and the short line to compare (the first two groups).

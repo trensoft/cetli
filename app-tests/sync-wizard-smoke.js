@@ -202,6 +202,7 @@ async function scenario() {
         ['E_PEER_TIMEOUT', {neutral: false, button: S.syncTryAgain()}],
         ['E_SERVICE_TIMEOUT', {neutral: false, button: S.syncTryAgain()}],
         ['E_FOREIGN_DEVICE', {neutral: false, button: null}],
+        ['E_CONFIG_UNSAFE', {neutral: false, button: null}],
         ['E_STFOLDER_EXISTS', {neutral: true, button: null}],
         ['E_ALREADY_PAIRED', {neutral: true, button: null}],
         ['E_NO_SYNCTHING', {neutral: false, button: S.syncCheckAgain()}],
@@ -258,6 +259,8 @@ async function scenario() {
     check(fake.count('restart') === 1 && fake.count('status') === 2 && w.page === 'error', 'no loop: one automatic try per window');
     w.w.errAction.emit('clicked');
     check(await waitFor(() => fake.count('restart') === 2 && fake.count('status') === 3), 'the button Try again runs restart, then asks the status');
+    const restarts = () => fake.calls.filter(c => c.verb === 'restart');
+    check(restarts()[0].opts.flags === undefined && restarts()[1].opts.flags?.enable === true, 'the automatic try asks for no enable; the button (the user\'s decision) does');
     await tick(300);
     check(fake.count('restart') === 2 && fake.count('status') === 3 && fake.count('setup') === 0 && fake.count('reset') === 0 && fake.count('forget') === 0, 'a click makes no second restart behind it, and nothing else runs');
     check(await pageIs(w, 'error') && w.w.errSecondary.get_visible(), 'the daemon still silent: the error page again, the way out still there');
@@ -302,6 +305,49 @@ async function scenario() {
     w.confirmDialog.emit('response', 'reset');
     check(await waitFor(() => fake.count('reset') === 1) && await waitFor(() => labelText(w.w.errText) === S.syncErrorText('E_NO_USER_SYSTEMD')), 'a failed reset shows its own error');
     check(fake.count('setup') === 0, 'and starts no set-up');
+    await closeWin(w);
+
+    // ---- the unit does not run (John 8844): inactive, failed, start limit, disabled. The engine answers like the real one: `restart` without
+    // enable on a disabled unit starts nothing and says `disabled`; every other case is started and the status is the paired page again.
+    for (const kind of ['inactive', 'failed', 'start-limit', 'disabled']) {
+        let running = false;
+        w = await open({
+            status: () => (running ? paired() : fail('E_SERVICE_TIMEOUT')),
+            restart: opts => {
+                if (kind === 'disabled' && opts.flags?.enable !== true)
+                    return {ok: true, result: {event: 'result', state: 'disabled'}};
+                running = true;
+                return {ok: true, result: {event: 'result', state: 'restarted'}};
+            },
+        });
+        if (kind !== 'disabled') {
+            check(await pageIs(w, 'paired'), `unit ${kind}: the window ends on the paired page by itself, no click`);
+            check(fake.calls.map(c => c.verb).join() === 'status,restart,status' && fake.calls[1].opts.flags === undefined, `unit ${kind}: status, restart (no enable), status`);
+        } else {
+            check(await pageIs(w, 'error') && await waitFor(() => fake.count('restart') === 1), 'unit disabled: the automatic try asked, and the error page stays');
+            await tick(400);
+            check(fake.calls.map(c => c.verb).join() === 'status,restart' && fake.calls[1].opts.flags === undefined && running === false, 'unit disabled: nothing was started, no second try');
+            check(w.w.errAction.get_visible() && labelText(w.w.errAction) === S.syncTryAgain() && w.w.errSecondary.get_visible(), 'unit disabled: the restart button and Reset sync are shown');
+            w.w.errAction.emit('clicked');
+            check(await pageIs(w, 'paired') && fake.calls.map(c => c.verb).join() === 'status,restart,restart,status' && fake.calls[2].opts.flags?.enable === true,
+                'unit disabled: the button asks for enable (the user decides), then the paired page');
+        }
+        await closeWin(w);
+    }
+
+    // ---- a restart that ends on E_CONFIG_UNSAFE is a dead end: Reset sync is offered (and asks first); the plain error has no such button
+    w = await open({
+        status: () => fail('E_SERVICE_TIMEOUT'),
+        restart: () => fail('E_CONFIG_UNSAFE', 'service'),
+        reset: () => ({ok: true, result: {event: 'result', state: 'not-set-up'}}),
+        setup: () => ({ok: true, result: {event: 'result', own_id: A, state: 'set-up'}}),
+    });
+    check(await pageIs(w, 'error') && await waitFor(() => labelText(w.w.errText) === S.syncErrorText('E_CONFIG_UNSAFE')), 'the automatic restart ends on E_CONFIG_UNSAFE: its own error text');
+    check(!w.w.errAction.get_visible() && w.w.errSecondary.get_visible() && labelText(w.w.errSecondary) === S.syncResetButton(), 'and Reset sync is offered, no Try again');
+    w.w.errSecondary.emit('clicked');
+    check(w.confirmDialog !== undefined && fake.count('reset') === 0, 'with the confirmation first');
+    w.confirmDialog.emit('response', 'reset');
+    check(await pageIs(w, 'ids') && fake.count('reset') === 1 && fake.count('setup') === 1, 'confirming resets and goes to the ID page');
     await closeWin(w);
 
     // ---- the ambiguity error offers a new waiting run

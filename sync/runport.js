@@ -40,6 +40,7 @@ const SYSTEMCTL_CALLS = Object.freeze([
     ['--user', 'restart', UNIT_NAME],
     ['--user', 'stop', UNIT_NAME],
     ['--user', 'is-active', UNIT_NAME],
+    ['--user', 'is-enabled', UNIT_NAME],
 ].map(a => JSON.stringify(a)));
 
 const okArg = a => typeof a === 'string' && !a.includes('\0');

@@ -73,6 +73,14 @@ test('0.2.5.2: a sync program that does not answer has a restart and, as the way
     assert.equal(Object.hasOwn(errorView('E_NOPE'), 'secondary'), false);
 });
 
+test('0.2.5.2: after a restart that ends on E_CONFIG_UNSAFE (a dead end) the way out "reset" is offered; nowhere else, and not without a restart before', () => {
+    assert.deepEqual(errorView('E_CONFIG_UNSAFE', {afterRestart: true}), {code: 'E_CONFIG_UNSAFE', neutral: false, action: 'none', secondary: 'reset'});
+    assert.equal(Object.hasOwn(errorView('E_CONFIG_UNSAFE'), 'secondary'), false, 'the plain error stays as it was');
+    for (const c of ERROR_CODES.filter(x => x !== 'E_SERVICE_TIMEOUT' && x !== 'E_CONFIG_UNSAFE'))
+        assert.equal(Object.hasOwn(errorView(c, {afterRestart: true}), 'secondary'), false, c);
+    assert.equal(errorView('E_SERVICE_TIMEOUT', {afterRestart: true}).secondary, 'reset');
+});
+
 test('the ID rows and the compare line', () => {
     assert.deepEqual(idRows(A), ['F6HEWOE-4KSACQ5-5MAX7IC-HAP3EGW', 'AQYBTIX-V74MXIF-ZB3GZN6-4T3QYQZ']);
     assert.equal(compareLine(A), 'F6HEWOE-4KSACQ5');

@@ -38,6 +38,7 @@ export function createWorld(opts = {}) {
         failConnections: null,                     // (nowMs) -> boolean: `show connections` fails (rc 1) when true
         afterAdd: null,                            // (id) -> void: a hook that changes a device right after it was added (a foreign edit)
         hung: false,                               // the unit is active but the daemon never answers (the failure of 0.2.5.2)
+        enabled: true,                             // `systemctl --user is-enabled`: false = the unit was disabled by the user (`forget --stop`)
         unitFailed: false,                         // the unit is in the failed state (start limit): starting it is refused until `reset-failed`
         failSystemctl: new Set(),                  // `systemctl` argument strings (after --user) that fail with rc 1
         failCli: new Set(),                        // exact `config devices add`-style prefixes that fail (rc 1)
@@ -221,6 +222,10 @@ export function createWorld(opts = {}) {
             const key = argv.slice(1).join(' ');
             if (w.failSystemctl.has(key.replace('--user ', '')))
                 return {rc: 1, out: 'Failed\n'};
+            if (key === `--user is-enabled cetli-syncthing.service`) {
+                w.timeline.push('systemctl is-enabled');
+                return w.enabled ? {rc: 0, out: 'enabled\n'} : {rc: 1, out: 'disabled\n'};
+            }
             if (key === `--user reset-failed cetli-syncthing.service`) {
                 w.unitFailed = false;
                 w.timeline.push('systemctl reset-failed');
@@ -238,12 +243,14 @@ export function createWorld(opts = {}) {
                 if (w.unitFailed)
                     return {rc: 1, out: 'Failed to enable: start request repeated too quickly\n'};
                 w.daemon = true;
+                w.enabled = true;
                 w.startedAt = w.mono;
                 w.timeline.push('systemctl enable --now');
                 return {rc: 0, out: ''};
             }
             if (key.startsWith('--user disable')) {
                 w.daemon = false;
+                w.enabled = false;
                 w.timeline.push('systemctl disable');
                 return {rc: 0, out: ''};
             }

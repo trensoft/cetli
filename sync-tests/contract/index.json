@@ -159,6 +159,11 @@
     "rc": 0,
     "expect": "result"
   },
+  "restart-disabled.ndjson": {
+    "verb": "restart",
+    "rc": 0,
+    "expect": "result"
+  },
   "restart-timeout.ndjson": {
     "verb": "restart",
     "rc": 1,

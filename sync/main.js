@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// `cetli-sync <verb> [--stop]`: the engine of the sync window. One JSON object per line on stdout (sync/protocol.js), exactly one terminal line,
+// `cetli-sync <verb> [--stop|--enable]`: the engine of the sync window. One JSON object per line on stdout (sync/protocol.js), exactly one terminal line,
 // exit code 0 after a `result`, 1 after an `error`, 2 for a usage error. The code is never an argument: `join` reads the ID of the other computer
 // from stdin (one line), `host` reads `accept <ID>` lines from stdin and stops at once on EOF. Launcher: `gjs -m <datadir>/cetli/sync/main.js "$@"`.
 import System from 'system';
@@ -15,7 +15,7 @@ import GLib from 'gi://GLib';
 const out = line => print(line);
 
 function usage() {
-    printerr('usage: cetli-sync status|setup|own-id|host|join|restart|reset|forget [--stop]');
+    printerr('usage: cetli-sync status|setup|own-id|host|join|restart [--enable]|reset|forget [--stop]');
     System.exit(2);
 }
 
@@ -25,6 +25,8 @@ async function main(args) {
     for (const a of args.slice(1)) {
         if (a === '--stop')
             flags.stop = true;
+        else if (a === '--enable')
+            flags.enable = true;
         else
             usage();
     }
@@ -50,7 +52,7 @@ async function main(args) {
         now: real.now, monotonic: real.monotonic, sleep: real.sleep,
         input, emit: emitEvent, log: real.log,
     });
-    const arg = verb === 'forget' ? flags : verb === 'join' ? await input.firstLine() : undefined;
+    const arg = verb === 'forget' || verb === 'restart' ? flags : verb === 'join' ? await input.firstLine() : undefined;
     const outcome = await engine.perform(verb, arg);
     if (outcome.result) {
         emitEvent(outcome.result);

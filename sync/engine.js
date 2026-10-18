@@ -491,23 +491,32 @@ export function createEngine(ports) {
         return {result: {event: 'result', state: 'set-up'}};
     }
 
-    // Starts the unit again, the way out of "does not answer" that touches no data: clear a failed state (the start limit of a crash loop), restart,
-    // wait for the daemon. The result is only that the daemon answers; the window asks `status` afterwards.
-    async function restart() {
+    // Starts the unit again, the way out of "does not answer" that touches no data: clear a failed state (the start limit of a crash loop), restart
+    // (this also starts a unit that is not running: inactive, failed), wait for the daemon. The result is only that the daemon answers; the window
+    // asks `status` afterwards. A unit that is DISABLED was switched off by the user (`forget --stop`): without `enable` nothing at all is run after
+    // the read-only question and the result is state `disabled`; with `enable` (the user pressed the button) it is `enable --now` instead of `restart`.
+    async function restart({enable = false} = {}) {
         if (!backendInstalled())
             throw new Fail('E_NO_SYNCTHING');
         if (!files.exists(configPath))
             throw new Fail('E_CLI_FAILED');
+        let state = 'restarted';
         await step('service', async () => {
             recheckConfig();
+            const was = await run.systemctl(['--user', 'is-enabled', UNIT_NAME], {timeoutMs: t.systemctlMs});
+            const disabled = was.rc !== 0 && was.out.trim() === 'disabled';
+            if (disabled && !enable) {
+                state = 'disabled';
+                return;
+            }
             await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});     // nothing to clear is not an error
-            const on = await run.systemctl(['--user', 'restart', UNIT_NAME], {timeoutMs: t.systemctlMs});
+            const on = await run.systemctl(['--user', disabled ? 'enable' : 'restart', ...(disabled ? ['--now'] : []), UNIT_NAME], {timeoutMs: t.systemctlMs});
             if (on.rc !== 0)
                 throw new Fail('E_NO_USER_SYSTEMD');
             if (!(await daemonAnswers(t.serviceWaitMs)))
                 throw new Fail('E_SERVICE_TIMEOUT');
         });
-        return {result: {event: 'result', state: 'restarted'}};
+        return {result: {event: 'result', state}};
     }
 
     // The way out when the daemon does not come back: back to "not set up", with NO call to the daemon. Stops and disables the unit, MOVES the
@@ -686,7 +695,7 @@ export function createEngine(ports) {
             case 'setup': return await setup();
             case 'own-id': return await ownIdVerb();
             case 'forget': return await forget(arg ?? {});
-            case 'restart': return await restart();
+            case 'restart': return await restart(arg ?? {});
             case 'reset': return await reset();
             case 'host': return await host();
             case 'join': return await join(arg);

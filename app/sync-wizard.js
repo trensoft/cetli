@@ -257,7 +257,7 @@ export class SyncWizard {
             // A computer that was set up reconnects by itself: the first time the sync program does not answer in this window, it is started
             // again once, without a click (no data is touched). If that does not help, the buttons follow. Never a loop (see _restart).
             if (out.error.code === 'E_SERVICE_TIMEOUT' && !this.restartTried) {
-                this._restart();
+                this._restart(true);
                 return;
             }
             this._showError(out.error.code, () => this.refresh());
@@ -505,14 +505,20 @@ export class SyncWizard {
 
     // The sync program does not answer: start it again (no data is touched), then ask the status. One automatic try per window (restartTried):
     // a click on the button counts as that try too, so a click never makes a second restart behind it.
-    async _restart() {
+    // The automatic try never switches on a unit the user switched off (`disabled`): then nothing ran, and the page is the same as for the silent
+    // program, with the button; the button (auto false) is the user's decision and asks for `enable --now` in that case.
+    async _restart(auto = false) {
         this.restartTried = true;
         this._show('checking');
-        const out = await this.bridge.run('restart');
+        const out = await this.bridge.run('restart', auto ? {} : {flags: {enable: true}});
         if (this.closed)
             return;
         if (!out.ok) {
-            this._showError(out.error.code, () => this.refresh());
+            this._showError(out.error.code, () => this.refresh(), {afterRestart: true});
+            return;
+        }
+        if (out.result.state === 'disabled') {
+            this._showError('E_SERVICE_TIMEOUT', () => this.refresh());
             return;
         }
         this.refresh();
@@ -550,8 +556,8 @@ export class SyncWizard {
     // ---- errors ---------------------------------------------------------------------------------------------------------
 
     // `retry`: what "Try again" does. An information code is a neutral page: no red, no "Try again".
-    _showError(code, retry) {
-        const view = errorView(code);
+    _showError(code, retry, {afterRestart = false} = {}) {
+        const view = errorView(code, {afterRestart});
         const w = this.w;
         this.retry = retry;
         this.errAction = view.action;

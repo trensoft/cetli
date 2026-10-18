@@ -13,8 +13,8 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const gtkenv = process.env.CETLI_GTKENV ?? '';
 
 const MUTANTS = [
-    {id: 'R1', rule: '(a) the way out is gone from the flow: a sync program that does not answer has no second action', file: 'app/sync-flow.js',
-        find: "const SECONDARY = Object.freeze({\n    E_SERVICE_TIMEOUT: 'reset',\n});", repl: 'const SECONDARY = Object.freeze({});'},
+    {id: 'R1', rule: '(g) the dead end of E_CONFIG_UNSAFE after a restart has no way out: Reset sync is not offered', file: 'app/sync-wizard.js', gjs: true,
+        find: 'this._showError(out.error.code, () => this.refresh(), {afterRestart: true});', repl: 'this._showError(out.error.code, () => this.refresh());'},
     {id: 'R2', rule: '(f) the automatic restart is skipped: a set-up computer whose sync program does not answer waits for a click', file: 'app/sync-wizard.js', gjs: true,
         find: "if (out.error.code === 'E_SERVICE_TIMEOUT' && !this.restartTried) {", repl: 'if (false) {'},
     {id: 'R3', rule: '(b) reset deletes the instance directory instead of moving it', file: 'sync/engine.js',
@@ -27,9 +27,8 @@ const MUTANTS = [
         find: 'if (!folder || folder.path !== dirs.notes || files.isSymlink(dirs.notes))', repl: 'if (false)'},
     {id: 'R7', rule: '(d) restart does not clear the failed state of the unit first', file: 'sync/engine.js',
         find: "            await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});     // nothing to clear is not an error\n", repl: ''},
-    {id: 'R8', rule: '(d) restart does not wait for the daemon', file: 'sync/engine.js',
-        find: "                throw new Fail('E_NO_USER_SYSTEMD');\n            if (!(await daemonAnswers(t.serviceWaitMs)))\n                throw new Fail('E_SERVICE_TIMEOUT');\n        });\n        return {result: {event: 'result', state: 'restarted'}};",
-        repl: "                throw new Fail('E_NO_USER_SYSTEMD');\n        });\n        return {result: {event: 'result', state: 'restarted'}};"},
+    {id: 'R8', rule: '(h) a unit the user switched off (disabled) is started by the automatic try', file: 'sync/engine.js',
+        find: 'if (disabled && !enable) {', repl: 'if (false) {'},
     {id: 'R9', rule: '(e) after a reset the window asks the status instead of going to the ID page by a new set-up', file: 'app/sync-wizard.js', gjs: true,
         find: '        this._setup();\n    }\n', repl: '        this.refresh();\n    }\n'},
     {id: 'R10', rule: 'reset goes on when the unit could not be stopped', file: 'sync/engine.js',

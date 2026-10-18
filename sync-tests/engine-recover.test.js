@@ -37,7 +37,7 @@ test('restart: reset-failed, then restart, then it waits for the daemon; the ord
     assert.ok(t.findIndex(e => e.startsWith('cli show system')) > t.indexOf('systemctl restart'), 'the daemon is asked after the restart');
     assert.ok(w.mono >= 3000, `it waited for the daemon (${w.mono} ms)`);
     assert.ok(w.sleeps > 0);
-    assert.deepEqual(systemctl(w), ['reset-failed', 'restart']);
+    assert.deepEqual(systemctl(w), ['is-enabled', 'reset-failed', 'restart']);
     assert.deepEqual(w.events.map(e => `${e.step}:${e.state}`), ['service:start', 'service:ok']);
     for (const e of w.events)
         emit(e, 'restart');
@@ -50,7 +50,7 @@ test('restart: a daemon that stays silent is E_SERVICE_TIMEOUT after the service
     const r = await perform(w, 'restart');
     assert.deepEqual(r, {error: {code: 'E_SERVICE_TIMEOUT', step: 'service'}});
     assert.ok(w.mono >= 30000, `waited ${w.mono} ms`);
-    assert.deepEqual(systemctl(w), ['reset-failed', 'restart']);
+    assert.deepEqual(systemctl(w), ['is-enabled', 'reset-failed', 'restart']);
 });
 
 test('restart touches no data: no write, no rename, no removal, no change of the file system, no cli write', async () => {
@@ -70,7 +70,7 @@ test('restart: systemctl waits for the stop of the unit, so it gets a long time 
     w.daemon = false;
     await perform(w, 'restart');
     const sc = w.calls.filter(c => c.argv[0] === '/usr/bin/systemctl');
-    assert.equal(sc.length, 2);
+    assert.equal(sc.length, 3);
     for (const c of sc)
         assert.equal(c.opts.timeoutMs, 120000);
 });
@@ -100,6 +100,101 @@ test('restart: no program, no instance, or a config that is not what we wrote: n
     cfg.text = cfg.text.replace(`${w.home}/gui.sock`, '0.0.0.0:8384');
     assert.deepEqual(await perform(w, 'restart'), {error: {code: 'E_CONFIG_UNSAFE', step: 'service'}});
     assert.deepEqual(systemctl(w), []);
+});
+
+// ---- a unit that is not running (John 8844, a real Syncthing 2.1.6): inactive, failed, start limit, disabled ---------------------------------
+
+// A set-up, paired machine whose UNIT is not running: `status` waits and ends on E_SERVICE_TIMEOUT (measured: 5-6 s).
+async function notRunning(kind, opts = {}) {
+    const w = await stuck(opts);
+    w.hung = false;
+    w.daemon = false;
+    w.unitFailed = kind === 'start-limit';
+    w.enabled = kind !== 'disabled';
+    return w;
+}
+
+test('a unit that is not running makes status say E_SERVICE_TIMEOUT, in every one of the four states (the case the window starts from)', async () => {
+    for (const kind of ['inactive', 'failed', 'start-limit', 'disabled']) {
+        const w = await notRunning(kind);
+        assert.deepEqual(await perform(w, 'status'), {error: {code: 'E_SERVICE_TIMEOUT'}}, kind);
+        assert.deepEqual(systemctl(w), [], `${kind}: status starts nothing`);
+    }
+});
+
+for (const [kind, why] of [['inactive', 'the unit was stopped'], ['failed', 'the unit ended in the failed state'], ['start-limit', 'the start limit refuses a start until reset-failed']]) {
+    test(`restart (the automatic try, no flag), unit ${kind} (${why}): is-enabled, reset-failed, restart, then the daemon answers`, async () => {
+        const w = await notRunning(kind, {startDelayMs: 2000});
+        const r = await perform(w, 'restart');
+        assert.deepEqual(r, {result: {event: 'result', state: 'restarted'}}, kind);
+        assert.deepEqual(systemctl(w), ['is-enabled', 'reset-failed', 'restart'], kind);
+        assert.equal(w.daemon, true, `${kind}: the daemon runs`);
+        assert.ok(w.mono >= 2000, `${kind}: it waited for the daemon`);
+        assert.equal((await perform(w, 'status')).result.state, 'paired', `${kind}: and the status is the paired page again`);
+        emit(r.result, 'restart');
+    });
+}
+
+test('restart (the automatic try), unit DISABLED: the user switched it off, so NOTHING is started; only the read-only question runs', async () => {
+    const w = await notRunning('disabled');
+    const before = snap(w);
+    const r = await perform(w, 'restart');
+    assert.deepEqual(r, {result: {event: 'result', state: 'disabled'}});
+    assert.deepEqual(systemctl(w), ['is-enabled'], 'no reset-failed, no restart, no enable');
+    assert.equal(w.daemon, false, 'the daemon does not run');
+    assert.equal(w.enabled, false, 'and the unit is still disabled');
+    assert.equal(w.timeline.some(e => /^systemctl (restart|enable|reset-failed)/.test(e)), false);
+    assert.equal(snap(w), before);
+    assert.equal(w.mono < 30000, true, 'it did not wait for a daemon that was not started');
+    emit(r.result, 'restart');
+});
+
+test('restart --enable (the button), unit DISABLED: the user decides, so reset-failed, enable --now, then the daemon answers', async () => {
+    const w = await notRunning('disabled', {startDelayMs: 2000});
+    const r = await perform(w, 'restart', {enable: true});
+    assert.deepEqual(r, {result: {event: 'result', state: 'restarted'}});
+    assert.deepEqual(systemctl(w), ['is-enabled', 'reset-failed', 'enable --now']);
+    assert.equal(w.enabled, true);
+    assert.equal(w.daemon, true);
+    assert.equal((await perform(w, 'status')).result.state, 'paired');
+    const x = await notRunning('disabled');
+    x.failSystemctl.add('enable --now cetli-syncthing.service');
+    assert.deepEqual(await perform(x, 'restart', {enable: true}), {error: {code: 'E_NO_USER_SYSTEMD', step: 'service'}});
+});
+
+test('restart --enable on a unit that is enabled is the same restart as without the flag (is-enabled, reset-failed, restart)', async () => {
+    for (const kind of ['inactive', 'failed', 'start-limit']) {
+        const w = await notRunning(kind);
+        assert.equal((await perform(w, 'restart', {enable: true})).result.state, 'restarted', kind);
+        assert.deepEqual(systemctl(w), ['is-enabled', 'reset-failed', 'restart'], kind);
+    }
+});
+
+test('restart: only the word "disabled" counts. An is-enabled that fails some other way (no answer, masked, an error) does not stop the restart', async () => {
+    const a = await notRunning('inactive');
+    a.failSystemctl.add('is-enabled cetli-syncthing.service');                     // rc 1, the text "Failed"
+    assert.equal((await perform(a, 'restart')).result.state, 'restarted');
+    assert.deepEqual(systemctl(a), ['is-enabled', 'reset-failed', 'restart']);
+    const b = await notRunning('disabled');
+    b.systemd = false;                                                             // no user service manager at all
+    assert.deepEqual(await perform(b, 'restart'), {error: {code: 'E_NO_USER_SYSTEMD', step: 'service'}});
+});
+
+test('restart: the unit not running, then silent after the start: E_SERVICE_TIMEOUT again (the buttons stay), the automatic try does not loop in the engine', async () => {
+    const w = await notRunning('inactive');
+    w.startDelayMs = 40000;                                        // set after the set-up: the start is slower than the service wait
+    assert.deepEqual(await perform(w, 'restart'), {error: {code: 'E_SERVICE_TIMEOUT', step: 'service'}});
+    assert.deepEqual(systemctl(w), ['is-enabled', 'reset-failed', 'restart'], 'one pass, no second restart inside');
+});
+
+test('restart: a config that is not what we wrote is E_CONFIG_UNSAFE before ANY systemctl call, the automatic try and the button alike', async () => {
+    for (const arg of [undefined, {enable: true}]) {
+        const w = await notRunning('disabled');
+        const cfg = w.fsMap.get(`${w.home}/config.xml`);
+        cfg.text = cfg.text.replace(`${w.home}/gui.sock`, '0.0.0.0:8384');
+        assert.deepEqual(await perform(w, 'restart', arg), {error: {code: 'E_CONFIG_UNSAFE', step: 'service'}});
+        assert.deepEqual(systemctl(w), []);
+    }
 });
 
 // ---- reset --------------------------------------------------------------------------------------------------------------------
@@ -180,6 +275,34 @@ test('reset: a marker is taken away only when it is provably ours and holds noth
     // after such a reset the guard of `setup` says what it always said
     const w = await keepsMarker(w2 => w2.put(`${w2.notes}/.stfolder/notes.txt`, 'x'), 'setup after');
     assert.deepEqual(await perform(w, 'setup'), {error: {code: 'E_STFOLDER_EXISTS'}});
+});
+
+test('reset: the boundary of the marker rule: wrong names, a link, a subdirectory, two files', async () => {
+    const stays = async (prepare, label) => {
+        const w = await stuck();
+        prepare(w);
+        const marker = `${w.notes}/.stfolder`;
+        assert.equal((await perform(w, 'reset')).result.state, 'not-set-up', label);
+        assert.equal(w.fsMap.has(marker), true, `${label}: the marker stays`);
+        assert.equal(w.timeline.some(e => e.startsWith('remove ') || e.startsWith('rmdir ')), false, `${label}: nothing removed`);
+    };
+    await stays(w => w.put(`${w.notes}/.stfolder/Syncthing-Folder-abc.txt`, 'x'), 'a name in capitals');
+    await stays(w => w.put(`${w.notes}/.stfolder/syncthing-folder-.txt`, 'x'), 'no letters or digits between the dashes and the dot');
+    await stays(w => w.put(`${w.notes}/.stfolder/syncthing-folder-${'a'.repeat(33)}.txt`, 'x'), 'a name longer than the pattern allows');
+    await stays(w => w.put(`${w.notes}/.stfolder/syncthing-folder-ab-cd.txt`, 'x'), 'a dash inside the id part');
+    await stays(w => { w.put(`${w.notes}/.stfolder/syncthing-folder-abc.txt`, 'x'); w.fsMap.get(`${w.notes}/.stfolder/syncthing-folder-abc.txt`).link = true; }, 'the hint file is a link');
+    await stays(w => { w.mkdir(`${w.notes}/.stfolder/sub`); w.put(`${w.notes}/.stfolder/sub/syncthing-folder-abc.txt`, 'x'); }, 'a subdirectory with a hint file inside');
+    await stays(w => { w.put(`${w.notes}/.stfolder/syncthing-folder-abc.txt`, 'x'); w.put(`${w.notes}/.stfolder/other.txt`, 'x'); }, 'one good file and one wrong one');
+    await stays(w => { w.put(`${w.notes}/.stfolder/syncthing-folder-abc.txt`, 'x'); w.mkdir(`${w.notes}/.stfolder/syncthing-folder-def.txt`); }, 'one good file and a directory of the same pattern');
+    // the good cases: empty, one file, two files of the pattern
+    for (const names of [[], ['syncthing-folder-abc123.txt'], ['syncthing-folder-abc123.txt', 'syncthing-folder-k3x9a2.txt']]) {
+        const w = await stuck();
+        for (const n of names)
+            w.put(`${w.notes}/.stfolder/${n}`, '# marker');
+        assert.equal((await perform(w, 'reset')).result.state, 'not-set-up', names.join());
+        assert.equal(w.fsMap.has(`${w.notes}/.stfolder`), false, `${names.length} hint file(s): the marker goes`);
+        assert.deepEqual(w.timeline.filter(e => /^(remove|rmdir)/.test(e)).length, names.length + 1);
+    }
 });
 
 test('reset: a marker that never was ours (no instance of ours) is not touched either', async () => {

@@ -87,7 +87,7 @@ const RESULT_SCHEMAS = {
     host: r => isPeer(r.peer) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
     join: r => isPeer(r.peer) && isCanonicalId(r.own_id) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
     forget: r => r.state === 'set-up',
-    restart: r => r.state === 'restarted',
+    restart: r => r.state === 'restarted' || r.state === 'disabled',
     reset: r => r.state === 'not-set-up',
 };
 const RESULT_KEYS = {
@@ -288,12 +288,14 @@ export function checkRun(verb, lines, rc) {
 export function argvFor(verb, flags = {}) {
     if (!VERBS.includes(verb))
         throw new ProtocolError('unknown verb');
-    const known = verb === 'forget' ? ['stop'] : [];
+    const known = verb === 'forget' ? ['stop'] : verb === 'restart' ? ['enable'] : [];
     for (const k of Object.keys(flags)) {
         if (!known.includes(k))
             throw new ProtocolError('unknown flag');
     }
-    return verb === 'forget' && flags.stop === true ? [verb, '--stop'] : [verb];
+    if (verb === 'forget' && flags.stop === true)
+        return [verb, '--stop'];
+    return verb === 'restart' && flags.enable === true ? [verb, '--enable'] : [verb];
 }
 
 // `join` reads ONE line: the typed ID, as typed. The window does not canonicalise; it only refuses what cannot be one line.

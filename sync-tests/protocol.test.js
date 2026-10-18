@@ -250,6 +250,10 @@ test('argv and stdin: the verb list is closed, the only flag is forget --stop, a
         assert.deepEqual(argvFor(v), [v]);
     assert.deepEqual(argvFor('forget', {stop: true}), ['forget', '--stop']);
     assert.deepEqual(argvFor('forget', {stop: false}), ['forget']);
+    assert.deepEqual(argvFor('restart', {enable: true}), ['restart', '--enable']);
+    assert.deepEqual(argvFor('restart', {enable: false}), ['restart']);
+    assert.throws(() => argvFor('restart', {stop: true}));
+    assert.throws(() => argvFor('forget', {enable: true}));
     assert.throws(() => argvFor('connect'));
     assert.throws(() => argvFor('host', {stop: true}));
     assert.throws(() => argvFor('forget', {name: 'x'}));
