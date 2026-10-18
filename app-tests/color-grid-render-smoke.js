@@ -67,6 +67,8 @@ async function drawn(widget) {
         }
         await sleep(200);
     }
+    // no frame after 10 s: say so in the log (a failed check); the picture that follows is then expected to fail with the null root
+    check(false, `${widget.constructor.name} (${widget.get_width()}x${widget.get_height()}) has no frame after 10 s: its snapshot is empty`);
 }
 
 // The popover (with its background) drawn to a PNG and read back: at(x, y) -> [r, g, b] in the coordinates of the popover.

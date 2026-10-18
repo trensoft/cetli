@@ -274,6 +274,41 @@ test('ten samples taken faster than the pause are not ten seconds: the time rule
     assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
 });
 
+// The edge of the rule, from both sides: `connections` answers true for exactly `n` samples (counted calls, 7000 ms on), then false.
+async function runWithConnectedSamples(n, {pause} = {}) {
+    const w = await ready();
+    knock(w, 3000);
+    accept(w, 7000);
+    let reads = 0;
+    w.connections.set(PEER, ms => ms >= 7000 && reads++ < n);
+    const base = w.ports();
+    const ports = pause === undefined ? base : {...base, sleep: ms => base.sleep(ms === TIMING.linkGapMs ? pause : ms)};
+    const r = await createEngine(ports).perform('host');
+    return {w, r, reads};
+}
+
+test('the edge of the count: exactly nine unbroken connected samples are not stable, exactly ten are (mutant: threshold - 1)', async () => {
+    const nine = await runWithConnectedSamples(9);
+    assert.equal(nine.r.result, undefined, 'nine samples, eight seconds, then a drop: no result');
+    assert.equal(nine.r.error.code, 'E_PEER_TIMEOUT');
+    assert.equal(nine.w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
+    const ten = await runWithConnectedSamples(10);
+    assert.equal(ten.r.result.link, 'stable');
+    assert.equal(ten.r.result.connected_s, 9);
+    assert.equal(ten.w.events.filter(e => e.event === 'link' && e.state === 'stable').length, 1);
+});
+
+test('the edge of the time: ten samples spanning 8.9 s are not stable yet, the same pace reaches it on the eleventh; 9.0 s is the tenth', async () => {
+    const slow = await runWithConnectedSamples(100, {pause: TIMING.linkGapMs});
+    assert.equal(slow.r.result.link, 'stable');
+    assert.equal(slow.r.result.connected_s, 9);
+    assert.equal(slow.reads, 10, 'nine pauses of exactly the gap: ten samples span exactly nine gaps, which is enough');
+    const quick = await runWithConnectedSamples(100, {pause: TIMING.linkGapMs - 11});          // nine pauses of 989 ms: 8.901 s
+    assert.equal(quick.r.result.link, 'stable');
+    assert.equal(quick.r.result.connected_s, 9);
+    assert.equal(quick.reads, 11, 'ten samples over 8.9 s are not yet nine gaps long; the eleventh is');
+});
+
 test('there is no E_NOT_UP_TO_DATE and no "sync" step any more: a stable link is the result', async () => {
     const w = await ready();
     knock(w, 3000);
