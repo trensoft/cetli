@@ -67,9 +67,10 @@ test('grid: the order of the grid recolours no stored value (a value keeps its c
     assert.equal(cssClassOf('#3f3d3c'), 'cetli-x-3f3d3c');
 });
 
-test('red: the bold text is a style of the exact #ee0000 only (not a mark, no other colour)', () => {
+test('red: the bold text is a style of the exact #ee0000 only (not a mark, no other colour); this checks the RULE, the drawn weight is measured by red-render-smoke.js', () => {
     const red = customColorStyle('#ee0000').css;
-    assert.match(red, /window\.cetli-x-ee0000 textview\.cetli-text text \{ font-weight: 700; \}/);
+    assert.match(red, /window\.cetli-x-ee0000 textview\.cetli-text \{ font-weight: 700; \}/, 'on the textview node');
+    assert.doesNotMatch(red, /textview\.cetli-text text \{ font-weight/, 'not on the text subnode (GTK 4.8 does not draw it; red-render-smoke.js measures the drawn weight)');
     for (const other of ['#ed0000', '#ef0000', '#ff0000', '#ee0001', '#3f3d3c', '#ffffff'])
         assert.doesNotMatch(customColorStyle(other).css, /font-weight/, `${other} has no bold style`);
     assert.doesNotMatch(buildCss(), /text \{ font-weight: 700/, 'the named colours have no bold style');

@@ -130,7 +130,8 @@ export function cssClassOf(color) {
 
 // The CSS of ONE custom colour, for a Gtk.CssProvider added when a window shows that colour: null if `s` is not a valid
 // custom colour, else {cls, css}. Same fill in the light and the dark theme (the user chose it), the text black/white by
-// contrast. The red (NOTE_RHEL_RED) has bold text by style: a look of the colour, nothing is stored (not a mark). Everything in the
+// contrast. The red (NOTE_RHEL_RED) has bold text by style: a look of the colour, nothing is stored (not a mark). The rule is on the
+// `textview` node: GTK 4.8 takes the font of a text view from that node, a rule on its `text` subnode is not drawn. Everything in the
 // string comes from three integers.
 export function customColorStyle(s) {
     const rgb = parseCustomColor(s);
@@ -143,7 +144,7 @@ export function customColorStyle(s) {
         `window.${cls} headerbar.cetli-header, window.cetli-dark.${cls} headerbar.cetli-header { background-color: ${strip}; color: ${stripText}; }`,
     ];
     if (fill === NOTE_RHEL_RED)
-        rules.push(`window.${cls} textview.cetli-text text { font-weight: 700; }`);
+        rules.push(`window.${cls} textview.cetli-text { font-weight: 700; }`);
     const css = rules.join('\n');
     return {cls, css: `${css}\n`};
 }
