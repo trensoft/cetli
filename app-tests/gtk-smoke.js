@@ -6,7 +6,7 @@ import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import {createApp} from '../app/application.js';
-import {buildCss} from '../app/data.js';
+import {NOTE_RHEL_RED, buildCss, cssClassOf} from '../app/data.js';
 import * as S from '../app/strings.js';
 import {CAUSE} from '../src/constants.js';
 import {NOTE_COLOR_IDS} from '../src/colors.js';
@@ -83,9 +83,13 @@ async function scenario() {
     check(w.win.get_title() === `cetli-${id}`, `window title is cetli-<uuid> (${w.win.get_title()})`);
     check(w.win.get_visible(), 'window is shown');
     check(noteFiles().length === 1, 'the new note is a file');
-    // the core picks the base colour of a new note (src/colors.js): any of the 8 menu colours, its class on the window, no other
-    check(NOTE_COLOR_IDS.includes(fileRec(id).color) && w.win.has_css_class(`cetli-${fileRec(id).color}`) &&
-        NOTE_COLOR_IDS.filter(c => w.win.has_css_class(`cetli-${c}`)).length === 1, 'default colour class');
+    // a new note is red (0.2.4): the exact #ee0000 in the file, the class of that colour on the window and no class of a name colour;
+    // the "Important" title is shown for this colour only, and the text is bold by style (nothing in the file but the colour)
+    check(fileRec(id).color === NOTE_RHEL_RED && w.win.has_css_class('cetli-x-ee0000') && !NOTE_COLOR_IDS.some(c => w.win.has_css_class(`cetli-${c}`)),
+        `default colour: the red (${fileRec(id).color})`);
+    check(w.titleLabel.get_label() === S.importantTitle() && w.titleLabel.get_mapped() && S.importantTitle() !== '',
+        `the red note has the title "${w.titleLabel.get_label()}" in its header`);
+    check(fileRec(id).extra === undefined || fileRec(id).extra.marks === undefined, 'the bold of the red is a style: no marks in the file');
 
     // editing and coalesced save
     w.buffer.insert_at_cursor('héllo 🎉', -1);
@@ -99,7 +103,14 @@ async function scenario() {
     const pickedColor = NOTE_COLOR_IDS.find(c => c !== startColor);
     w.setColor(pickedColor);
     await sleep(500);
-    check(fileRec(id).color === pickedColor && w.win.has_css_class(`cetli-${pickedColor}`) && !w.win.has_css_class(`cetli-${startColor}`), 'colour change saved and class swapped');
+    check(fileRec(id).color === pickedColor && w.win.has_css_class(`cetli-${pickedColor}`) && !w.win.has_css_class(cssClassOf(startColor)), 'colour change saved and class swapped');
+    check(w.titleLabel.get_label() === '', 'a colour other than the exact red has no title');
+    w.setColor('#ed0000');
+    check(w.titleLabel.get_label() === '', 'a near red (#ed0000) has no title either');
+    w.setColor(NOTE_RHEL_RED);
+    check(w.titleLabel.get_label() === S.importantTitle(), 'back to the exact red: the title is there again');
+    w.setColor(pickedColor);
+    await sleep(500);
 
     // remote version, window clean and quiet: text replaced, cursor after the change shifts
     await sleep(2200);
@@ -200,7 +211,7 @@ async function scenario() {
     check(w3.color === startColor3 && !w3.win.has_css_class(`cetli-${remoteColor}`), 'and its colour');
     await sleep(1700);
     check(w3._bufferText() === 'abcd REMOTE' && w3.mark === null, 'after 2 s without a key the remote text is taken, the mark goes');
-    check(w3.color === remoteColor && w3.win.has_css_class(`cetli-${remoteColor}`) && !w3.win.has_css_class(`cetli-${startColor3}`), 'the colour of the remote version is applied');
+    check(w3.color === remoteColor && w3.win.has_css_class(`cetli-${remoteColor}`) && !w3.win.has_css_class(cssClassOf(startColor3)), 'the colour of the remote version is applied');
 
     // a cursor exactly at the start of the changed region stays before the new text
     w3.buffer.place_cursor(w3.buffer.get_iter_at_offset(4));

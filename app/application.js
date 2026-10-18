@@ -11,7 +11,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import {createStore, createWatcher} from '../src/index.js';
 import * as gio from '../src/gio-layer.js';
 import {
-    APP_ID, APP_NAME, COPYRIGHT, DEFAULT_COLOR, DEFAULT_HEIGHT, DEFAULT_WIDTH, DEVELOPER, ISSUE_URL, MAX_SIZE, MIN_SIZE, WEBSITE,
+    APP_ID, APP_NAME, COPYRIGHT, DEFAULT_COLOR, DEFAULT_HEIGHT, DEFAULT_WIDTH, DEVELOPER, ISSUE_URL, MAX_SIZE, MIN_SIZE, NOTE_RHEL_RED, WEBSITE,
     buildCss,
 } from './data.js';
 import {AllNotesWindow} from './allnotes.js';
@@ -129,7 +129,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     }
 
     async function newNote(from) {
-        const res = await store.createNote({text: ''});               // the core picks the base colour (src/colors.js)
+        const res = await store.createNote({text: '', color: NOTE_RHEL_RED});   // a new note is red (0.2.4); the core's random pick (src/colors.js) is not used here
         if (!res.ok) {
             from?._setMark('refused', S.markNotSaved(res.cause.code));
             return null;

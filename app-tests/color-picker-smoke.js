@@ -7,7 +7,7 @@ import GLib from 'gi://GLib';
 import Gdk from 'gi://Gdk?version=4.0';
 import Gtk from 'gi://Gtk?version=4.0';
 
-import {GRID_COLORS, NOTE_BLACK, isCustomColor, parseCustomColor} from '../app/data.js';
+import {GRID_COLORS, NOTE_BLACK, NOTE_RHEL_RED, isCustomColor, parseCustomColor} from '../app/data.js';
 import {createApp} from '../app/application.js';
 import * as S from '../app/strings.js';
 
@@ -42,9 +42,8 @@ async function scenario() {
     const dialogButton = typeof Gtk.ColorDialogButton === 'function' && typeof Gtk.ColorDialog === 'function';
     print(`GTK ${Gtk.get_major_version()}.${Gtk.get_minor_version()}: picker is ${dialogButton ? 'Gtk.ColorDialogButton' : 'Gtk.ColorButton (fallback)'}`);
     check(w.customPicker instanceof (dialogButton ? Gtk.ColorDialogButton : Gtk.ColorButton), 'the picker is the one this GTK has');
-    check(w.win.has_css_class(`cetli-${w.color}`), `a new note starts on a palette colour (${w.color}, picked by the core)`);
+    check(w.color === NOTE_RHEL_RED && w.win.has_css_class('cetli-x-ee0000') && fileRec(id).color === NOTE_RHEL_RED, `a new note starts red (${w.color}, the app's choice since 0.2.4)`);
 
-    const first = w.color;
     // The user chooses a colour: set it, then the signal that the widget gives for a choice by the user.
     const choose = c => {
         w.customPicker.set_rgba(c);
@@ -55,7 +54,7 @@ async function scenario() {
     await waitFor(() => fileRec(id).color === '#336699');
     check(w.color === '#336699', `chosen colour is #rrggbb in lower case (${w.color})`);
     check(fileRec(id).color === '#336699', 'and is saved in the note file through the normal save path');
-    check(w.win.has_css_class('cetli-x-336699') && !w.win.has_css_class(`cetli-${first}`), 'the window has the custom class, the old one is gone');
+    check(w.win.has_css_class('cetli-x-336699') && !w.win.has_css_class('cetli-x-ee0000'), 'the window has the custom class, the old one is gone');
     const rev = fileRec(id).rev;
 
     choose(rgba(0xaa, 0xbb, 0xcc));

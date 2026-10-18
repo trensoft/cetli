@@ -67,6 +67,11 @@ msgstr ""
 msgid "Note text"
 msgstr ""
 
+#. Translators: the title in the header of a red note, meaning "this note matters" (not "urgent", not "a famous person").
+#: app/strings.js
+msgid "Important"
+msgstr ""
+
 #: app/strings.js
 msgid "Yellow"
 msgstr ""

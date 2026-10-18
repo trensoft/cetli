@@ -35,9 +35,10 @@ export const KNOWN_COLORS = Object.freeze([...COLORS, ...LEGACY_COLORS]);
 export const NOTE_BLACK = '#3f3d3c';
 export const NOTE_WHITE = '#ffffff';
 export const NOTE_RHEL_RED = '#ee0000';
-// The colour grid (0.2.2), 9 values in this order: the first six are names (a note file keeps the NAME, no migration), the last
-// three are custom `#rrggbb` (black, white, red). A new NAME is forbidden: an old client would show it as yellow.
-export const GRID_COLORS = Object.freeze(['yellow', 'pink', 'green', 'purple', 'blue', 'gray', NOTE_BLACK, NOTE_WHITE, NOTE_RHEL_RED]);
+// The colour grid, 9 values in this order: the red first (0.2.4), then six names (a note file keeps the NAME, no migration), then
+// black and white; the red, the black and the white are custom `#rrggbb`. A new NAME is forbidden: an old client would show it as
+// yellow. The order lives only here: a note file keeps the colour VALUE, never the place in the grid.
+export const GRID_COLORS = Object.freeze([NOTE_RHEL_RED, 'yellow', 'pink', 'green', 'purple', 'blue', 'gray', NOTE_BLACK, NOTE_WHITE]);
 
 export const TEXT_LIGHT = '#2b2b2b';
 export const TEXT_DARK = '#f2f2f2';
@@ -129,17 +130,21 @@ export function cssClassOf(color) {
 
 // The CSS of ONE custom colour, for a Gtk.CssProvider added when a window shows that colour: null if `s` is not a valid
 // custom colour, else {cls, css}. Same fill in the light and the dark theme (the user chose it), the text black/white by
-// contrast. Everything in the string comes from three integers.
+// contrast. The red (NOTE_RHEL_RED) has bold text by style: a look of the colour, nothing is stored (not a mark). Everything in the
+// string comes from three integers.
 export function customColorStyle(s) {
     const rgb = parseCustomColor(s);
     if (!rgb)
         return null;
     const cls = cssClassOf(s);
     const fill = hexOf(rgb), strip = hexOf(darker(rgb)), text = textColorFor(rgb), stripText = textColorFor(darker(rgb));
-    const css = [
+    const rules = [
         `window.${cls}, window.cetli-dark.${cls} { background-color: ${fill}; color: ${text}; }`,
         `window.${cls} headerbar.cetli-header, window.cetli-dark.${cls} headerbar.cetli-header { background-color: ${strip}; color: ${stripText}; }`,
-    ].join('\n');
+    ];
+    if (fill === NOTE_RHEL_RED)
+        rules.push(`window.${cls} textview.cetli-text text { font-weight: 700; }`);
+    const css = rules.join('\n');
     return {cls, css: `${css}\n`};
 }
 
@@ -158,6 +163,8 @@ export function buildCss() {
         'window.cetli-note { border-radius: 6px; }',
         'window.cetli-note headerbar.cetli-header { min-height: 28px; box-shadow: none; border-radius: 6px 6px 0 0; }',
         'window.cetli-note textview.cetli-text, window.cetli-note textview.cetli-text text { background: transparent; color: inherit; }',
+        // the title of the red note ("Important", shown by the window, not stored): bold and larger than the text, in the colour of the strip
+        'window.cetli-note headerbar.cetli-header label.cetli-title { font-weight: 700; font-size: larger; }',
         'window.cetli-note label.cetli-mark { font-size: smaller; padding: 2px 8px; }',
         'window.cetli-note label.cetli-unresolved { font-size: smaller; }',
         // the "All notes" list: a row is the note in miniature (same fills and texts as the windows)

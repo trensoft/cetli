@@ -8,7 +8,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {SAVE_COALESCE_MS} from '../src/constants.js';
-import {COLORS, GRID_COLORS, PALETTE, REMOTE_QUIET_MS, WINDOW_TITLE_PREFIX, cssClassOf, customColorStyle, isCustomColor, parseCustomColor, textColorFor} from './data.js';
+import {COLORS, GRID_COLORS, NOTE_RHEL_RED, PALETTE, REMOTE_QUIET_MS, WINDOW_TITLE_PREFIX, cssClassOf, customColorStyle, isCustomColor, parseCustomColor, textColorFor} from './data.js';
 import {changedRegion} from './textdiff.js';
 import {FORMAT_ACTIONS, FormatBar, marksExtra, rangesOfRecord, sameRanges} from './format-bar.js';
 import * as S from './strings.js';
@@ -142,7 +142,15 @@ export class NoteWindow {
         this._buildHeader();
         this._buildBody(record.text);
         this._addActions();
-        this._applyColorClass();
+        // The colour class goes on the window at the first map, not here: a text view that is given its colour while the window is
+        // built shows black text for a custom colour (the red, #3f3d3c, #336699 ...) when the note starts from its file (measured,
+        // GTK 4.8.3, 0.2.3: the computed `color` of the view was right, the drawn text was black). A change after the text view has
+        // been shown (a click on a circle) was always drawn right. The rest of the colour (title, picker, grid) is set now.
+        this._applyColorClass(false);
+        const mapId = this.win.connect('map', () => {
+            this.win.disconnect(mapId);
+            this._applyColorClass();
+        });
         this.setDark(ctl.dark());
         this.win.connect('close-request', () => this._onCloseRequest());
     }
@@ -157,7 +165,10 @@ export class NoteWindow {
     _buildHeader() {
         const header = new Gtk.HeaderBar();
         header.add_css_class('cetli-header');
-        header.set_title_widget(new Gtk.Label({label: ''}));    // the title is the contract name, not for the eye
+        // The window title is the contract name, not for the eye; this label is the title of the red note (_applyColorClass).
+        this.titleLabel = new Gtk.Label({label: ''});
+        this.titleLabel.add_css_class('cetli-title');
+        header.set_title_widget(this.titleLabel);
         this.unresolved = new Gtk.Label({visible: false});
         this.unresolved.add_css_class('cetli-unresolved');
         // New note: a + in the header (not in the menu); Ctrl+N is the accelerator of the same action.
@@ -318,16 +329,21 @@ export class NoteWindow {
 
     // ---- look ------------------------------------------------------------------------------------------------
 
-    _applyColorClass() {
-        if (this.colorClass)
-            this.win.remove_css_class(this.colorClass);
-        ensureCustomStyle(this.color);
-        this.colorClass = cssClassOf(this.color);
-        this.win.add_css_class(this.colorClass);
-        if (isCustomColor(this.color))
-            this.win.add_css_class('cetli-fixed');
-        else
-            this.win.remove_css_class('cetli-fixed');
+    // `classToo` false: everything but the CSS class of the colour (the constructor, see there).
+    _applyColorClass(classToo = true) {
+        if (classToo) {
+            if (this.colorClass)
+                this.win.remove_css_class(this.colorClass);
+            ensureCustomStyle(this.color);
+            this.colorClass = cssClassOf(this.color);
+            this.win.add_css_class(this.colorClass);
+            if (isCustomColor(this.color))
+                this.win.add_css_class('cetli-fixed');
+            else
+                this.win.remove_css_class('cetli-fixed');
+        }
+        // "Important" in the header of a red note only (the exact red); a look of the colour, not stored in the note
+        this.titleLabel.set_label(this.color === NOTE_RHEL_RED ? S.importantTitle() : '');
         this._syncPicker();
         this._syncGrid();
     }

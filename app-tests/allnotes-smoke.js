@@ -7,7 +7,7 @@ import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import {createApp} from '../app/application.js';
-import {COLORS} from '../app/data.js';
+import {COLORS, NOTE_RHEL_RED, cssClassOf} from '../app/data.js';
 import {AllNotesWindow, CARD_CSS} from '../app/allnotes.js';
 import {PREVIEW_LINES, PREVIEW_LINE_CHARS} from '../app/preview.js';
 import * as S from '../app/strings.js';
@@ -104,9 +104,9 @@ async function scenario() {
     check(rowLabel(idA) === S.emptyNotePreview(), `an empty note shows the placeholder (${rowLabel(idA)})`);
     wA.buffer.set_text('first line\n\n  second line  \nthird\nfourth', -1);
     check(await waitFor(() => rowLabel(idA) === 'first line\nsecond line\nthird'), `the row follows the typing: ${JSON.stringify(rowLabel(idA))}`);
-    const cls = c => list.rows.get(idA).row.has_css_class(`cetli-${c}`);
-    const colorOfA = COLORS.find(c => cls(c));
-    check(colorOfA === wA.color && COLORS.filter(c => cls(c)).length === 1, `the row carries the colour class of its note, one only (${colorOfA})`);
+    const cls = c => list.rows.get(idA).row.has_css_class(cssClassOf(c));
+    const colorOfA = [...COLORS, NOTE_RHEL_RED].find(c => cls(c));
+    check(colorOfA === wA.color && colorOfA === NOTE_RHEL_RED && [...COLORS, NOTE_RHEL_RED].filter(c => cls(c)).length === 1, `the row carries the colour class of its note (a new note is red), one only (${colorOfA})`);
     const other = COLORS.find(c => c !== wA.color);
     wA.setColor(other);
     check(await waitFor(() => cls(other) && !cls(colorOfA)), 'a colour change moves the class of the row');

@@ -48,13 +48,31 @@ test('palette: the menu names are yellow, pink, green, purple, blue, gray; orang
         assert.equal(cssClassOf(name), `cetli-${name}`, `${name} stays a known value (an old note must not turn yellow)`);
 });
 
-test('grid: GRID_COLORS are these 9 values in this order: six names, then black, white and red as custom #rrggbb', () => {
-    assert.deepEqual([...GRID_COLORS], ['yellow', 'pink', 'green', 'purple', 'blue', 'gray', '#3f3d3c', '#ffffff', '#ee0000']);
+test('grid: GRID_COLORS are these 9 values in this order: the red first, six names, then black and white', () => {
+    assert.deepEqual([...GRID_COLORS], ['#ee0000', 'yellow', 'pink', 'green', 'purple', 'blue', 'gray', '#3f3d3c', '#ffffff']);
     assert.ok(Object.isFrozen(GRID_COLORS));
-    assert.deepEqual(GRID_COLORS.slice(0, 6), [...COLORS]);
-    for (const c of GRID_COLORS.slice(6))
+    assert.deepEqual(GRID_COLORS.slice(1, 7), [...COLORS]);
+    for (const c of [GRID_COLORS[0], ...GRID_COLORS.slice(7)])
         assert.equal(isCustomColor(c), true, `${c}: no new NAME (an old client would show it as yellow)`);
     assert.equal(new Set(GRID_COLORS).size, 9);
+});
+
+// The grid order is code only: a note file keeps the colour VALUE. Moving the red to the first place must not recolour a note
+// that was saved before (the hard limit of 0.2.4): every value a 0.2.3 grid could store still maps to the same CSS class.
+test('grid: the order of the grid recolours no stored value (a value keeps its class, the red is still the exact #ee0000)', () => {
+    for (const stored of ['yellow', 'pink', 'green', 'purple', 'blue', 'gray', '#3f3d3c', '#ffffff', '#ee0000'])
+        assert.ok(GRID_COLORS.includes(stored), `${stored} is still a grid value`);
+    assert.equal(cssClassOf('#ee0000'), 'cetli-x-ee0000');
+    assert.equal(cssClassOf('yellow'), 'cetli-yellow');
+    assert.equal(cssClassOf('#3f3d3c'), 'cetli-x-3f3d3c');
+});
+
+test('red: the bold text is a style of the exact #ee0000 only (not a mark, no other colour)', () => {
+    const red = customColorStyle('#ee0000').css;
+    assert.match(red, /window\.cetli-x-ee0000 textview\.cetli-text text \{ font-weight: 700; \}/);
+    for (const other of ['#ed0000', '#ef0000', '#ff0000', '#ee0001', '#3f3d3c', '#ffffff'])
+        assert.doesNotMatch(customColorStyle(other).css, /font-weight/, `${other} has no bold style`);
+    assert.doesNotMatch(buildCss(), /text \{ font-weight: 700/, 'the named colours have no bold style');
 });
 
 // The menu (app/window.js, strings.js) imports these three names: a missing export would stop the module from loading.
@@ -62,7 +80,7 @@ test('grid: NOTE_BLACK, NOTE_WHITE and NOTE_RHEL_RED are exported, one line each
     for (const name of ['NOTE_BLACK', 'NOTE_WHITE', 'NOTE_RHEL_RED'])
         assert.equal(typeof data[name], 'string', `${name} missing from app/data.js`);
     assert.deepEqual([NOTE_BLACK, NOTE_WHITE, NOTE_RHEL_RED], ['#3f3d3c', '#ffffff', '#ee0000']);
-    assert.deepEqual([...GRID_COLORS.slice(6)], [NOTE_BLACK, NOTE_WHITE, NOTE_RHEL_RED]);
+    assert.deepEqual([GRID_COLORS[0], ...GRID_COLORS.slice(7)], [NOTE_RHEL_RED, NOTE_BLACK, NOTE_WHITE]);
     // the black is the Sticky Notes charcoal header: white text 10.80:1
     assert.ok(contrast(NOTE_BLACK, '#ffffff') >= 10.8 && contrast(NOTE_BLACK, '#ffffff') < 10.9, `${contrast(NOTE_BLACK, '#ffffff')}`);
 });

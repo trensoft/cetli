@@ -19,6 +19,8 @@ export const allNotesTitle = () => _('All notes');
 export const emptyNotePreview = () => _('(empty note)');
 export const menuTooltip = () => _('Main menu');
 export const textViewLabel = () => _('Note text');
+// Translators: the title in the header of a red note, meaning "this note matters" (not "urgent", not "a famous person").
+export const importantTitle = () => _('Important');
 
 export function colorName(color) {
     switch (color) {
