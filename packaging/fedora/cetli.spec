@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.2
+Version:        0.2.3
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -122,6 +122,12 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.3-1
+- No change to the application: the app/ code is identical to 0.2.2
+- Tests only: the All notes bulk smoke test now uses 50 notes (not 1000 files) with stricter limits (build 250 ms, refresh 10 ms) and exits after its result instead of hanging
+- Tests only: run.sh stops the bulk smoke test after 120 s, so a hang counts as a failure instead of an endless wait
+- Tests only: the formatting bar render smoke test waits for the frame clock instead of a fixed sleep (15 s cap)
+
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.2-1
 - Menu rearranged: a "+" button for a new note in the header bar (Ctrl+N); the main menu holds the colour grid on top, then All notes (Ctrl+H), Delete note and About
 - Colour grid with round swatches: yellow, pink, green, purple, blue, gray, charcoal (#3f3d3c), white and RHEL red (#ee0000), and a last circle for a custom #rrggbb colour; orange, mint and peach are no longer offered, notes that have them keep them

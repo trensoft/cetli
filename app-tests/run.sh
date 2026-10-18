@@ -13,12 +13,15 @@ if [ -z "${CETLI_GTKENV:-}" ]; then
     exit $rc
 fi
 . "$CETLI_GTKENV/gjsenv.sh"
-# CETLI_BULK=1 adds the 1000-note test (slow: it starts the program with 1000 files in the folder).
+# CETLI_BULK=1 adds the 50-note list test (it starts the program with 50 files in the folder).
 smokes="gtk-smoke.js allnotes-smoke.js preview-marks-smoke.js marks-gjs-smoke.js color-picker-smoke.js color-render-smoke.js color-grid-render-smoke.js format-bar-smoke.js format-bar-render-smoke.js"
 [ "${CETLI_BULK:-}" = 1 ] && smokes="$smokes allnotes-bulk-smoke.js"
 for smoke in $smokes; do
     echo "== $smoke"
-    out="$("$CETLI_GTKENV/headless.sh" 1920x1080 -- gjs -m "$here/app-tests/$smoke" 2>&1)"
+    # the bulk test is run under a ceiling: a run that prints its result and then does not end is a failure (rc 124), not a wait
+    limit=()
+    [ "$smoke" = allnotes-bulk-smoke.js ] && limit=(timeout 120)
+    out="$("${limit[@]+"${limit[@]}"}" "$CETLI_GTKENV/headless.sh" 1920x1080 -- gjs -m "$here/app-tests/$smoke" 2>&1)"
     st=$?
     printf '%s\n' "$out" | grep -E '^(ok|FAIL|info) |checks passed|RESULT' || true
     [ "$st" -eq 0 ] || rc=1

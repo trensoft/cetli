@@ -25,7 +25,31 @@ const check = (cond, label) => {
         print(`FAIL ${label}`);
     }
 };
-const sleep = ms => new Promise(r => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => { r(); return GLib.SOURCE_REMOVE; }));
+// Wait until the FRAME CLOCK of the widget has advanced `ms`: the theme animates a button's tone and a colour change for 200 ms in
+// frame-clock time, and a headless compositor under load delivers frames late, so a wall-clock sleep can end before the style of the
+// new state was applied and before the animation ran. A wall-clock cap keeps a stalled clock from hanging the test; when the cap
+// is what ends the wait, an `info` line says so (the check after it may then fail on a half-drawn state).
+const settle = (widget, ms) => new Promise(res => {
+    let t0 = null, done = false, cap = 0;
+    widget.add_tick_callback((_w, clock) => {
+        if (done)
+            return GLib.SOURCE_REMOVE;
+        const t = clock.get_frame_time();
+        t0 ??= t;
+        if (t - t0 < ms * 1000)
+            return GLib.SOURCE_CONTINUE;
+        done = true;
+        GLib.source_remove(cap);
+        res();
+        return GLib.SOURCE_REMOVE;
+    });
+    cap = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 15000, () => {
+        done = true;
+        print('info settle: frame clock stalled (15 s wall-clock cap reached)');
+        res();
+        return GLib.SOURCE_REMOVE;
+    });
+});
 const lin = c => {
     c /= 255;
     return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -59,7 +83,7 @@ async function drawn(w, name, on) {
     }
     w.bar.buttons.get(1).set_active(on);
     w.bar.syncing = false;
-    await sleep(500);                          // the theme animates a button's tone for 200 ms
+    await settle(w.win, 500);                  // the theme animates a button's tone for 200 ms (frame-clock time)
     const shot = shoot(w.win, `${base}/${name}.png`);
     const bold = w.bar.buttons.get(1);
     return {shot, sensitive: bold.get_sensitive(), active: bold.get_active()};
@@ -75,7 +99,7 @@ async function scenario() {
         for (const color of ['yellow', 'pink', 'gray', '#ee0000', '#3f3d3c', '#ffffff', '#336699']) {
             w.setColor(color);
             w.bar.setRanges([]);
-            await sleep(500);
+            await settle(w.win, 500);
             const [ok, r] = bold.compute_bounds(w.win);
             if (!ok) {
                 check(false, `${scheme} ${color}: the bold button has bounds`);
