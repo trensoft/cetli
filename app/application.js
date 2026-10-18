@@ -161,7 +161,12 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     async function newNote(from) {
         const res = await createNoteRed1st();
         if (!res.ok) {
-            from?._setMark('refused', S.markNotSaved(res.cause.code));
+            // a note window shows its own mark; the list (or, from the menu, the open list) shows a toast; with neither there is nobody to tell
+            const text = S.markNotSaved(res.cause.code);
+            if (from?._setMark)
+                from._setMark('refused', text);
+            else
+                (from ?? allNotes)?.showError?.(text);
             return null;
         }
         allNotes?.scheduleRefresh();
@@ -346,7 +351,18 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         loadCss();
         menu = buildMenu();
         const add = new Gio.SimpleAction({name: 'new-note'});
-        add.connect('activate', () => newNote(null));
+        add.connect('activate', async () => {
+            if (!add.get_enabled())
+                return;
+            add.set_enabled(false);                                  // New note (menu, Ctrl+N) is off until the note is written: two quick presses make one note
+            try {
+                await newNote(null);
+            } catch (e) {
+                platform.log.warn(`new note: ${e?.message ?? e}`);
+            } finally {
+                add.set_enabled(true);
+            }
+        });
         gtkApp.add_action(add);
         const all = new Gio.SimpleAction({name: 'all-notes'});
         all.connect('activate', () => showAllNotes());
