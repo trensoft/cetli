@@ -554,10 +554,13 @@ export class Store {
             changes.push({type: old ? 'changed' : 'added', id, record: rec});
         }
         for (const id of this._view.keys()) {
-            // `gone`: the note has no `<id>.json` entry at all. A note that only left the view (a quarantined, unknown, newer or frozen file, over the
-            // limit) is still on disk; whoever acts on 'removed' (a window closing) must not treat that as a vanished file.
-            if (!next.has(id))
-                changes.push({type: 'removed', id, record: null, gone: !groups.get(id)?.main});
+            // `gone`: the note has no entry at all, neither `<id>.json` nor a conflict copy. A note that only left the view (a quarantined, unknown,
+            // newer or frozen file, over the limit, or a vanished main file with a conflict copy left) is still on disk; whoever acts on 'removed'
+            // (a window closing) must not treat that as a vanished file. `gone === false` keeps the 0.2.5.4 behaviour (a mark, no closing).
+            if (!next.has(id)) {
+                const g = groups.get(id);
+                changes.push({type: 'removed', id, record: null, gone: !g || (!g.main && g.conflicts.length === 0)});
+            }
         }
         this._view = next;
         for (const ch of changes)

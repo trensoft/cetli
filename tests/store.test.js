@@ -127,6 +127,20 @@ test('0.2.6: a note that leaves the view is "removed" with gone=true only when i
     assert.ok(env.has(`${uuid(1)}.json`) && env.has(`${uuid(2)}.json`), 'the two files are still there');
 }));
 
+test('0.2.6: the main file vanished but a conflict copy is left: "removed" with gone=false (not a vanished note)', withEnv({resolveConflicts: false}, async env => {
+    env.putRec(`${uuid(1)}.json`, rec({id: uuid(1)}));
+    await env.store.refresh();
+    assert.equal(env.store.listNotes().length, 1);
+    env.events.length = 0;
+    fs.unlinkSync(path.join(env.dirs.notes, `${uuid(1)}.json`));
+    env.putRec(`${uuid(1)}.sync-conflict-20261017-120000-ABCDEFG.json`, rec({id: uuid(1), rev: 2}));
+    await env.store.refresh();
+    const removed = env.events.filter(e => e.type === 'removed');
+    assert.equal(removed.length, 1, 'the note left the view');
+    assert.equal(removed[0].gone, false, 'a conflict copy is still on disk');
+    assert.ok(env.has(`${uuid(1)}.sync-conflict-20261017-120000-ABCDEFG.json`), 'the conflict copy is untouched');
+}));
+
 test('3: unknown files are logged once per (name, size, mtime), never deleted', withEnv({}, async env => {
     env.put(`${uuid(1)}.json`, '{broken');
     await env.store.refresh();
