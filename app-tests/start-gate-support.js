@@ -24,8 +24,9 @@ export async function waitFor(cond, limit = 8000) {
 }
 
 // `marker`: the notes folder carries the `.stfolder` directory Syncthing makes. `deleted`: how many deleted records are in the folder at the start.
+// `seed(dirs)`: the caller puts more files into the notes folder before the program starts.
 // `scenario(env)` gets {ctl, app (createApp's result), windows, files(), records(), check, tick, waitFor}; its failures are reported, the process exits 0/1.
-export function runStartGate({marker, deleted = 0}, scenario) {
+export function runStartGate({marker, deleted = 0, seed = null}, scenario) {
     const base = GLib.dir_make_tmp('cetli-start-XXXXXX');
     const dirs = {notes: `${base}/data/notes`, tmp: `${base}/data/tmp`, state: `${base}/state`};
     GLib.mkdir_with_parents(dirs.notes, 0o755);
@@ -37,6 +38,8 @@ export function runStartGate({marker, deleted = 0}, scenario) {
         GLib.file_set_contents(`${dirs.notes}/${id}.json`,
             `${JSON.stringify({schema: 1, id, rev: 2, updated: now, created: now, device: 'b5b5b5b5', color: 'yellow', text: '', deleted: true, conflict_of: null})}\n`);
     }
+    if (seed)
+        seed(dirs);
     let failed = 0;
     let checks = 0;
     const check = (cond, label) => {
@@ -48,11 +51,11 @@ export function runStartGate({marker, deleted = 0}, scenario) {
             print(`FAIL ${label}`);
         }
     };
-    const files = () => {
+    const files = (all = false) => {
         const out = [];
         const en = Gio.File.new_for_path(dirs.notes).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
         for (let i = en.next_file(null); i !== null; i = en.next_file(null))
-            if (i.get_name().endsWith('.json'))
+            if (all || i.get_name().endsWith('.json'))
                 out.push(i.get_name());
         return out.sort();
     };

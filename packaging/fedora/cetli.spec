@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.5.3
+Version:        0.2.5.4
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -131,6 +131,11 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5.4-1
+- Fix: the header of a note no longer shows "N unresolved". The copies that Syncthing makes when two computers change a note at the same time (files named <id>.sync-conflict-<date>-<time>-<id>.json) were kept but never resolved, so the counter only grew. The program now resolves them by itself, without losing a text: the newest version becomes the note, and every other version is kept as a note of its own (same text, same colour, no mark and no changed title); the conflict file is deleted only after its text is safe in a note. A frozen note (its own file damaged or not readable) is left as it is, with the conflict files.
+- Fix: the error text of a sync program that does not answer no longer asks the user to run a command (journalctl); it says only that the sync was started and does not answer, and to try again. The Hungarian text is changed too; the other catalogs had no translation of it yet.
+- Tests: app-tests/conflict-resolve-smoke.js starts the real application on a synchronised folder with live notes and three conflict copies of different texts (one newer than its main file); tests/resolve.test.js still holds that the store itself is off by default. Not measured: a real Syncthing conflict on the computer where the counter showed; whether the copies of a long-running session look the same on screen as in this start test.
+
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5.3-1
 - Fix: on a synchronised notes folder with no live note (for example after all notes were deleted: the folder then holds only deleted records), the start opens the list of notes, and its empty page had no way to a first note. The empty page now has a "New note" button. It makes the first note the same way as the menu does, so it is red (Important), and opens its window. Nothing else changes: on a folder that is not synchronised the start still makes one red note, and the start of a synchronised folder still makes no note by itself.
 - Tests: three start-gate smokes drive the real application (app-tests/synced-start-deleted-smoke.js: marker, deleted records, no live note; app-tests/synced-start-empty-smoke.js: marker, empty folder; app-tests/unsynced-start-smoke.js: no marker, the old path). Not measured: a real synchronised pair; the Hungarian and other catalogs are unchanged (the button text is the existing "New note").

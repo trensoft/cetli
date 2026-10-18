@@ -67,7 +67,7 @@ function loadCss() {
 // `firstStartSync`: the product (main.js) turns the first-start sync window on; the tests of the notes leave it off.
 export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false} = {}) {
     const gtkApp = new Adw.Application({application_id: APP_ID, flags: Gio.ApplicationFlags.DEFAULT_FLAGS});
-    const store = createStore({fs, platform, dirs});          // resolveConflicts stays at its default: off
+    const store = createStore({fs, platform, dirs, resolveConflicts: true});   // the copies of Syncthing conflicts are resolved by the product; the store default stays off
     const windows = new Map();
     const version = readVersion();
     const syncBridge = bridge ?? new SyncBridge({log: m => platform.log.warn(m)});

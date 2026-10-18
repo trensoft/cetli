@@ -620,10 +620,8 @@ msgid ""
 msgstr "A háttérszolgáltatás nem indítható: ebben a munkamenetben nincs felhasználói szolgáltatáskezelő."
 
 #: app/strings.js
-msgid ""
-"Sync was started but does not answer. Try again. To see the log, run: "
-"journalctl --user -u cetli-syncthing"
-msgstr "A szinkron elindult, de nem válaszol. Próbáld újra. A napló megtekintéséhez futtasd: journalctl --user -u cetli-syncthing"
+msgid "Sync was started but does not answer. Try again."
+msgstr "A szinkron elindult, de nem válaszol. Próbáld újra."
 
 #: app/strings.js
 msgid "The sync settings could not be prepared safely. Nothing was changed."

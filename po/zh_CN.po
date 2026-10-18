@@ -603,9 +603,7 @@ msgid ""
 msgstr ""
 
 #: app/strings.js
-msgid ""
-"Sync was started but does not answer. Try again. To see the log, run: "
-"journalctl --user -u cetli-syncthing"
+msgid "Sync was started but does not answer. Try again."
 msgstr ""
 
 #: app/strings.js

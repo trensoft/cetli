@@ -220,7 +220,7 @@ export function syncErrorText(code) {
     switch (code) {
     case 'E_NO_SYNCTHING': return _('Syncthing is not installed on this computer.');
     case 'E_NO_USER_SYSTEMD': return _('The background service could not be started: this session has no user service manager.');
-    case 'E_SERVICE_TIMEOUT': return _('Sync was started but does not answer. Try again. To see the log, run: journalctl --user -u cetli-syncthing');
+    case 'E_SERVICE_TIMEOUT': return _('Sync was started but does not answer. Try again.');
     case 'E_CONFIG_UNSAFE': return _('The sync settings could not be prepared safely. Nothing was changed.');
     case 'E_CLI_FAILED': return _('The sync program refused a step. Try again.');
     case 'E_STFOLDER_EXISTS': return syncInfoStfolderText();
