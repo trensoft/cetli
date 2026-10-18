@@ -287,7 +287,9 @@ async function runWithConnectedSamples(n, {pause} = {}) {
     return {w, r, reads};
 }
 
-test('the edge of the count: exactly nine unbroken connected samples are not stable, exactly ten are (mutant: threshold - 1)', async () => {
+// At the pace of the gap (1 s) the time rule alone already asks for ten samples (nine samples are 8 s < 9 s), so THIS test cannot tell
+// the count rule from the time rule: it pins the plain edge only. The two rules are told apart by the slow-pace test below.
+test('the plain edge: exactly nine unbroken connected samples at the gap pace are not stable, exactly ten are', async () => {
     const nine = await runWithConnectedSamples(9);
     assert.equal(nine.r.result, undefined, 'nine samples, eight seconds, then a drop: no result');
     assert.equal(nine.r.error.code, 'E_PEER_TIMEOUT');
@@ -296,6 +298,21 @@ test('the edge of the count: exactly nine unbroken connected samples are not sta
     assert.equal(ten.r.result.link, 'stable');
     assert.equal(ten.r.result.connected_s, 9);
     assert.equal(ten.w.events.filter(e => e.event === 'link' && e.state === 'stable').length, 1);
+});
+
+// A slow sampler (1.5 s between samples, a slow `syncthing cli`; under the 2 x gap that restarts the count) has the time rule satisfied
+// after seven samples (six gaps = 9 s), so only the COUNT can hold nine samples back. This is the test of the mutants "threshold - 1"
+// (stable on the ninth) and "the time alone, no count" (stable on the seventh): both give a result here. The opposite mutant, the
+// count alone, is the target of 'ten samples taken faster than the pause' above (named there, not re-run for this commit), not of this test.
+test('slow samples: nine unbroken connected samples 1.5 s apart are not stable though they span 12 s, ten are (mutants: threshold - 1, time alone)', async () => {
+    const nine = await runWithConnectedSamples(9, {pause: 1500});
+    assert.equal(nine.r.result, undefined, 'nine samples: the time is there, the count is not');
+    assert.equal(nine.r.error.code, 'E_PEER_TIMEOUT');
+    assert.equal(nine.w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
+    const ten = await runWithConnectedSamples(10, {pause: 1500});
+    assert.equal(ten.r.result.link, 'stable');
+    assert.equal(ten.r.result.connected_s, 13, 'nine gaps of 1.5 s');
+    assert.equal(ten.reads, 10, 'stable on the tenth sample, not before');
 });
 
 test('the edge of the time: ten samples spanning 8.9 s are not stable yet, the same pace reaches it on the eleventh; 9.0 s is the tenth', async () => {
