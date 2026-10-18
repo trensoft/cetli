@@ -547,9 +547,10 @@ export function createEngine(ports) {
         return {own, cfg: await readConfig()};
     }
 
-    // Every ID a verb names must be in the list this run just read, and not the own one: else E_BAD_ID and nothing is written.
-    function namedIds(ids, cfg, own) {
-        if (!Array.isArray(ids) || ids.length === 0 || ids.some(id => !cfg.ids.includes(id) || id === own))
+    // Every ID a verb names must be in the list this run just read (or, for a rerun of `revoke`, a tombstone of an earlier run: it is simply
+    // skipped as absent), and not the own one: else E_BAD_ID and nothing is written.
+    function namedIds(ids, cfg, own, tomb = []) {
+        if (!Array.isArray(ids) || ids.length === 0 || ids.some(id => id === own || !(cfg.ids.includes(id) || tomb.includes(id))))
             throw new Fail('E_BAD_ID');
         return ids;
     }
@@ -626,7 +627,7 @@ export function createEngine(ports) {
     // Every step is idempotent: a run that was cut short is simply run again.
     async function revoke({ids = []} = {}) {
         const {own, cfg} = await prepareLight();
-        namedIds(ids, cfg, own);
+        namedIds(ids, cfg, own, loadState().state.tomb);
         const [x] = ids;
         const freezeSet = [x, ...cfg.ids.filter(id => id !== own && id !== x)].slice(0, FREEZE_MAX);
         await step('freeze', async () => {
@@ -746,7 +747,7 @@ export function createEngine(ports) {
     // The accept sequence (M-W7 (b)): the add (with the introducer role and the label), the share, then the read-back. The label is the sanitised
     // name of the candidate (displayName: 1-32 printable ASCII) as ONE `--name=` argument, or the fixed text. A computer that was accepted is
     // written into the acknowledged set; one the user types in again is no longer a tombstone.
-    async function addPeer(peerId, own, label) {
+    async function addPeer(peerId, own, label, {existing = false} = {}) {
         await step('device', async () => {
             await cli(['config', 'devices', 'add', '--device-id', peerId, '--introducer', `--name=${label}`]);
         });
@@ -754,7 +755,7 @@ export function createEngine(ports) {
             await cli(['config', 'folders', FOLDER_ID, 'devices', 'add', '--device-id', peerId]);
             let cfg = await readConfig();                                    // rc 0 is not evidence that it was added (M-W1 row 4)
             let peer = cfg.devices.find(d => d.id === peerId);
-            if (peer && peer.introducedBy === '' && !peer.introducer) {
+            if (existing && peer && peer.introducedBy === '' && !peer.introducer) {
                 // a repeated add changes nothing (M-W1 row 4): a device that was there already (the half pair of 0.2.5) keeps its old flag
                 await setIntroducer(peerId, true);
                 cfg = await readConfig();
@@ -856,7 +857,7 @@ export function createEngine(ports) {
         if (others.length > 0 && !others.some(d => d.id === peerId))
             throw new Fail(others.some(d => peersOf(cfg, own).shared(d)) ? 'E_ALREADY_PAIRED' : 'E_HALF_STATE_OTHER');
         if (!others.some(d => d.id === peerId) || !peersOf(cfg, own).shared({id: peerId}))
-            await addPeer(peerId, own, PEER_LABEL);                          // a new peer, or the same one with the share missing (row 12)
+            await addPeer(peerId, own, PEER_LABEL, {existing: others.some(d => d.id === peerId)});        // a new peer, or the same one with the share missing (row 12)
         emit({event: 'peer', id: peerId, name: null});
         const link = await awaitStable(peerId);
         return {result: connectedResult({id: peerId, name: null}, own, link)};

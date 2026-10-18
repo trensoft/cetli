@@ -37,6 +37,7 @@ export function createWorld(opts = {}) {
         system: null,                              // (world) -> {rc, out}: a different answer of `show system`
         failConnections: null,                     // (nowMs) -> boolean: `show connections` fails (rc 1) when true
         afterAdd: null,                            // (id) -> void: a hook that changes a device right after it was added (a foreign edit)
+        noIntroducerSet: false,                    // `introducer set` answers rc 0 and changes nothing (a daemon that does not hold the flag)
         remoteLists: [],                           // [{by, id, name}]: a computer `by` that still lists `id`: while `by` is a device here with introducer=true,
                                                    // `id` is added again (as an introduced device) after a delete and whenever a second or more passes (PLAN-0.2.6 5)
         failCli: new Set(),                        // exact `config devices add`-style prefixes that fail (rc 1)
@@ -181,7 +182,8 @@ export function createWorld(opts = {}) {
         if (b === 'devices' && isCanonicalId(c) && d === 'introducer' && e === 'set') {
             if (!w.devices.has(c))
                 return {rc: 3, out: `No help topic for '${c}'\n`};
-            w.devices.get(c).introducer = args[5] === 'true';
+            if (!w.noIntroducerSet)
+                w.devices.get(c).introducer = args[5] === 'true';
             return {rc: 0, out: ''};
         }
         if (b === 'devices' && isCanonicalId(c) && d === 'skip-introduction-removals' && e === 'set') {
