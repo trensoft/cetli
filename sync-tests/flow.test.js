@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {ERROR_CODES, INFORMATION_CODES, STATUS_STATES, RESERVED_CODES, parse} from '../sync/protocol.js';
 import {SHORTCUT_REMOVE} from '../sync/policy.js';
+import {createWorld} from './support/world.js';
+import {makeId} from './support/ids.js';
 import {
     PAGES, pageForStatus, isConnected, linkKey, groupSummary, peerRow, peerRows, promoteIds, groupView, removePaths, removeDefaults, revokeIds, forgetId,
     revokeSummary, errorView, idRows, compareLine, buttonGroup, idsReducer, initialIdsState,
@@ -43,6 +45,30 @@ test('every status state has exactly one page, all of them known pages', () => {
     assert.equal(PAGES.includes('paired') || PAGES.includes('half'), false, 'paired and half are gone');
     for (const p of ['group', 'add', 'remove', 'revoking', 'revoke-result'])
         assert.ok(PAGES.includes(p), p);
+});
+
+test('set-up with a removal still open (the last peer was revoked, the window closed before Finish) is the group page with the freeze banner, not the ID page', async () => {
+    const open = {state: 'set-up', own_id: A, peers: [], computers: 1, max_computers: 10, over_limit: false, revocation_open: true, harden_pending: 0, promote_pending: 0,
+        removed: [B], listener: 'ok', up_to_date: null, notes: 1, waiting: false};
+    assert.equal(pageForStatus(open), 'group');
+    assert.equal(pageForStatus({...open, revocation_open: false}), 'ids', 'with no removal open it is still the ID page');
+    const v = groupView(open);
+    assert.deepEqual([v.revocationOpen, v.rows.length, v.addBlocked], [true, 0, true]);
+    // the real sequence against the stub machine: a pair of two, the only other computer is revoked, the window is closed and opened again
+    const w = createWorld();
+    await w.setUp();
+    const peerId = makeId(7);
+    w.pair(peerId, {introducer: true, name: 'pc-b'});
+    const rv = await w.engine().perform('revoke', {ids: [peerId]});
+    assert.equal(rv.result.revocation_open, true);
+    assert.equal(rv.result.remaining, 0);
+    const s = (await w.engine().perform('status')).result;
+    assert.deepEqual([s.state, s.peers.length, s.revocation_open], ['set-up', 0, true]);
+    assert.equal(pageForStatus(s), 'group', 'Finish is on this page; the ID page has none and its host would end in E_REVOCATION_OPEN');
+    assert.deepEqual(await w.engine().perform('host'), {error: {code: 'E_REVOCATION_OPEN'}});
+    assert.deepEqual(await w.engine().perform('finish'), {result: {event: 'result', revocation_open: false}});
+    const after = (await w.engine().perform('status')).result;
+    assert.deepEqual([after.state, after.revocation_open, pageForStatus(after)], ['set-up', false, 'ids']);
 });
 
 test('"Connected" is said of one computer, and only when its link is stable; the raw connected flag, a missing link or a state say nothing', () => {

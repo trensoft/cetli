@@ -12,14 +12,16 @@ export const PAGES = Object.freeze([
 ]);
 
 // The page for a `status` result. `set-up` (no other computer yet) goes to the ID page: the waiting machine waits, the other one types.
-// `half` and `paired` are one page since 0.2.6: the list of the group, each computer with its own link.
+// `half` and `paired` are one page since 0.2.6: the list of the group, each computer with its own link. `set-up` with a removal still open
+// (the last computer was revoked and the window closed before Finish) is the group page too: it has the freeze banner and Finish, the ID
+// page has neither and its `host` would only fail with E_REVOCATION_OPEN.
 export function pageForStatus(status) {
     switch (status?.state) {
     case STATE_NO_BACKEND: return 'missing';
     case 'not-set-up': return 'consent';
     case 'stfolder-conflict': return 'info-stfolder';
     case 'foreign-config': return 'info-foreign';
-    case 'set-up': return 'ids';
+    case 'set-up': return status.revocation_open === true ? 'group' : 'ids';
     case 'half':
     case 'paired': return 'group';
     default: return 'error';

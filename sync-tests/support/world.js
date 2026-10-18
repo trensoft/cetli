@@ -37,6 +37,7 @@ export function createWorld(opts = {}) {
         system: null,                              // (world) -> {rc, out}: a different answer of `show system`
         failConnections: null,                     // (nowMs) -> boolean: `show connections` fails (rc 1) when true
         afterAdd: null,                            // (id) -> void: a hook that changes a device right after it was added (a foreign edit)
+        keepDevices: new Set(),                    // ids whose `devices <ID> delete` answers rc 0 and changes nothing (a delete that did not hold)
         noIntroducerSet: false,                    // `introducer set` answers rc 0 and changes nothing (a daemon that does not hold the flag)
         remoteLists: [],                           // [{by, id, name}]: a computer `by` that still lists `id`: while `by` is a device here with introducer=true,
                                                    // `id` is added again (as an introduced device) after a delete and whenever a second or more passes (PLAN-0.2.6 5)
@@ -175,7 +176,8 @@ export function createWorld(opts = {}) {
         if (b === 'devices' && isCanonicalId(c) && d === 'dump-json')
             return w.devices.has(c) ? {rc: 0, out: devJson(c)} : {rc: 3, out: `No help topic for '${c}'\n`};
         if (b === 'devices' && isCanonicalId(c) && d === 'delete') {
-            w.devices.delete(c);
+            if (!w.keepDevices.has(c))
+                w.devices.delete(c);
             reintroduce();
             return {rc: 0, out: ''};
         }

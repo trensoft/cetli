@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
-const TESTS = ['engine-setup', 'engine-connect', 'group-admission', 'group-removal', 'policy', 'protocol'].map(n => `sync-tests/${n}.test.js`);
+const TESTS = ['engine-setup', 'engine-connect', 'group-admission', 'group-removal', 'policy', 'protocol', 'flow'].map(n => `sync-tests/${n}.test.js`);
 
 const MUTANTS = [
     ['X1', 'MAX_PEERS = 10 instead of 9 (11 computers allowed)', 'sync/policy.js', 'export const MAX_PEERS = MAX_COMPUTERS - 1;', 'export const MAX_PEERS = MAX_COMPUTERS;'],
@@ -31,6 +31,24 @@ const MUTANTS = [
         'if (others.length > 0 && !others.some(d => d.id === peerId))', 'if (false)'],
     ['X11', 'revoke over the freeze cap is not refused (a success that froze only part of the peers)', 'sync/engine.js',
         'if (cfg.ids.filter(id => id !== own).length > FREEZE_MAX)', 'if (cfg.ids.filter(id => id !== own).length > FREEZE_MAX + 1000)'],
+    ['X12', 'host does not refuse a list over the read cap (it listens with 16 peers)', 'sync/engine.js',
+        'if (cfg.overCap || peersOf(cfg, own).peers.length >= MAX_PEERS)', 'if (peersOf(cfg, own).peers.length >= MAX_PEERS)'],
+    ['X13', 'finish does not read the flags back', 'sync/engine.js',
+        'if (mine((await readConfig()).devices).some(d => d.introducer !== wanted(d)))', 'if (false)'],
+    ['X14', 'revoke does not check the flags it read back', 'sync/engine.js', 'if (flags.some(Boolean))', 'if (false)'],
+    ['X15', 'revoke over the read cap reads no flag back', 'sync/engine.js',
+        "const flags = back.overCap ? await Promise.all(freezeSet.map(async id => json(await cli(['config', 'devices', id, 'dump-json'])).introducer === true)) :", 'const flags = back.overCap ? [] :'],
+    ['X16', 'a state file whose read throws is a fresh state, not a freeze', 'sync/engine.js',
+        '        } catch {\n            return {state: brokenState(), missing: false};', '        } catch {\n            return {state: freshState(), missing: true};'],
+    ['X17', 'the first write seeds a tombstoned device into ack', 'sync/engine.js',
+        'direct.filter(id => !next.ack.includes(id) && !next.tomb.includes(id))', 'direct.filter(id => !next.ack.includes(id))'],
+    ['X18', 'forget --all does not verify the removal before it clears the state file', 'sync/engine.js', 'if (!absent(after, targets))', 'if (false)'],
+    ['X19', 'revoke has no verify step after the delete', 'sync/engine.js', 'if (!absent(await readConfig(), ids))', 'if (false)'],
+    ['X20', 'readConfig accepts a line that is not a canonical ID', 'sync/engine.js', 'if (!ids.every(isCanonicalId))', 'if (false)'],
+    ['X21', 'revoke refuses only 2 peers over the freeze cap, not 1', 'sync/engine.js',
+        'if (cfg.ids.filter(id => id !== own).length > FREEZE_MAX)', 'if (cfg.ids.filter(id => id !== own).length > FREEZE_MAX + 1)'],
+    ['X22', 'set-up with a removal open goes to the ID page (no Finish)', 'app/sync-flow.js',
+        "case 'set-up': return status.revocation_open === true ? 'group' : 'ids';", "case 'set-up': return 'ids';"],
 ];
 
 function run(dir) {

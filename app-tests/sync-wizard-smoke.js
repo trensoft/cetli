@@ -466,6 +466,20 @@ async function scenario() {
     check(JSON.stringify(fake.argv.find(a => a[0] === 'finish')) === JSON.stringify(['finish']), 'finish has no argument');
     await closeWin(w);
 
+    // the last computer was revoked and the window was closed before Finish: no peer, the removal still open. The group page has Finish; the ID page had none.
+    let lastOpen = true;
+    w = await open({status: () => status('set-up', {computers: 1, listener: 'ok', notes: 3, revocation_open: lastOpen, removed: lastOpen ? [B] : []}),
+        finish: () => { lastOpen = false; return {ok: true, result: {event: 'result', revocation_open: false}}; }});
+    await pageIs(w, 'group');
+    check(w.w.bnFreeze.box.get_visible() && w.w.freezeButton.get_visible() && labelText(w.w.freezeButton) === S.syncFinishButton(), 'no computer left and a removal open: the group page with the banner and the Finish button');
+    check(w.rowWidgets.length === 0 && !w.w.groupAdd.get_sensitive(), 'no rows, Add is off');
+    w.w.freezeButton.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await waitFor(() => fake.count('finish') === 1), 'Finish runs');
+    await pageIs(w, 'ids');
+    check(!lastOpen, 'after it the status has no removal open and the ID page is shown (the list is empty, the window can add a computer again)');
+    await closeWin(w);
+
     // over the limit: the banner with the counts, no link text (not measured), Add off, and a choice longer than the engine takes is not sent
     w = await open({status: () => fixture('status-over-limit'), revoke: () => fail('E_INTERNAL')});
     await pageIs(w, 'group');

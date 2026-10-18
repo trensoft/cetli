@@ -733,3 +733,117 @@ test('status.removed: the newest REMOVED_MAX tombstones that are not in the list
     assert.deepEqual(sb.removed, [gone[0]]);
     assert.equal(sb.peers[0].returned, true);
 });
+
+// ---- review 8779 / 8809: tests for the guards the mutants of the code review left alive ---------------------------------------------------
+
+test('host over the read cap (17 devices, 16 peers) is E_GROUP_FULL before the pending list is read; the same at the exact limit (9 peers)', async () => {
+    const cap = await ready();
+    ids(16).forEach(id => cap.introduce(id, makeId(1000), {introducer: false}));
+    cap.calls.length = 0;
+    assert.deepEqual(await perform(cap, 'host'), {error: {code: 'E_GROUP_FULL'}});
+    assert.equal(argvs(cap).some(a => a.includes('pending')), false, 'it never listens');
+    assert.equal(argvs(cap).filter(isWrite).length, 0);
+    const full = await ready();
+    full.group(ids(9));
+    full.calls.length = 0;
+    assert.deepEqual(await perform(full, 'host'), {error: {code: 'E_GROUP_FULL'}});
+    assert.equal(argvs(full).some(a => a.includes('pending')), false);
+});
+
+test('finish: a flag that does not hold after the write is E_CLI_FAILED and the freeze stays open; with the flags holding it ends', async () => {
+    const {w, a, b, c, d} = await makeGroup();
+    await perform(w, 'revoke', {ids: [b]});
+    w.noIntroducerSet = true;                                      // the daemon answers rc 0 and keeps the flag down
+    const r = await perform(w, 'finish');
+    assert.equal(r.error.code, 'E_CLI_FAILED');
+    assert.equal(r.error.step, 'device');
+    assert.notEqual(stateOf(w).freeze, null, 'not reported as finished');
+    assert.equal((await perform(w, 'status')).result.revocation_open, true);
+    w.noIntroducerSet = false;
+    assert.deepEqual(await perform(w, 'finish'), {result: {event: 'result', revocation_open: false}});
+    assert.equal(stateOf(w).freeze, null);
+    assert.deepEqual([a, c, d].map(id => w.devices.get(id).introducer), [true, false, true], 'direct on, introduced off while hardening');
+});
+
+test('revoke at the freeze cap (16 peers, 17 devices: the list is over the read cap) checks the flags one by one; a flag that does not hold is E_CLI_FAILED and nothing is deleted', async () => {
+    const w = await ready();
+    const many = ids(FREEZE_MAX);
+    w.group(many);
+    w.noIntroducerSet = true;
+    w.calls.length = 0;
+    const r = await perform(w, 'revoke', {ids: [many[0]]});
+    assert.deepEqual(r, {error: {code: 'E_CLI_FAILED', step: 'freeze'}});
+    assert.equal(argvs(w).some(a => a.includes('delete')), false, 'nothing deleted');
+    assert.equal(argvs(w).filter(a => a.includes('dump-json') && a.includes(many[0])).length > 0, true, 'asked for the frozen ones one by one');
+    assert.notEqual(stateOf(w).freeze, null);
+});
+
+test('revoke one peer over the freeze cap (17 peers) is E_GROUP_FULL at the freeze step with zero writes, and not a success that froze 16', async () => {
+    const w = await ready();
+    const many = ids(FREEZE_MAX + 1);
+    w.group(many);
+    w.calls.length = 0;
+    const before = snapshot(w);
+    assert.deepEqual(await perform(w, 'revoke', {ids: [many[0]]}), {error: {code: 'E_GROUP_FULL', step: 'freeze'}});
+    assert.equal(argvs(w).filter(isWrite).length, 0);
+    assert.equal(snapshot(w), before);
+    assert.equal(w.fsMap.has(STATE(w)), false);
+});
+
+test('revoke: a delete that did not hold is caught by the verify step (E_CLI_FAILED), the freeze and the tombstone stay', async () => {
+    const {w, b} = await makeGroup();
+    w.keepDevices.add(b);                                          // rc 0, the device is still in the list
+    const r = await perform(w, 'revoke', {ids: [b]});
+    assert.deepEqual(r, {error: {code: 'E_CLI_FAILED', step: 'verify'}});
+    assert.notEqual(stateOf(w).freeze, null);
+    assert.deepEqual(stateOf(w).tomb, [b]);
+});
+
+test('forget --all: a delete that did not hold is E_CLI_FAILED at the share step and the state file is not cleared', async () => {
+    const {w, a, d} = await makeGroup();
+    putState(w, {ack: [a, d], tomb: [OTHER], freeze: {ids: [a]}});
+    w.keepDevices.add(d);
+    const r = await perform(w, 'forget', {all: true});
+    assert.deepEqual(r, {error: {code: 'E_CLI_FAILED', step: 'share'}});
+    assert.deepEqual(stateOf(w), {v: 1, ack: [a, d], tomb: [OTHER], freeze: {ids: [a]}}, 'the freeze and the tombstones go only with a verified removal');
+});
+
+test('an unreadable state file (a read that throws, here a directory in its place) is an open freeze: status says so, host, join and setup refuse', async () => {
+    const {w} = await makeGroup();
+    w.mkdir(STATE(w));
+    const s = (await perform(w, 'status')).result;
+    assert.equal(s.revocation_open, true);
+    valid('status', s);
+    assert.deepEqual(await perform(w, 'host'), {error: {code: 'E_REVOCATION_OPEN'}});
+    assert.equal((await perform(w, 'join', THIRD)).error.code, 'E_REVOCATION_OPEN');
+    assert.equal((await perform(w, 'setup')).error.code, 'E_REVOCATION_OPEN');
+});
+
+test('the first write of the state file seeds the directly accepted devices into ack, but never one that is being tombstoned in that very write (revoke, forget <ID>)', async () => {
+    const {w, a, b, d} = await makeGroup();
+    assert.equal(w.fsMap.has(STATE(w)), false);
+    await perform(w, 'revoke', {ids: [d]});
+    const st = stateOf(w);
+    assert.deepEqual(st.tomb, [d]);
+    assert.equal(st.ack.includes(d), false, 'a removed computer is not acknowledged');
+    assert.equal(st.ack.includes(a), true, 'the other directly accepted one is');
+    assert.equal(st.ack.includes(b), false, 'an introduced one is not');
+    const g = await makeGroup({policy: {shortcutRemove: true}});
+    assert.equal(g.w.fsMap.has(STATE(g.w)), false);
+    await perform(g.w, 'forget', {ids: [g.d]});
+    const sf = stateOf(g.w);
+    assert.deepEqual(sf.tomb, [g.d]);
+    assert.equal(sf.ack.includes(g.d), false);
+    assert.equal(sf.ack.includes(g.a), true);
+});
+
+test('readConfig: a line of `devices list` that is not a canonical ID is E_CLI_FAILED, in a short list and in a list over the read cap (never used as an argument)', async () => {
+    for (const [label, n] of [['short', 2], ['over the read cap', 20]]) {
+        const w = await ready();
+        ids(n).forEach(id => w.introduce(id, makeId(1000), {introducer: false}));
+        w.devices.set('--delete-everything', {name: 'x', introducer: false, autoAcceptFolders: false, introducedBy: ''});
+        w.calls.length = 0;
+        assert.deepEqual(await perform(w, 'status'), {error: {code: 'E_CLI_FAILED'}}, label);
+        assert.equal(argvs(w).some(a => a.includes('--delete-everything') && a.includes('dump-json')), false, label);
+    }
+});
