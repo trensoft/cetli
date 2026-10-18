@@ -799,8 +799,18 @@ export class SyncWizard {
         this._confirm({heading: S.syncFinishShort(), body: S.syncRevokeNext(), confirmLabel: S.syncFinishShort(), onConfirm: () => this._finish()});
     }
 
+    // `finish` refuses with E_REVOCATION_OPEN while a removed computer is back: that is not an error page, the group page shows the
+    // "removed computer is back" row and the freeze banner again.
     async _finish() {
-        await this._runThenRefresh('finish', {});
+        this._show('checking');
+        const out = await this.bridge.run('finish', {});
+        if (this.closed)
+            return;
+        if (!out.ok && out.error.code !== 'E_REVOCATION_OPEN') {
+            this._showError(out.error.code, () => this.refresh());
+            return;
+        }
+        this.refresh();
     }
 
     // The remove page for one row of the status on screen. Lost or stolen is the default; the "I still have it" path exists only when the
