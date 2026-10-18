@@ -125,6 +125,12 @@ export const files = {
             return false;
         }
     },
+    // `reset` only. A move within one parent directory, so within one file system: a rename, never a copy. Without the overwrite flag Gio refuses
+    // a target that exists; a failure throws.
+    rename: (from, to) => { fileOf(from).move(fileOf(to), Gio.FileCopyFlags.NOFOLLOW_SYMLINKS, null, null); },
+    // `reset` only: one plain file, and one EMPTY directory. Neither follows a link (a link is deleted as itself) and neither is recursive.
+    removeFile: p => { fileOf(p).delete(null); },
+    removeDir: p => { fileOf(p).delete(null); },
     listNames: p => {
         const out = [];
         const en = fileOf(p).enumerate_children('standard::name', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);

@@ -8,6 +8,9 @@ export const SOCKET_NAME = 'gui.sock';
 export const BACKEND_EXE = '/usr/bin/syncthing';          // the literal that run port and static test look for
 export const SYSTEMCTL_EXE = '/usr/bin/systemctl';
 export const FOLDER_ID = 'cetli-notes';
+// What Syncthing may leave inside its own `.stfolder` marker directory: a hint file. The engine's `reset` takes the marker away only when it
+// holds nothing else than these (NOT measured on the real binary: it is the only thing besides an empty directory that is accepted).
+export const MARKER_HINT_FILE = /^syncthing-folder-[0-9a-z]{1,32}\.txt$/;
 
 const absolute = p => typeof p === 'string' && /^\/[^\0-\x1f\x7f]+$/.test(p) && !p.includes('//') && !p.endsWith('/');
 

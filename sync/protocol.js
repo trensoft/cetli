@@ -20,7 +20,7 @@ export const EXIT_RESULT = 0;
 export const EXIT_ERROR = 1;
 export const EXIT_USAGE = 2;
 
-export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget']);
+export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget', 'restart', 'reset']);
 export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'device', 'share', 'connect', 'sync']);
 export const PROGRESS_STATES = Object.freeze(['start', 'ok']);
 export const STATUS_STATES = Object.freeze(['no-syncthing', 'not-set-up', 'stfolder-conflict', 'foreign-config', 'set-up', 'half', 'paired']);
@@ -87,6 +87,8 @@ const RESULT_SCHEMAS = {
     host: r => isPeer(r.peer) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
     join: r => isPeer(r.peer) && isCanonicalId(r.own_id) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
     forget: r => r.state === 'set-up',
+    restart: r => r.state === 'restarted',
+    reset: r => r.state === 'not-set-up',
 };
 const RESULT_KEYS = {
     status: ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'listener', 'shared', 'up_to_date', 'notes', 'waiting'],
@@ -95,6 +97,8 @@ const RESULT_KEYS = {
     host: ['peer', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
     join: ['peer', 'own_id', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
     forget: ['state'],
+    restart: ['state'],
+    reset: ['state'],
 };
 
 // `connected_s` is a count of whole seconds exactly when the link is stable, otherwise null (section 3, `link`).
@@ -218,7 +222,7 @@ export function parse(line, verb = null) {
 // {ok: true, outcome: {kind: 'result'|'error', ...}} or {ok: false, code}, where a missing terminal line or a code other than 0/1 is
 // E_ENGINE_DIED and a line that broke a rule is E_PROTOCOL.
 const VERB_EVENTS = {
-    status: [], setup: [], 'own-id': [], forget: [],
+    status: [], setup: [], 'own-id': [], forget: [], restart: [], reset: [],
     host: ['candidate', 'link', 'peer'],
     join: ['link', 'peer'],
 };

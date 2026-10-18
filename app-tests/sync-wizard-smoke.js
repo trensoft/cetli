@@ -200,6 +200,7 @@ async function scenario() {
         ['E_PENDING_AMBIGUOUS', {neutral: false, button: S.syncTryAgain()}],
         ['E_EXPIRED', {neutral: false, button: S.syncTryAgain()}],
         ['E_PEER_TIMEOUT', {neutral: false, button: S.syncTryAgain()}],
+        ['E_SERVICE_TIMEOUT', {neutral: false, button: S.syncTryAgain()}],
         ['E_FOREIGN_DEVICE', {neutral: false, button: null}],
         ['E_STFOLDER_EXISTS', {neutral: true, button: null}],
         ['E_ALREADY_PAIRED', {neutral: true, button: null}],
@@ -213,8 +214,62 @@ async function scenario() {
         const btn = w.w.errAction.get_visible() ? labelText(w.w.errAction) : null;
         check(hasRed === !expect.neutral && btn === expect.button, `${code}: ${expect.neutral ? 'neutral' : 'red'}, button ${btn}`);
         check(labelText(w.w.errText) === S.syncErrorText(code), `${code}: the text comes from strings.js`);
+        // only the sync program that does not answer has a way out beyond the first button
+        check(w.w.errSecondary.get_visible() === (code === 'E_SERVICE_TIMEOUT') && (code !== 'E_SERVICE_TIMEOUT' || labelText(w.w.errSecondary) === S.syncResetButton()),
+            `${code}: ${code === 'E_SERVICE_TIMEOUT' ? 'a second button "Reset sync"' : 'no second button'}`);
         await closeWin(w);
     }
+
+    // ---- the sync program does not answer: Try again restarts it (no data touched), and if that does not help there is Reset sync after a confirmation
+    let statusAnswer = fail('E_SERVICE_TIMEOUT');
+    w = await open({
+        status: () => statusAnswer,
+        restart: () => ({ok: true, result: {event: 'result', state: 'restarted'}}),
+        reset: () => ({ok: true, result: {event: 'result', state: 'not-set-up'}}),
+        setup: () => ({ok: true, result: {event: 'result', own_id: A, state: 'set-up'}}),
+    });
+    await pageIs(w, 'error');
+    w.w.errAction.emit('clicked');
+    check(await waitFor(() => fake.count('restart') === 1 && fake.count('status') === 2), 'Try again on E_SERVICE_TIMEOUT runs restart, then asks the status');
+    check(fake.count('setup') === 0 && fake.count('reset') === 0 && fake.count('forget') === 0, 'and nothing else');
+    check(await pageIs(w, 'error') && w.w.errSecondary.get_visible(), 'the daemon still silent: the error page again, the way out still there');
+    statusAnswer = status('set-up');
+    w.w.errAction.emit('clicked');
+    check(await pageIs(w, 'ids') && fake.count('restart') === 2, 'a restart that helps ends on the ID page');
+    await closeWin(w);
+    statusAnswer = fail('E_SERVICE_TIMEOUT');
+    w = await open({
+        status: () => statusAnswer,
+        restart: () => fail('E_SERVICE_TIMEOUT', 'service'),
+        reset: () => ({ok: true, result: {event: 'result', state: 'not-set-up'}}),
+        setup: () => ({ok: true, result: {event: 'result', own_id: B, state: 'set-up'}}),
+    });
+    await pageIs(w, 'error');
+    w.w.errAction.emit('clicked');
+    check(await waitFor(() => fake.count('restart') === 1) && await pageIs(w, 'error') && w.w.errSecondary.get_visible(), 'a restart that fails with the same code: both buttons stay');
+    w.w.errSecondary.emit('clicked');
+    check(w.confirmDialog !== undefined && fake.count('reset') === 0, 'Reset sync asks first; nothing ran yet');
+    const body = w.confirmDialog.get_body();
+    check(w.confirmDialog.get_heading() === S.syncResetConfirmTitle() && body === S.syncResetConfirmBody(), 'the confirmation carries its own title and text');
+    check(body.includes('new ID') && body.includes('Stop syncing') && body.includes('notes stay'), 'it says: a new ID, Stop syncing on the other computer, the notes stay');
+    w.confirmDialog.emit('response', 'cancel');
+    await tick(150);
+    check(fake.count('reset') === 0 && w.page === 'error', 'Cancel runs nothing');
+    w.w.errSecondary.emit('clicked');
+    w.confirmDialog.emit('response', 'reset');
+    check(await waitFor(() => fake.count('reset') === 1), 'confirming runs reset');
+    check(await pageIs(w, 'ids') && fake.count('setup') === 1, 'then setup and the ID page (a new ID, the entry of the other ID), not another status question');
+    check(rowsText(w.w.ownId) === B && fake.count('host') === 1, 'the new ID of this computer is shown and a waiting run started');
+    check(fake.calls.map(c => c.verb).join() === 'status,restart,reset,setup,host', `the order of the calls (${fake.calls.map(c => c.verb).join()})`);
+    await closeWin(w);
+    // a reset that fails shows its error and goes on from the status
+    w = await open({status: () => fail('E_SERVICE_TIMEOUT'), reset: () => fail('E_NO_USER_SYSTEMD', 'service')});
+    await pageIs(w, 'error');
+    w.w.errSecondary.emit('clicked');
+    w.confirmDialog.emit('response', 'reset');
+    check(await waitFor(() => fake.count('reset') === 1) && await waitFor(() => labelText(w.w.errText) === S.syncErrorText('E_NO_USER_SYSTEMD')), 'a failed reset shows its own error');
+    check(fake.count('setup') === 0, 'and starts no set-up');
+    await closeWin(w);
 
     // ---- the ambiguity error offers a new waiting run
     w = await open({status: () => status('set-up')});

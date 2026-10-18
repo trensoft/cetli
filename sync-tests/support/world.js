@@ -37,6 +37,9 @@ export function createWorld(opts = {}) {
         system: null,                              // (world) -> {rc, out}: a different answer of `show system`
         failConnections: null,                     // (nowMs) -> boolean: `show connections` fails (rc 1) when true
         afterAdd: null,                            // (id) -> void: a hook that changes a device right after it was added (a foreign edit)
+        hung: false,                               // the unit is active but the daemon never answers (the failure of 0.2.5.2)
+        unitFailed: false,                         // the unit is in the failed state (start limit): starting it is refused until `reset-failed`
+        failSystemctl: new Set(),                  // `systemctl` argument strings (after --user) that fail with rc 1
         failCli: new Set(),                        // exact `config devices add`-style prefixes that fail (rc 1)
         ownId: opts.ownId ?? OWN,
     };
@@ -71,6 +74,28 @@ export function createWorld(opts = {}) {
         isDir: p => fsMap.get(p)?.dir === true,
         isSymlink: p => fsMap.get(p)?.link === true,
         listNames: p => [...fsMap.keys()].filter(k => dirOf(k) === p).map(k => k.slice(p.length + 1)),
+        // `reset` only: a move within one parent, the removal of one file, the removal of one EMPTY directory (as the real ports do)
+        rename: (from, to) => {
+            if (!fsMap.has(from) || fsMap.has(to) || dirOf(from) !== dirOf(to))
+                throw new Error('rename failed');
+            for (const k of [...fsMap.keys()].filter(k => k === from || k.startsWith(`${from}/`))) {
+                fsMap.set(to + k.slice(from.length), fsMap.get(k));
+                fsMap.delete(k);
+            }
+            w.timeline.push(`rename ${from} ${to}`);
+        },
+        removeFile: p => {
+            if (!fsMap.has(p) || fsMap.get(p).dir)
+                throw new Error('remove failed');
+            fsMap.delete(p);
+            w.timeline.push(`remove ${p}`);
+        },
+        removeDir: p => {
+            if (!fsMap.get(p)?.dir || [...fsMap.keys()].some(k => dirOf(k) === p))
+                throw new Error('rmdir failed');
+            fsMap.delete(p);
+            w.timeline.push(`rmdir ${p}`);
+        },
     };
     // the machine
     fsMap.set('/', {dir: true, mode: 0o755});
@@ -95,7 +120,7 @@ export function createWorld(opts = {}) {
         const elems = [...w.folders.keys()].map(id => `\n    <folder id="${id}" label="cetli" path="${w.folders.get(id).path}" type="${w.folders.get(id).type}">\n    </folder>`).join('');
         f.text = base.replace(/(<configuration version="52">)/, `$1${elems}`);
     };
-    const daemonUp = () => w.daemon && (w.startedAt === null || w.mono - w.startedAt >= w.startDelayMs);
+    const daemonUp = () => w.daemon && !w.hung && (w.startedAt === null || w.mono - w.startedAt >= w.startDelayMs);
     const lines = a => `${a.join('\n')}\n`;
     const devJson = id => {
         const d = w.devices.get(id);
@@ -166,7 +191,7 @@ export function createWorld(opts = {}) {
         if (b === 'folders' && c === 'add') {
             const id = flag(args, '--id');
             w.folders.set(id, {path: flag(args, '--path'), type: flag(args, '--type') ?? 'sendreceive', devices: [{id: w.ownId, introducedBy: ''}], argv: args});
-            w.put(`${flag(args, '--path')}/.stfolder`);                  // Syncthing makes the marker (M log 32)
+            w.mkdir(`${flag(args, '--path')}/.stfolder`);                // Syncthing makes the marker (M log 32): a directory
             syncFolderElements();
             return {rc: 0, out: ''};
         }
@@ -194,7 +219,24 @@ export function createWorld(opts = {}) {
             if (!w.systemd)
                 return {rc: 1, out: 'Failed to connect to bus\n'};
             const key = argv.slice(1).join(' ');
+            if (w.failSystemctl.has(key.replace('--user ', '')))
+                return {rc: 1, out: 'Failed\n'};
+            if (key === `--user reset-failed cetli-syncthing.service`) {
+                w.unitFailed = false;
+                w.timeline.push('systemctl reset-failed');
+                return {rc: 0, out: ''};
+            }
+            if (key === `--user restart cetli-syncthing.service`) {
+                w.timeline.push('systemctl restart');
+                if (w.unitFailed)
+                    return {rc: 1, out: 'Failed to restart: start request repeated too quickly\n'};
+                w.daemon = true;
+                w.startedAt = w.mono;
+                return {rc: 0, out: ''};
+            }
             if (key === `--user enable --now cetli-syncthing.service`) {
+                if (w.unitFailed)
+                    return {rc: 1, out: 'Failed to enable: start request repeated too quickly\n'};
                 w.daemon = true;
                 w.startedAt = w.mono;
                 w.timeline.push('systemctl enable --now');
@@ -214,6 +256,8 @@ export function createWorld(opts = {}) {
             w.put(`${home}/cert.pem`, '', 0o644);
             w.put(`${home}/key.pem`, '', 0o600);
             w.put(`${home}/config.xml`, GENERATED.replace(/<apikey>[^<]*<\/apikey>/, `<apikey>${FAKE_KEY}</apikey>`), 0o600);
+            w.devices.clear();                                           // a new instance knows no device and no folder
+            w.folders.clear();
             w.devices.set(w.ownId, {name: 'machine', introducer: false, autoAcceptFolders: false, introducedBy: ''});
             return {rc: 0, out: `INF Calculated device ID (device=${w.ownId})\n`};
         }

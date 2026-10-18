@@ -1,0 +1,7 @@
+{"v":1,"event":"progress","step":"service","state":"start"}
+{"v":1,"event":"progress","step":"service","state":"ok"}
+{"v":1,"event":"progress","step":"instance","state":"start"}
+{"v":1,"event":"progress","step":"instance","state":"ok"}
+{"v":1,"event":"progress","step":"folder","state":"start"}
+{"v":1,"event":"progress","step":"folder","state":"ok"}
+{"v":1,"event":"result","state":"not-set-up"}

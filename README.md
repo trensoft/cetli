@@ -30,6 +30,9 @@ To connect two computers, open **Sync…** on both. Each shows its own ID. On th
 that knocks, after you have compared the ID shown there with the ID on the other computer (compare at least the first two
 groups); or type the ID of the other computer into the field. The window says *Connected* only when the program has proof from
 the other computer's side. **Stop syncing** removes the other computer and its share; it never removes the folder or a note.
+If the sync program does not answer, the error window offers **Try again** (starts the sync program again, touches no data) and **Reset sync** (after a
+confirmation: moves the own directory of the sync program aside under a time-stamped name, takes away the marker of cetli's own folder, and starts again at the
+ID page with a new ID; no note is touched; the other computer must stop syncing too). On the command line: `cetli-sync restart`, `cetli-sync reset`.
 
 What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): two computers are the supported case.
 cetli pairs a computer with exactly one other computer; three or more cannot be set up in this version. Not measured: a real network behind a default firewall or NAT,

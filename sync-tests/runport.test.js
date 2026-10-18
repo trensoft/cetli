@@ -82,13 +82,14 @@ test('short and one-dash spellings of the forbidden flags are refused too; a neg
 test('systemctl: only the closed calls on our own unit', async () => {
     const s = stub();
     const port = createRunPort({spawn: s.spawn, hostEnv: CALLER, home: HOME});
-    for (const ok of [['--user', 'enable', '--now', UNIT_NAME], ['--user', 'disable', '--now', UNIT_NAME], ['--user', 'disable', UNIT_NAME], ['--user', 'stop', UNIT_NAME], ['--user', 'is-active', UNIT_NAME]])
+    for (const ok of [['--user', 'enable', '--now', UNIT_NAME], ['--user', 'disable', '--now', UNIT_NAME], ['--user', 'disable', UNIT_NAME], ['--user', 'stop', UNIT_NAME], ['--user', 'is-active', UNIT_NAME],
+        ['--user', 'reset-failed', UNIT_NAME], ['--user', 'restart', UNIT_NAME]])
         await port.systemctl(ok);
     assert.equal(s.calls[0].argv[0], SYSTEMCTL_EXE);
     const sneaky = {toJSON: () => '--user'};                     // an object that serialises like an allowed argument
     assert.throws(() => port.systemctl([sneaky, 'stop', UNIT_NAME]), /not allowed/);
     for (const bad of [[], ['--user', 'enable', '--now', 'syncthing.service'], ['enable', '--now', UNIT_NAME], ['--user', 'enable', '--now', UNIT_NAME, 'other.service'],
-        ['--system', 'enable', '--now', UNIT_NAME], ['--user', 'mask', UNIT_NAME], ['--user', 'daemon-reload'], ['--user', 'start', 'x;y'], 'enable'])
+        ['--system', 'enable', '--now', UNIT_NAME], ['--user', 'mask', UNIT_NAME], ['--user', 'restart'], ['--user', 'restart', 'other.service'], ['--user', 'reset-failed'], ['--user', 'reset-failed', 'other.service'], ['--user', 'restart', '--now', UNIT_NAME], ['--user', 'daemon-reload'], ['--user', 'start', 'x;y'], 'enable'])
         assert.throws(() => port.systemctl(bad), /not allowed/, JSON.stringify(bad));
 });
 

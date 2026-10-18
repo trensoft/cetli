@@ -43,11 +43,12 @@ export function linkKey(status) {
 }
 
 // What an error offers. 'edit' = the message sits under the field; 'stop' = offer "Stop syncing"; 'check' = "Check again"; 'retry' = "Try
-// again"; 'none' = nothing (the foreign entry stays after a retry, so no button: Robert 8389).
+// again"; 'restart' = "Try again" that starts the sync program again (the engine's `restart`); 'none' = nothing (the foreign entry stays after a
+// retry, so no button: Robert 8389). A second way out can follow (SECONDARY): 'reset' = "Reset sync", after a confirmation.
 const ACTIONS = Object.freeze({
     [CODE_NO_BACKEND]: 'check',
     E_NO_USER_SYSTEMD: 'none',
-    E_SERVICE_TIMEOUT: 'retry',
+    E_SERVICE_TIMEOUT: 'restart',
     E_CONFIG_UNSAFE: 'none',
     E_CLI_FAILED: 'retry',
     E_STFOLDER_EXISTS: 'none',
@@ -66,10 +67,16 @@ const ACTIONS = Object.freeze({
     E_INTERNAL: 'retry',
 });
 
+// The way out when the first action does not help: a sync program that does not answer can be started again, and if it still does not, the
+// window can put this computer back to the start (the engine's `reset`).
+const SECONDARY = Object.freeze({
+    E_SERVICE_TIMEOUT: 'reset',
+});
+
 export function errorView(code) {
     const known = Object.hasOwn(ACTIONS, code);
     const c = known ? code : 'E_INTERNAL';
-    return {code: c, neutral: isNeutralCode(c), action: ACTIONS[c]};
+    return {code: c, neutral: isNeutralCode(c), action: ACTIONS[c], ...(Object.hasOwn(SECONDARY, c) ? {secondary: SECONDARY[c]} : {})};
 }
 
 // The ID in two rows of four groups for a monospace label, and the short line to compare (the first two groups).

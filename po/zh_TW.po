@@ -527,6 +527,23 @@ msgid "Stop syncing"
 msgstr ""
 
 #: app/strings.js
+msgid "Reset sync"
+msgstr ""
+
+#: app/strings.js
+msgid "Reset sync on this computer?"
+msgstr ""
+
+#. Translators: Stop syncing is the name of a button in this window, keep it the same as its translation.
+#: app/strings.js
+msgid ""
+"This computer gets a new ID. On the other computer, press Stop syncing "
+"too: it allows only one partner and would not accept the new ID. Your notes "
+"stay on both computers. Afterwards you enter the ID of the other computer "
+"again."
+msgstr ""
+
+#: app/strings.js
 msgid "Stop syncing with this computer?"
 msgstr ""
 

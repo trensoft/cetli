@@ -56,6 +56,30 @@ async function scenario() {
     Gio.File.new_for_path(`${base}/link`).make_symbolic_link(`${base}/target`, null);
     check(f.isSymlink(`${base}/link`) && !f.isSymlink(`${base}/target`) && !f.isSymlink(`${base}/none`), 'isSymlink does not follow the link');
     check(f.modeOf(`${base}/none`) === null, 'modeOf of a missing path is null');
+    // `reset` only: rename within one directory, one file, one EMPTY directory
+    f.mkdirp(`${base}/inst/sub`, 0o700);
+    f.writeText(`${base}/inst/sub/key`, 'k', 0o600);
+    f.rename(`${base}/inst`, `${base}/inst.bak`);
+    check(!f.exists(`${base}/inst`) && f.readText(`${base}/inst.bak/sub/key`) === 'k' && f.modeOf(`${base}/inst.bak`) === 0o700, 'rename moves the whole directory with its content and its mode');
+    f.mkdirp(`${base}/occupied`, 0o700);
+    f.mkdirp(`${base}/mover`, 0o700);
+    let threw = false;
+    try { f.rename(`${base}/mover`, `${base}/occupied`); } catch { threw = true; }
+    check(threw && f.exists(`${base}/mover`), 'a rename onto a path that exists is refused and moves nothing');
+    threw = false;
+    try { f.rename(`${base}/nowhere`, `${base}/nowhere2`); } catch { threw = true; }
+    check(threw, 'a rename of a missing path throws');
+    f.mkdirp(`${base}/m/.stfolder`, 0o755);
+    GLib.file_set_contents(`${base}/m/.stfolder/hint.txt`, 'h');
+    threw = false;
+    try { f.removeDir(`${base}/m/.stfolder`); } catch { threw = true; }
+    check(threw && f.exists(`${base}/m/.stfolder/hint.txt`), 'removeDir refuses a directory with something in it');
+    f.removeFile(`${base}/m/.stfolder/hint.txt`);
+    f.removeDir(`${base}/m/.stfolder`);
+    check(!f.exists(`${base}/m/.stfolder`) && f.exists(`${base}/m`), 'removeFile and removeDir take exactly the file and the empty directory');
+    Gio.File.new_for_path(`${base}/m/lnk`).make_symbolic_link(`${base}/target`, null);
+    f.removeFile(`${base}/m/lnk`);
+    check(!f.isSymlink(`${base}/m/lnk`) && f.exists(`${base}/target`), 'removing a link removes the link and not what it points to');
 
     // ---- the bridge's process layer with a real child: lines in order, the exit after the last line, the caps, bad UTF-8, stdin, kill
     const env = ['PATH=/usr/bin:/bin'];
@@ -93,6 +117,10 @@ async function scenario() {
     check(r.rc === 0 && line.length === 1 && JSON.parse(line[0]).state === 'no-syncthing' && JSON.parse(line[0]).v === 1, 'main.js status: one result line, rc 0');
     r = await run(['frob']);
     check(r.rc === 2, 'main.js: an unknown verb is a usage error, rc 2');
+    r = await run(['reset', '--stop']);
+    check(r.rc === 2, 'main.js: reset takes no flag (and a usage error starts nothing)');
+    r = await run(['restart', '--stop']);
+    check(r.rc === 2, 'main.js: restart takes no flag');
     r = await run(['join'], 'not an id\n');
     const jl = r.out.trim().split('\n').filter(l => l.startsWith('{'));
     check(r.rc === 1 && jl.length === 1 && JSON.parse(jl[0]).event === 'error', 'main.js join with a line on stdin: one error line, rc 1');

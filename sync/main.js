@@ -15,7 +15,7 @@ import GLib from 'gi://GLib';
 const out = line => print(line);
 
 function usage() {
-    printerr('usage: cetli-sync status|setup|own-id|host|join|forget [--stop]');
+    printerr('usage: cetli-sync status|setup|own-id|host|join|restart|reset|forget [--stop]');
     System.exit(2);
 }
 
