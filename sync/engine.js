@@ -213,21 +213,30 @@ export function createEngine(ports) {
     // `linkGapMs` apart on the monotonic clock (Interface 3, option (a) of 0G.2; there is no `cli` completion, so nothing says "synced").
     // A failed or timed-out call, a not-connected sample, or a gap of more than twice `linkGapMs` between two samples restarts the count.
     // `connectedS` is the length of the unbroken run this engine saw, first to last sample, in whole seconds; null unless stable.
+    // A sample also says `failed` (the call itself failed or timed out): for the count that is a broken sample, but `status` must not turn it into
+    // "not connected" (0.2.6: the call said nothing about the link).
     function createLinkTracker(peerId) {
         let consecutive = 0;
         let runStart = null;
         let lastAt = null;
         let everConnected = false;
+        let queryLogged = false;
         const v = {link: 'none', connectedS: null, connected: false};
         return {
             get value() { return {...v}; },
             async sample() {
                 let connected = false;
+                let failed = false;
                 try {
                     connected = await readConnected(peerId);
                 } catch (e) {
                     if (!(e instanceof Fail))
                         throw e;                                              // a failed call is a broken sample, not the end of the run
+                    failed = true;
+                    if (!queryLogged) {
+                        queryLogged = true;
+                        log('link: the connection query failed');
+                    }
                 }
                 const at = ports.monotonic();
                 if (lastAt !== null && at - lastAt > 2 * t.linkGapMs)
@@ -238,7 +247,7 @@ export function createEngine(ports) {
                     consecutive = 0;
                     v.link = everConnected ? 'flapping' : 'none';
                     v.connectedS = null;
-                    return {...v};
+                    return {...v, failed};
                 }
                 everConnected = true;
                 if (consecutive === 0)
@@ -249,7 +258,7 @@ export function createEngine(ports) {
                 const stable = consecutive >= t.linkSamples && spanMs >= (t.linkSamples - 1) * t.linkGapMs;
                 v.link = stable ? 'stable' : 'flapping';
                 v.connectedS = stable ? Math.floor(spanMs / 1000) : null;
-                return {...v};
+                return {...v, failed};
             },
         };
     }
@@ -295,11 +304,14 @@ export function createEngine(ports) {
         return seen === 0 ? null : degraded ? 'degraded' : 'ok';
     }
 
-    // status: the first not-connected sample ends the run; only the success path pays the K samples.
+    // status: the first not-connected sample ends the run; only the success path pays the K samples. A sample whose call failed ends it too,
+    // but as "unknown" (link null, connected null): the window shows "Checking the connection" and asks again, it never claims "not connected".
     async function measureLink(peerId) {
         const tracker = createLinkTracker(peerId);
         for (let i = 0; i < t.linkSamples + 1; i++) {
             const s = await tracker.sample();
+            if (s.failed)
+                return {link: null, connected: null, connectedS: null};
             if (!s.connected || s.link === 'stable')
                 return s;
             if (i < t.linkSamples)

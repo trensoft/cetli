@@ -65,7 +65,7 @@ function loadCss() {
 // `dirs`, `fs` and `platform` can be given by a test; the product uses the defaults of the core's Gio layer. `bridge` and `homeDir` are given
 // by a test too (a fake bridge replays the engine; the home is where the first-start hook looks for `.stfolder` markers).
 // `firstStartSync`: the product (main.js) turns the first-start sync window on; the tests of the notes leave it off.
-export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false} = {}) {
+export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false, linkPollMs = undefined} = {}) {
     const gtkApp = new Adw.Application({application_id: APP_ID, flags: Gio.ApplicationFlags.DEFAULT_FLAGS});
     const store = createStore({fs, platform, dirs, resolveConflicts: true});   // the copies of Syncthing conflicts are resolved by the product; the store default stays off
     const windows = new Map();
@@ -217,7 +217,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     // The menu item and the first start. A window that is already open is brought to the front.
     function showSync({firstStart = false} = {}) {
         if (syncWin === null)
-            syncWin = new SyncWizard({ctl, bridge: syncBridge, firstStart});
+            syncWin = new SyncWizard({ctl, bridge: syncBridge, firstStart, ...(linkPollMs === undefined ? {} : {linkPollMs})});
         syncWin.present();
         return syncWin;
     }

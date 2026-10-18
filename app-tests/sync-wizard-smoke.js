@@ -87,7 +87,7 @@ class FakeBridge {
 }
 
 const fake = new FakeBridge();
-const app = createApp({dirs, bridge: fake, homeDir: HOME});
+const app = createApp({dirs, bridge: fake, homeDir: HOME, linkPollMs: 0});            // the link poll has its own smoke (link-poll-smoke.js)
 const {gtkApp} = app;
 
 const labelText = l => l.get_label();
