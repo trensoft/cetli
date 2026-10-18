@@ -257,6 +257,8 @@ test('foreignDevices and folderAnomaly are one predicate each (T-N1, T-N14)', ()
     assert.equal(foreignDevices([d(OWN, {introducer: true})], OWN).length, 1, 'the own device is no introducer');
     assert.equal(foreignDevices([d(OWN, {autoAcceptFolders: true})], OWN).length, 1);
     assert.equal(foreignDevices([d(OWN), d(PEER, {autoAcceptFolders: true})], OWN).length, 1);
+    assert.equal(foreignDevices([d(OWN), d(PEER, {autoAcceptFolders: true, introducedBy: OTHER})], OWN).length, 1, 'an introduced computer must not auto-accept folders either');
+    assert.equal(foreignDevices([d(OWN), d(PEER, {skipIntroductionRemovals: true, introducedBy: OTHER})], OWN).length, 1);
     assert.equal(foreignDevices([d(OWN), d(PEER, {skipIntroductionRemovals: true})], OWN).length, 1);
     assert.equal(foreignDevices([d(OWN, {skipIntroductionRemovals: true}), d(PEER)], OWN).length, 0, 'the own device has no one to skip');
     for (const bad of [OWN, PEER, 'invalid', 'x', OTHER.toLowerCase()])
