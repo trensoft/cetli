@@ -1,0 +1,157 @@
+{
+  "status-no-syncthing.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-not-set-up.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-stfolder-conflict.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-foreign-config.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-set-up.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-half.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-paired.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-flapping.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "setup-ok.ndjson": {
+    "verb": "setup",
+    "rc": 0,
+    "expect": "result"
+  },
+  "setup-fail-systemd.ndjson": {
+    "verb": "setup",
+    "rc": 1,
+    "expect": "error:E_NO_USER_SYSTEMD"
+  },
+  "setup-foreign-device.ndjson": {
+    "verb": "setup",
+    "rc": 1,
+    "expect": "error:E_FOREIGN_DEVICE"
+  },
+  "setup-stfolder-exists.ndjson": {
+    "verb": "setup",
+    "rc": 1,
+    "expect": "error:E_STFOLDER_EXISTS"
+  },
+  "own-id-ok.ndjson": {
+    "verb": "own-id",
+    "rc": 0,
+    "expect": "result"
+  },
+  "forget-ok.ndjson": {
+    "verb": "forget",
+    "rc": 0,
+    "expect": "result"
+  },
+  "host-ok.ndjson": {
+    "verb": "host",
+    "rc": 0,
+    "expect": "result"
+  },
+  "host-candidate-unreadable-name.ndjson": {
+    "verb": "host",
+    "rc": 0,
+    "expect": "result"
+  },
+  "host-expired.ndjson": {
+    "verb": "host",
+    "rc": 1,
+    "expect": "error:E_EXPIRED"
+  },
+  "host-ambiguous.ndjson": {
+    "verb": "host",
+    "rc": 1,
+    "expect": "error:E_PENDING_AMBIGUOUS"
+  },
+  "host-foreign-device.ndjson": {
+    "verb": "host",
+    "rc": 1,
+    "expect": "error:E_FOREIGN_DEVICE"
+  },
+  "host-peer-timeout.ndjson": {
+    "verb": "host",
+    "rc": 1,
+    "expect": "error:E_PEER_TIMEOUT"
+  },
+  "host-stdin-eof.ndjson": {
+    "verb": "host",
+    "rc": 1,
+    "expect": "E_ENGINE_DIED"
+  },
+  "join-ok.ndjson": {
+    "verb": "join",
+    "rc": 0,
+    "expect": "result"
+  },
+  "join-flapping.ndjson": {
+    "verb": "join",
+    "rc": 1,
+    "expect": "error:E_PEER_TIMEOUT"
+  },
+  "join-not-up-to-date.ndjson": {
+    "verb": "join",
+    "rc": 1,
+    "expect": "error:E_NOT_UP_TO_DATE"
+  },
+  "join-bad-id.ndjson": {
+    "verb": "join",
+    "rc": 1,
+    "expect": "error:E_BAD_ID"
+  },
+  "join-own-id.ndjson": {
+    "verb": "join",
+    "rc": 1,
+    "expect": "error:E_OWN_ID"
+  },
+  "join-already-paired.ndjson": {
+    "verb": "join",
+    "rc": 1,
+    "expect": "error:E_ALREADY_PAIRED"
+  },
+  "join-foreign-device.ndjson": {
+    "verb": "join",
+    "rc": 1,
+    "expect": "error:E_FOREIGN_DEVICE"
+  },
+  "oversize.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "E_PROTOCOL"
+  },
+  "not-json.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "E_PROTOCOL"
+  },
+  "v2.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "E_PROTOCOL"
+  }
+}

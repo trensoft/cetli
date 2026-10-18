@@ -1,0 +1,13 @@
+{"v":1,"event":"progress","step":"instance","state":"start"}
+{"v":1,"event":"progress","step":"instance","state":"ok"}
+{"v":1,"event":"candidate","id":"VTTWEJK-SMIOBMH-3FIWS7V-JFC2CL4-FCR3BU6-PEPADRQ-EYVVD3Z-BIGMUQ5","name":"laptop-b"}
+{"v":1,"event":"progress","step":"device","state":"start"}
+{"v":1,"event":"progress","step":"device","state":"ok"}
+{"v":1,"event":"progress","step":"share","state":"start"}
+{"v":1,"event":"progress","step":"share","state":"ok"}
+{"v":1,"event":"peer","id":"VTTWEJK-SMIOBMH-3FIWS7V-JFC2CL4-FCR3BU6-PEPADRQ-EYVVD3Z-BIGMUQ5","name":"laptop-b"}
+{"v":1,"event":"progress","step":"connect","state":"start"}
+{"v":1,"event":"link","state":"none","up_to_date":false}
+{"v":1,"event":"link","state":"stable","up_to_date":false}
+{"v":1,"event":"link","state":"stable","up_to_date":true}
+{"v":1,"event":"result","peer":{"id":"VTTWEJK-SMIOBMH-3FIWS7V-JFC2CL4-FCR3BU6-PEPADRQ-EYVVD3Z-BIGMUQ5","name":"laptop-b"},"connected":true,"link":"stable","up_to_date":true,"notes":7}

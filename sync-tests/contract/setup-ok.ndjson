@@ -1,0 +1,7 @@
+{"v":1,"event":"progress","step":"instance","state":"start"}
+{"v":1,"event":"progress","step":"instance","state":"ok"}
+{"v":1,"event":"progress","step":"folder","state":"start"}
+{"v":1,"event":"progress","step":"folder","state":"ok"}
+{"v":1,"event":"progress","step":"service","state":"start"}
+{"v":1,"event":"progress","step":"service","state":"ok"}
+{"v":1,"event":"result","own_id":"F6HEWOE-4KSACQ5-5MAX7IC-HAP3EGW-AQYBTIX-V74MXIF-ZB3GZN6-4T3QYQZ","state":"set-up"}

@@ -1,0 +1,299 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// PURE: the wire contract between the engine (`cetli-sync`) and the window's bridge (PLAN-WIZARD-INTERFACE 2, 2a, 3). One JSON object per
+// line on stdout, `{"v":1,"event":"<name>", ...}`. Both sides use THIS file: the engine to write (emit), the bridge to read (parse and
+// the run checker), and the contract fixtures in sync-tests/contract/ are replayed against it on both sides.
+//
+// Reader rules (section 3): unknown fields are ignored, unknown `progress.step` values are ignored by the window, an unknown error
+// `code` is read as the generic E_INTERNAL, `v` other than 1 is refused. Anything else that does not fit is a protocol violation: parse
+// returns null and the bridge raises E_PROTOCOL and kills the process. The engine's own text never reaches the window: only codes.
+//
+// Today's variant is the ID exchange with one button (2a). The code form (events `code` and `attempts`, errors E_BAD_CODE / E_OWN_CODE)
+// is 0.2.6: its shapes are RESERVED here and neither emitted nor accepted.
+
+import {displayName, isCanonicalId} from './ids.js';
+
+export const PROTOCOL_VERSION = 1;
+export const MAX_LINE_BYTES = 4 * 1024;
+export const MAX_TOTAL_BYTES = 64 * 1024;
+
+export const EXIT_RESULT = 0;
+export const EXIT_ERROR = 1;
+export const EXIT_USAGE = 2;
+
+export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget']);
+export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'device', 'share', 'connect', 'sync']);
+export const PROGRESS_STATES = Object.freeze(['start', 'ok']);
+export const STATUS_STATES = Object.freeze(['no-syncthing', 'not-set-up', 'stfolder-conflict', 'foreign-config', 'set-up', 'half', 'paired']);
+export const LINK_STATES = Object.freeze(['none', 'flapping', 'stable']);
+
+// The closed list of error codes (section 3). Information codes are shown neutral by the window: rc 1 and the closed list stay.
+export const ERROR_CODES = Object.freeze([
+    'E_NO_SYNCTHING', 'E_NO_USER_SYSTEMD', 'E_SERVICE_TIMEOUT', 'E_CONFIG_UNSAFE', 'E_CLI_FAILED',
+    'E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED', 'E_HALF_STATE_OTHER', 'E_PEER_TIMEOUT', 'E_NOT_UP_TO_DATE', 'E_EXPIRED',
+    'E_PENDING_TOO_LARGE', 'E_PENDING_AMBIGUOUS', 'E_BAD_ID', 'E_OWN_ID', 'E_FOREIGN_DEVICE',
+    'E_BUSY', 'E_PROTOCOL', 'E_ENGINE_DIED', 'E_INTERNAL',
+]);
+export const INFORMATION_CODES = Object.freeze(['E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED']);
+// Reserved for 0.2.6 (the code form): in the Interface file's closed list, but not emitted today and not accepted on the wire.
+export const RESERVED_CODES = Object.freeze(['E_BAD_CODE', 'E_OWN_CODE']);
+// Raised by the bridge, never by the engine: an engine line that carries one is a violation.
+export const BRIDGE_ONLY_CODES = Object.freeze(['E_BUSY', 'E_PROTOCOL', 'E_ENGINE_DIED']);
+export const GENERIC_CODE = 'E_INTERNAL';
+
+// Which verbs may raise a code, where the Interface file fixes it. A code not listed here may come from any verb.
+const CODE_SCOPE = Object.freeze({
+    E_BAD_ID: ['join'],
+    E_OWN_ID: ['join'],
+    E_PENDING_TOO_LARGE: ['host'],
+    E_PENDING_AMBIGUOUS: ['host'],
+    E_EXPIRED: ['host'],
+    E_PEER_TIMEOUT: ['host', 'join'],
+    E_NOT_UP_TO_DATE: ['host', 'join'],
+    E_FOREIGN_DEVICE: ['setup', 'host', 'join'],             // `status` reports the state foreign-config instead; own-id and forget do not read it
+});
+
+export const isNeutralCode = code => INFORMATION_CODES.includes(code);
+export const isKnownStep = step => PROGRESS_STEPS.includes(step);
+
+export class ProtocolError extends Error {
+    constructor(what) {
+        super(`protocol: ${what}`);
+        this.name = 'ProtocolError';
+    }
+}
+
+// ---- field checks -----------------------------------------------------------------------------------------------------------------
+
+const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isBool = v => typeof v === 'boolean';
+const boolOrNull = v => v === null || isBool(v);
+const isCount = v => Number.isInteger(v) && v >= 0 && v <= 1e9;
+const idOrNull = v => v === null || isCanonicalId(v);
+// A name is already reduced by the engine (ids.js displayName): null, or 1-32 printable ASCII characters. Nothing else crosses.
+const isName = v => v === null || (typeof v === 'string' && v.length > 0 && v.length <= 32 && displayName(v) === v);
+const isPeer = v => isObj(v) && isCanonicalId(v.id) && isName(v.name);
+
+const RESULT_SCHEMAS = {
+    status: r => STATUS_STATES.includes(r.state) && idOrNull(r.own_id) && (r.peer === null || isPeer(r.peer)) && boolOrNull(r.connected) &&
+        (r.link === null || LINK_STATES.includes(r.link)) && boolOrNull(r.shared) && boolOrNull(r.up_to_date) &&
+        (r.notes === null || isCount(r.notes)) && isBool(r.waiting) && statusRules(r),
+    setup: r => isCanonicalId(r.own_id) && r.state === 'set-up',
+    'own-id': r => isCanonicalId(r.own_id),
+    host: r => isPeer(r.peer) && r.peer !== null && isBool(r.connected) && connectedResult(r) && isCount(r.notes),
+    join: r => isPeer(r.peer) && isCanonicalId(r.own_id) && isBool(r.connected) && connectedResult(r) && isCount(r.notes),
+    forget: r => r.state === 'set-up',
+};
+const RESULT_KEYS = {
+    status: ['state', 'own_id', 'peer', 'connected', 'link', 'shared', 'up_to_date', 'notes', 'waiting'],
+    setup: ['own_id', 'state'],
+    'own-id': ['own_id'],
+    host: ['peer', 'connected', 'link', 'up_to_date', 'notes'],
+    join: ['peer', 'own_id', 'connected', 'link', 'up_to_date', 'notes'],
+    forget: ['state'],
+};
+
+// `result` of host and join is already the proof: link stable AND up to date, nothing else (section 3, `link`).
+const connectedResult = r => r.link === 'stable' && r.up_to_date === true;
+
+// `link` is null unless the state is half or paired; foreign-config takes precedence over paired, so its link is null too.
+function statusRules(r) {
+    if (r.state !== 'half' && r.state !== 'paired')
+        return r.link === null && r.up_to_date === null && r.shared === null;
+    return r.peer !== null;
+}
+
+const has = (o, keys) => keys.every(k => Object.hasOwn(o, k));
+
+// The fields of one event (without v/event), or false. The same table checks emit and parse.
+function fieldsOk(event, verb) {
+    switch (event.event) {
+    case 'progress':
+        return typeof event.step === 'string' && PROGRESS_STATES.includes(event.state);
+    case 'candidate':
+        return isCanonicalId(event.id) && isName(event.name) && Object.hasOwn(event, 'name');
+    case 'link':
+        return LINK_STATES.includes(event.state) && isBool(event.up_to_date);
+    case 'peer':
+        return isCanonicalId(event.id) && isName(event.name) && Object.hasOwn(event, 'name');
+    case 'error':
+        return typeof event.code === 'string' && (event.step === undefined || typeof event.step === 'string');
+    case 'result': {
+        if (verb === null)
+            return true;                                   // the shape is checked once the verb is known
+        const keys = RESULT_KEYS[verb];
+        return keys !== undefined && has(event, keys) && RESULT_SCHEMAS[verb](event);
+    }
+    default:
+        return false;
+    }
+}
+
+export const EVENT_NAMES = Object.freeze(['progress', 'candidate', 'link', 'peer', 'result', 'error']);
+
+// ---- emit (engine side) -----------------------------------------------------------------------------------------------------------
+
+// The line for an event, without the newline. Strict: an unknown event or field, a reserved or bridge-only code, a value out of shape
+// is a bug of the engine and throws. `verb` is needed for a `result` and for the per-verb rules of an `error`.
+export function emit(event, verb = null) {
+    if (!isObj(event) || !EVENT_NAMES.includes(event.event))
+        throw new ProtocolError('unknown event');
+    if (event.event === 'result' && (verb === null || !VERBS.includes(verb)))
+        throw new ProtocolError('a result needs its verb');
+    const allowed = {
+        progress: ['step', 'state'], candidate: ['id', 'name'], link: ['state', 'up_to_date'], peer: ['id', 'name'], error: ['code', 'step'],
+        result: verb === null ? [] : RESULT_KEYS[verb] ?? [],
+    }[event.event];
+    for (const k of Object.keys(event)) {
+        if (k !== 'event' && !allowed.includes(k))
+            throw new ProtocolError(`field ${k} is not part of ${event.event}`);
+    }
+    if (!fieldsOk(event, verb))
+        throw new ProtocolError(`${event.event} does not fit the contract`);
+    if (event.event === 'progress' && !isKnownStep(event.step))
+        throw new ProtocolError('unknown progress step');
+    if (event.event === 'error') {
+        if (!ERROR_CODES.includes(event.code) || BRIDGE_ONLY_CODES.includes(event.code))
+            throw new ProtocolError('error code is not one the engine may raise');
+        if (verb !== null && CODE_SCOPE[event.code] && !CODE_SCOPE[event.code].includes(verb))
+            throw new ProtocolError(`${event.code} is not raised by ${verb}`);
+        if (event.step !== undefined && !isKnownStep(event.step))
+            throw new ProtocolError('unknown step on an error');
+    }
+    const line = JSON.stringify({v: PROTOCOL_VERSION, ...event});
+    if (new TextEncoder().encode(line).length > MAX_LINE_BYTES)
+        throw new ProtocolError('line too long');
+    return line;
+}
+
+// ---- parse (bridge side) ----------------------------------------------------------------------------------------------------------
+
+// The event of a line, or null (not JSON, not an object, too long, v != 1, an event or a field out of shape). An unknown error code is
+// read as E_INTERNAL; an unknown progress step is returned as it is and ignored by the caller (isKnownStep). `verb` selects the
+// schema of a `result`; without it a result is only checked to be an object.
+export function parse(line, verb = null) {
+    if (typeof line !== 'string' || new TextEncoder().encode(line).length > MAX_LINE_BYTES)
+        return null;
+    let obj;
+    try {
+        obj = JSON.parse(line);
+    } catch (e) {
+        return null;
+    }
+    if (!isObj(obj) || obj.v !== PROTOCOL_VERSION || !EVENT_NAMES.includes(obj.event))
+        return null;
+    if (!fieldsOk(obj, verb))
+        return null;
+    const {v, ...event} = obj;
+    if (event.event === 'error') {
+        if (BRIDGE_ONLY_CODES.includes(event.code))
+            return null;
+        if (!ERROR_CODES.includes(event.code))
+            return {...event, code: GENERIC_CODE};
+        if (verb !== null && CODE_SCOPE[event.code] && !CODE_SCOPE[event.code].includes(verb))
+            return null;
+    }
+    return event;
+}
+
+// ---- one run (bridge side, and the fixture replay) -------------------------------------------------------------------------------
+
+// A state machine for the lines of ONE process run. `feed(line)` for each stdout line; `finish(rc)` when the process has ended.
+// feed returns {ok: true, event} or {ok: false, code: 'E_PROTOCOL'} (the bridge kills the process). finish returns
+// {ok: true, outcome: {kind: 'result'|'error', ...}} or {ok: false, code}, where a missing terminal line or a code other than 0/1 is
+// E_ENGINE_DIED and a line that broke a rule is E_PROTOCOL.
+const VERB_EVENTS = {
+    status: [], setup: [], 'own-id': [], forget: [],
+    host: ['candidate', 'link', 'peer'],
+    join: ['link', 'peer'],
+};
+
+export function createRunChecker(verb) {
+    if (!VERBS.includes(verb))
+        throw new ProtocolError('unknown verb');
+    let total = 0;
+    let terminal = null;
+    let broken = false;
+    const violate = () => {
+        broken = true;
+        return {ok: false, code: 'E_PROTOCOL'};
+    };
+    return {
+        feed(line) {
+            if (broken || terminal !== null)
+                return violate();                          // nothing after the terminal line
+            total += new TextEncoder().encode(line).length + 1;
+            if (total > MAX_TOTAL_BYTES)
+                return violate();
+            const event = parse(line, verb);
+            if (event === null)
+                return violate();
+            if (event.event !== 'progress' && event.event !== 'result' && event.event !== 'error' && !VERB_EVENTS[verb].includes(event.event))
+                return violate();
+            if (event.event === 'result' || event.event === 'error')
+                terminal = event;
+            return {ok: true, event};
+        },
+        finish(rc) {
+            if (broken)
+                return {ok: false, code: 'E_PROTOCOL'};
+            if (rc === EXIT_USAGE)
+                return {ok: false, code: 'E_ENGINE_DIED', usage: true};
+            if (terminal === null || (rc !== EXIT_RESULT && rc !== EXIT_ERROR))
+                return {ok: false, code: 'E_ENGINE_DIED'};
+            if ((terminal.event === 'result') !== (rc === EXIT_RESULT))
+                return {ok: false, code: 'E_ENGINE_DIED'};
+            return terminal.event === 'result' ? {ok: true, outcome: {kind: 'result', result: terminal}} :
+                {ok: true, outcome: {kind: 'error', code: terminal.code, step: terminal.step ?? null}};
+        },
+    };
+}
+
+// All lines of a finished run at once (the fixture replay and the tests).
+export function checkRun(verb, lines, rc) {
+    const checker = createRunChecker(verb);
+    const events = [];
+    for (const line of lines) {
+        const r = checker.feed(line);
+        if (!r.ok)
+            return {ok: false, code: r.code, events};
+        events.push(r.event);
+    }
+    const end = checker.finish(rc);
+    return end.ok ? {ok: true, events, outcome: end.outcome} : {ok: false, code: end.code, ...(end.usage ? {usage: true} : {}), events};
+}
+
+// ---- argv and stdin (what the window may ask for) ---------------------------------------------------------------------------------
+
+// The closed argv of every call: no free-form argument. Nothing the user typed is an argument (the ID goes through stdin).
+export function argvFor(verb, flags = {}) {
+    if (!VERBS.includes(verb))
+        throw new ProtocolError('unknown verb');
+    const known = verb === 'forget' ? ['stop'] : [];
+    for (const k of Object.keys(flags)) {
+        if (!known.includes(k))
+            throw new ProtocolError('unknown flag');
+    }
+    return verb === 'forget' && flags.stop === true ? [verb, '--stop'] : [verb];
+}
+
+// `join` reads ONE line: the typed ID, as typed. The window does not canonicalise; it only refuses what cannot be one line.
+export function joinStdin(typed) {
+    if (typeof typed !== 'string' || /[\r\n\0]/.test(typed.replace(/[\r\n]+$/, '')))
+        return null;
+    return `${typed.replace(/[\r\n]+$/, '')}\n`;
+}
+
+// `host` may be sent ONE line `accept <ID>`.
+export function acceptLine(id) {
+    if (!isCanonicalId(id))
+        throw new ProtocolError('accept needs a canonical ID');
+    return `accept ${id}\n`;
+}
+
+// The engine's reading of a stdin line of `host`: the ID of an accept, or null (every other line is ignored).
+export function parseAcceptLine(line) {
+    if (typeof line !== 'string')
+        return null;
+    const m = /^accept ([^ \r\n]+)\r?\n?$/.exec(line);
+    return m !== null && isCanonicalId(m[1]) ? m[1] : null;
+}

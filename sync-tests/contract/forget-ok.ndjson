@@ -1,0 +1,3 @@
+{"v":1,"event":"progress","step":"device","state":"start"}
+{"v":1,"event":"progress","step":"device","state":"ok"}
+{"v":1,"event":"result","state":"set-up"}
