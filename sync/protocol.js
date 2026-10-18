@@ -8,9 +8,13 @@
 // returns null and the bridge raises E_PROTOCOL and kills the process. The engine's own text never reaches the window: only codes.
 //
 // Today's variant is the ID exchange with one button (2a). The code form (events `code` and `attempts`, errors E_BAD_CODE / E_OWN_CODE)
-// is 0.2.6: its shapes are RESERVED here and neither emitted nor accepted.
+// stays RESERVED here and is neither emitted nor accepted.
+//
+// 0.2.6 (PLAN-0.2.6 3): a group of up to MAX_COMPUTERS computers. `status` carries a list of peers instead of one; the verbs revoke, finish,
+// harden, promote and ack are new; `forget` takes one ID or `--all`; two new information codes. All of it is additive in v 1.
 
 import {displayName, isCanonicalId, ID_RAW_MAX} from './ids.js';
+import {MAX_COMPUTERS, MAX_PEERS} from './policy.js';
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_LINE_BYTES = 4 * 1024;
@@ -20,8 +24,10 @@ export const EXIT_RESULT = 0;
 export const EXIT_ERROR = 1;
 export const EXIT_USAGE = 2;
 
-export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget']);
-export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'device', 'share', 'connect', 'sync']);
+export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack']);
+// The verbs that take computer IDs as arguments (`forget` also takes `--all`, `ack` also `--all`).
+export const ID_VERBS = Object.freeze(['forget', 'revoke', 'promote', 'ack']);
+export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'device', 'share', 'connect', 'sync', 'freeze', 'remove', 'verify', 'dwell']);
 export const PROGRESS_STATES = Object.freeze(['start', 'ok']);
 export const STATUS_STATES = Object.freeze(['no-syncthing', 'not-set-up', 'stfolder-conflict', 'foreign-config', 'set-up', 'half', 'paired']);
 export const LISTENER_STATES = Object.freeze(['ok', 'degraded', 'down']);
@@ -36,9 +42,9 @@ export const ERROR_CODES = Object.freeze([
     'E_NO_SYNCTHING', 'E_NO_USER_SYSTEMD', 'E_SERVICE_TIMEOUT', 'E_CONFIG_UNSAFE', 'E_CLI_FAILED',
     'E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED', 'E_HALF_STATE_OTHER', 'E_PEER_TIMEOUT', 'E_EXPIRED',
     'E_PENDING_TOO_LARGE', 'E_PENDING_AMBIGUOUS', 'E_BAD_ID', 'E_OWN_ID', 'E_FOREIGN_DEVICE',
-    'E_BUSY', 'E_PROTOCOL', 'E_ENGINE_DIED', 'E_INTERNAL',
+    'E_BUSY', 'E_PROTOCOL', 'E_ENGINE_DIED', 'E_INTERNAL', 'E_GROUP_FULL', 'E_REVOCATION_OPEN',
 ]);
-export const INFORMATION_CODES = Object.freeze(['E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED']);
+export const INFORMATION_CODES = Object.freeze(['E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED', 'E_GROUP_FULL', 'E_REVOCATION_OPEN']);
 // Reserved for 0.2.6 (the code form; E_NOT_UP_TO_DATE needs a `cli` source for the other computer's completion): in the Interface file's
 // closed list, but not emitted today and not accepted on the wire.
 export const RESERVED_CODES = Object.freeze(['E_BAD_CODE', 'E_OWN_CODE', 'E_NOT_UP_TO_DATE']);
@@ -48,13 +54,15 @@ export const GENERIC_CODE = 'E_INTERNAL';
 
 // Which verbs may raise a code, where the Interface file fixes it. A code not listed here may come from any verb.
 const CODE_SCOPE = Object.freeze({
-    E_BAD_ID: ['join'],
+    E_BAD_ID: ['join', 'forget', 'revoke', 'promote', 'ack'],
     E_OWN_ID: ['join'],
+    E_GROUP_FULL: ['host', 'setup'],                          // the group is at (or over) the limit; `status` reports it as over_limit
+    E_REVOCATION_OPEN: ['host', 'join', 'setup', 'promote'],  // a removal is not finished on this computer; `status` reports revocation_open
     E_PENDING_TOO_LARGE: ['host'],
     E_PENDING_AMBIGUOUS: ['host'],
     E_EXPIRED: ['host'],
     E_PEER_TIMEOUT: ['host', 'join'],
-    E_FOREIGN_DEVICE: ['setup', 'host', 'join'],             // `status` reports the state foreign-config instead; own-id and forget do not read it
+    E_FOREIGN_DEVICE: ['setup', 'host', 'join', 'promote'],  // `status` reports the state foreign-config instead; own-id, forget, revoke, finish, harden and ack still run
 });
 
 export const isNeutralCode = code => INFORMATION_CODES.includes(code);
@@ -78,23 +86,45 @@ const idOrNull = v => v === null || isCanonicalId(v);
 const isName = v => v === null || (typeof v === 'string' && v.length > 0 && v.length <= 32 && displayName(v) === v);
 const isPeer = v => isObj(v) && isCanonicalId(v.id) && isName(v.name);
 
+const isIdList = (v, max) => Array.isArray(v) && v.length <= max && v.every(isCanonicalId) && new Set(v).size === v.length;
+const isSmall = v => Number.isInteger(v) && v >= 0 && v <= 99;
+
+// One computer of the group, as `status` lists it (PLAN-0.2.6 3.2). `connected`, `link` and `connected_s` are null together when the link
+// was not measured (foreign-config, over-limit); otherwise `link` is a state, `connected` a boolean and `connected_s` follows the link.
+const isGroupPeer = p => isObj(p) && isCanonicalId(p.id) && isName(p.name) && idOrNull(p.introduced_by) && isBool(p.introducer) && isBool(p.shared) &&
+    isBool(p.new) && isBool(p.returned) && boolOrNull(p.connected) && (p.link === null || LINK_STATES.includes(p.link)) &&
+    (p.link === null ? p.connected === null && p.connected_s === null : p.connected !== null && connectedSOk(p));
+
 const RESULT_SCHEMAS = {
-    status: r => STATUS_STATES.includes(r.state) && idOrNull(r.own_id) && (r.peer === null || isPeer(r.peer)) && boolOrNull(r.connected) &&
-        (r.link === null || LINK_STATES.includes(r.link)) && connectedSOk(r) && (r.listener === null || LISTENER_STATES.includes(r.listener)) && boolOrNull(r.shared) && r.up_to_date === null &&
+    status: r => STATUS_STATES.includes(r.state) && idOrNull(r.own_id) && Array.isArray(r.peers) && r.peers.length <= MAX_COMPUTERS && r.peers.every(isGroupPeer) &&
+        (r.computers === null || (Number.isInteger(r.computers) && r.computers >= 1 && r.computers <= 1e6)) && isSmall(r.max_computers) && r.max_computers >= 2 &&
+        isBool(r.over_limit) && isBool(r.revocation_open) && isSmall(r.harden_pending) && isSmall(r.promote_pending) &&
+        (r.listener === null || LISTENER_STATES.includes(r.listener)) && r.up_to_date === null &&
         (r.notes === null || isCount(r.notes)) && isBool(r.waiting) && statusRules(r),
     setup: r => isCanonicalId(r.own_id) && r.state === 'set-up',
     'own-id': r => isCanonicalId(r.own_id),
     host: r => isPeer(r.peer) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
     join: r => isPeer(r.peer) && isCanonicalId(r.own_id) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
-    forget: r => r.state === 'set-up',
+    forget: r => (r.state === 'set-up' || r.state === null) && isSmall(r.remaining) && (r.state === 'set-up') === (r.remaining === 0),
+    revoke: r => isIdList(r.removed, MAX_PEERS) && isIdList(r.returned, MAX_PEERS) && Array.isArray(r.offline) && r.offline.length <= MAX_COMPUTERS && r.offline.every(isPeer) &&
+        isSmall(r.remaining) && r.revocation_open === true,
+    finish: r => r.revocation_open === false,
+    harden: r => isSmall(r.changed),
+    promote: r => isSmall(r.changed),
+    ack: r => isSmall(r.changed),
 };
 const RESULT_KEYS = {
-    status: ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'listener', 'shared', 'up_to_date', 'notes', 'waiting'],
+    status: ['state', 'own_id', 'peers', 'computers', 'max_computers', 'over_limit', 'revocation_open', 'harden_pending', 'promote_pending', 'listener', 'up_to_date', 'notes', 'waiting'],
     setup: ['own_id', 'state'],
     'own-id': ['own_id'],
     host: ['peer', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
     join: ['peer', 'own_id', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
-    forget: ['state'],
+    forget: ['state', 'remaining'],
+    revoke: ['removed', 'returned', 'offline', 'remaining', 'revocation_open'],
+    finish: ['revocation_open'],
+    harden: ['changed'],
+    promote: ['changed'],
+    ack: ['changed'],
 };
 
 // `connected_s` is a count of whole seconds exactly when the link is stable, otherwise null (section 3, `link`).
@@ -104,11 +134,22 @@ const connectedSOk = o => (o.link === 'stable') === (o.connected_s !== null && o
 // 0.2.5, there is no `cli` source for it).
 const connectedResult = r => r.link === 'stable' && connectedSOk(r) && r.up_to_date === null;
 
-// `link` is null unless the state is half or paired; foreign-config takes precedence over paired, so its link is null too.
+// The list of `status` against its state. set-up = no peer, half = peers and none shared, paired = at least one shared; foreign-config also
+// carries the peers (the window offers Remove) but no link and no listener. over_limit: the links are not measured. A list of more than
+// READ_CAP devices is not read: peers is empty and the state is `half` (peers exist, nothing is known about the share).
 function statusRules(r) {
-    if (r.state !== 'half' && r.state !== 'paired')
-        return r.link === null && r.connected_s === null && r.up_to_date === null && r.shared === null && (r.state === 'set-up' || r.listener === null);
-    return r.peer !== null;
+    const noLink = r.peers.every(p => p.link === null);
+    if (r.state === 'foreign-config')
+        return noLink && r.listener === null;
+    if (r.state === 'set-up')
+        return r.peers.length === 0 && !r.over_limit;
+    if (r.state === 'half' || r.state === 'paired') {
+        if (r.over_limit)
+            return noLink;                                  // the list may be cut, the state is the one of the whole list
+        const anyShared = r.peers.some(p => p.shared);
+        return r.peers.length > 0 && (r.state === 'paired') === anyShared;
+    }
+    return r.peers.length === 0 && r.listener === null && !r.over_limit && !r.revocation_open && r.harden_pending === 0 && r.promote_pending === 0;
 }
 
 const has = (o, keys) => keys.every(k => Object.hasOwn(o, k));
@@ -218,7 +259,7 @@ export function parse(line, verb = null) {
 // {ok: true, outcome: {kind: 'result'|'error', ...}} or {ok: false, code}, where a missing terminal line or a code other than 0/1 is
 // E_ENGINE_DIED and a line that broke a rule is E_PROTOCOL.
 const VERB_EVENTS = {
-    status: [], setup: [], 'own-id': [], forget: [],
+    status: [], setup: [], 'own-id': [], forget: [], revoke: [], finish: [], harden: [], promote: [], ack: [],
     host: ['candidate', 'link', 'peer'],
     join: ['link', 'peer'],
 };
@@ -280,16 +321,64 @@ export function checkRun(verb, lines, rc) {
 
 // ---- argv and stdin (what the window may ask for) ---------------------------------------------------------------------------------
 
-// The closed argv of every call: no free-form argument. Nothing the user typed is an argument (the ID goes through stdin).
-export function argvFor(verb, flags = {}) {
+// The closed argv of every call: no free-form argument. Nothing the user typed is an argument (the typed ID goes through stdin). The
+// computer IDs of 0.2.6 are positional arguments: IDs are not secret (they are on the screen), every one must be canonical (so none can
+// look like a flag), at most MAX_PEERS, no duplicates.
+//   forget <ID> | forget --all [--stop]     revoke <ID>...     promote <ID>...     ack <ID>... | ack --all
+//   status, setup, own-id, host, join, finish, harden: no argument
+// `flags`: {all, stop}; `ids`: array of canonical IDs.
+export function argvFor(verb, flags = {}, ids = []) {
     if (!VERBS.includes(verb))
         throw new ProtocolError('unknown verb');
-    const known = verb === 'forget' ? ['stop'] : [];
+    const known = verb === 'forget' ? ['all', 'stop'] : verb === 'ack' ? ['all'] : [];
     for (const k of Object.keys(flags)) {
-        if (!known.includes(k))
+        if (!known.includes(k) || typeof flags[k] !== 'boolean')
             throw new ProtocolError('unknown flag');
     }
-    return verb === 'forget' && flags.stop === true ? [verb, '--stop'] : [verb];
+    if (!Array.isArray(ids) || ids.length > MAX_PEERS || new Set(ids).size !== ids.length || !ids.every(isCanonicalId))
+        throw new ProtocolError('bad ID argument');
+    const all = flags.all === true;
+    const stop = flags.stop === true;
+    if (!ID_VERBS.includes(verb)) {
+        if (ids.length > 0)
+            throw new ProtocolError('this verb takes no ID');
+        return [verb];
+    }
+    if (all && ids.length > 0)
+        throw new ProtocolError('--all and IDs exclude each other');
+    if (stop && !all)
+        throw new ProtocolError('--stop needs --all');
+    if (verb === 'forget')
+        return all ? [verb, '--all', ...(stop ? ['--stop'] : [])] : ids.length === 1 ? [verb, ids[0]] : fail('forget takes one ID or --all');
+    if (verb === 'ack')
+        return all ? [verb, '--all'] : ids.length >= 1 ? [verb, ...ids] : fail('ack takes IDs or --all');
+    if (ids.length === 0)
+        throw new ProtocolError(`${verb} takes at least one ID`);
+    return [verb, ...ids];
+}
+function fail(what) {
+    throw new ProtocolError(what);
+}
+
+// The engine's reading of its own command line (the reverse of argvFor): {verb, flags, ids}, or throws ProtocolError.
+export function parseArgs(args) {
+    if (!Array.isArray(args) || args.length === 0 || typeof args[0] !== 'string')
+        throw new ProtocolError('no verb');
+    const [verb, ...rest] = args;
+    const flags = {};
+    const ids = [];
+    for (const a of rest) {
+        if (a === '--all' || a === '--stop') {
+            const k = a.slice(2);
+            if (Object.hasOwn(flags, k))
+                throw new ProtocolError('flag twice');
+            flags[k] = true;
+        } else {
+            ids.push(a);                                    // checked as an ID by argvFor
+        }
+    }
+    argvFor(verb, flags, ids);
+    return {verb, flags, ids};
 }
 
 // `join` reads ONE line: the typed ID, as typed. The window does not canonicalise; it only refuses what cannot be one line.

@@ -1,0 +1,9 @@
+{"v":1,"event":"progress","step":"freeze","state":"start"}
+{"v":1,"event":"progress","step":"freeze","state":"ok"}
+{"v":1,"event":"progress","step":"remove","state":"start"}
+{"v":1,"event":"progress","step":"remove","state":"ok"}
+{"v":1,"event":"progress","step":"verify","state":"start"}
+{"v":1,"event":"progress","step":"verify","state":"ok"}
+{"v":1,"event":"progress","step":"dwell","state":"start"}
+{"v":1,"event":"progress","step":"dwell","state":"ok"}
+{"v":1,"event":"result","removed":["TKIBGPF-WSGKBIH-LXXRQZX-HYOCM6Y-T6IYH5B-5CNPJLR-UHMG75U-JXHXVQP"],"returned":[],"offline":[{"id":"IZA3FNQ-S6ZB6SZ-KJXJ4MB-KUYXPYA-MYWCRPI-TSVUXR2-CRK2SYT-YGUA6QZ","name":"office"}],"remaining":2,"revocation_open":true}

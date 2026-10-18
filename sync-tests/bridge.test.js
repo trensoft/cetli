@@ -36,11 +36,14 @@ function harness(extra = {}) {
     return {runner, procs, argvs, timers, logs};
 }
 
+// The arguments the closed argv of a verb needs (PLAN-0.2.6 3.1): the verbs with IDs get one, `forget` runs as `forget --all`.
+const argsOf = verb => verb === 'forget' ? {flags: {all: true}} : ['revoke', 'promote', 'ack'].includes(verb) ? {ids: [B]} : {};
+
 test('every fixture replays through a fake process to the outcome the index states', async () => {
     for (const [file, spec] of Object.entries(INDEX)) {
         const h = harness();
         const events = [];
-        const run = h.runner.start(spec.verb, {onEvent: e => events.push(e), stdin: spec.verb === 'join' ? `${B}\n` : null});
+        const run = h.runner.start(spec.verb, {...argsOf(spec.verb), onEvent: e => events.push(e), stdin: spec.verb === 'join' ? `${B}\n` : null});
         const p = h.procs[0];
         p.emit(linesOf(file));
         p.exit(spec.rc);
@@ -68,8 +71,8 @@ test('oversize.ndjson and the like: a violation kills the process at once, befor
 
 test('the argv is the literal engine path and the closed verb argv; the environment given to the process is the allowlist', () => {
     const h = harness();
-    h.runner.start('forget', {flags: {stop: true}});
-    assert.deepEqual(h.argvs[0].argv, [ENGINE_PATH, 'forget', '--stop']);
+    h.runner.start('forget', {flags: {all: true, stop: true}});
+    assert.deepEqual(h.argvs[0].argv, [ENGINE_PATH, 'forget', '--all', '--stop']);
     assert.equal(ENGINE_PATH, '/usr/bin/cetli-sync');
     assert.deepEqual(h.argvs[0].opts.env.sort(), ['HOME=/home/u', 'PATH=/usr/bin', 'XDG_RUNTIME_DIR=/run/user/1']);
     assert.deepEqual(scrubEnviron(['STGUIADDRESS=x', 'STGUIAPIKEY=y', 'STHOMEDIR=z', 'LANG=hu_HU.UTF-8', '=x', 'A']), ['LANG=hu_HU.UTF-8']);
@@ -80,7 +83,12 @@ test('an unknown verb or flag never reaches a process', async () => {
     const h = harness();
     assert.deepEqual(await h.runner.start('connect').done, {ok: false, error: {code: 'E_INTERNAL', step: null}});
     assert.deepEqual(await h.runner.start('host', {flags: {stop: true}}).done, {ok: false, error: {code: 'E_INTERNAL', step: null}});
+    assert.deepEqual(await h.runner.start('forget', {flags: {stop: true}}).done, {ok: false, error: {code: 'E_INTERNAL', step: null}});     // --stop needs --all
+    assert.deepEqual(await h.runner.start('revoke').done, {ok: false, error: {code: 'E_INTERNAL', step: null}});                               // revoke needs IDs
+    assert.deepEqual(await h.runner.start('revoke', {ids: ['--home=/x']}).done, {ok: false, error: {code: 'E_INTERNAL', step: null}});         // and canonical ones
     assert.equal(h.procs.length, 0);
+    h.runner.start('revoke', {ids: [A, B]});
+    assert.deepEqual(h.argvs[0].argv, [ENGINE_PATH, 'revoke', A, B]);
 });
 
 test('stdin: join gets exactly the typed line then EOF; host keeps stdin open; the others close it at once', () => {
@@ -92,9 +100,9 @@ test('stdin: join gets exactly the typed line then EOF; host keeps stdin open; t
     h.runner.start('host');
     assert.equal(h.procs[0].stdinClosed, false);
     assert.deepEqual(h.procs[0].written, []);
-    for (const verb of ['status', 'setup', 'own-id', 'forget']) {
+    for (const verb of ['status', 'setup', 'own-id', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack']) {
         const x = harness();
-        x.runner.start(verb, {stdin: 'ignored'});
+        x.runner.start(verb, {...argsOf(verb), stdin: 'ignored'});
         assert.equal(x.procs[0].stdinClosed, true, verb);
         assert.deepEqual(x.procs[0].written, [], verb);
     }

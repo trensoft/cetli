@@ -32,14 +32,14 @@ const failure = (code, step = null) => ({ok: false, error: {code, step}});
 export function createRunner({openProcess, exe = ENGINE_PATH, setTimer, clearTimer, log = () => {}, environ = () => []}) {
     let active = null;
 
-    function start(verb, {flags = {}, stdin = null, onEvent = () => {}} = {}) {
+    function start(verb, {flags = {}, ids = [], stdin = null, onEvent = () => {}} = {}) {
         if (active !== null) {
             const busy = Promise.resolve(failure('E_BUSY'));
             return {done: busy, accept: () => false, stop: () => busy};
         }
         let argv;
         try {
-            argv = [exe, ...argvFor(verb, flags)];
+            argv = [exe, ...argvFor(verb, flags, ids)];
         } catch (e) {
             return {done: Promise.resolve(failure('E_INTERNAL')), accept: () => false, stop: () => Promise.resolve(failure('E_INTERNAL'))};
         }

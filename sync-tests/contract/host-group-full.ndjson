@@ -1,0 +1,3 @@
+{"v":1,"event":"progress","step":"instance","state":"start"}
+{"v":1,"event":"progress","step":"instance","state":"ok"}
+{"v":1,"event":"error","code":"E_GROUP_FULL","step":"instance"}

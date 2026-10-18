@@ -153,5 +153,95 @@
     "verb": "status",
     "rc": 0,
     "expect": "result"
+  },
+  "status-group-3.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-group-new.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-promote-pending.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-revocation-open.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-returned.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-over-limit.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "status-max-size.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
+  },
+  "forget-all-ok.ndjson": {
+    "verb": "forget",
+    "rc": 0,
+    "expect": "result"
+  },
+  "forget-one-ok.ndjson": {
+    "verb": "forget",
+    "rc": 0,
+    "expect": "result"
+  },
+  "host-group-full.ndjson": {
+    "verb": "host",
+    "rc": 1,
+    "expect": "error:E_GROUP_FULL"
+  },
+  "host-revocation-open.ndjson": {
+    "verb": "host",
+    "rc": 1,
+    "expect": "error:E_REVOCATION_OPEN"
+  },
+  "revoke-ok.ndjson": {
+    "verb": "revoke",
+    "rc": 0,
+    "expect": "result"
+  },
+  "revoke-returned.ndjson": {
+    "verb": "revoke",
+    "rc": 0,
+    "expect": "result"
+  },
+  "finish-ok.ndjson": {
+    "verb": "finish",
+    "rc": 0,
+    "expect": "result"
+  },
+  "harden-ok.ndjson": {
+    "verb": "harden",
+    "rc": 0,
+    "expect": "result"
+  },
+  "promote-ok.ndjson": {
+    "verb": "promote",
+    "rc": 0,
+    "expect": "result"
+  },
+  "ack-ok.ndjson": {
+    "verb": "ack",
+    "rc": 0,
+    "expect": "result"
+  },
+  "revoke-bad-id.ndjson": {
+    "verb": "revoke",
+    "rc": 1,
+    "expect": "error:E_BAD_ID"
   }
 }

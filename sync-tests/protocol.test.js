@@ -4,9 +4,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
 import {
-    BRIDGE_ONLY_CODES, ERROR_CODES, INFORMATION_CODES, MAX_LINE_BYTES, MAX_TOTAL_BYTES, RESERVED_CODES, VERBS, acceptLine, argvFor,
-    checkRun, createRunChecker, emit, isKnownStep, isNeutralCode, joinStdin, parse, parseAcceptLine,
+    BRIDGE_ONLY_CODES, ERROR_CODES, ID_VERBS, INFORMATION_CODES, MAX_LINE_BYTES, MAX_TOTAL_BYTES, RESERVED_CODES, VERBS, acceptLine, argvFor,
+    checkRun, createRunChecker, emit, isKnownStep, isNeutralCode, joinStdin, parse, parseAcceptLine, parseArgs,
 } from '../sync/protocol.js';
+import {MAX_COMPUTERS, MAX_PEERS} from '../sync/policy.js';
+import {makeId} from './support/ids.js';
 
 const dir = new URL('./contract/', import.meta.url);
 const INDEX = JSON.parse(readFileSync(new URL('index.json', dir), 'utf8'));
@@ -24,6 +26,9 @@ test('the fixtures the Interface file names exist (section 5, with the 0.2.5 nam
         'status-no-syncthing', 'status-not-set-up', 'status-stfolder-conflict', 'status-foreign-config', 'status-set-up', 'status-half',
         'status-paired', 'status-flapping', 'status-listener-degraded', 'host-foreign-device', 'join-foreign-device', 'setup-foreign-device', 'setup-ok', 'setup-fail-systemd',
         'host-ok', 'host-expired', 'host-stdin-eof', 'join-ok', 'join-flapping', 'forget-ok', 'oversize', 'not-json', 'v2',
+        // 0.2.6 (PLAN-0.2.6 3.2)
+        'status-group-3', 'status-group-new', 'status-over-limit', 'status-revocation-open', 'status-returned', 'status-promote-pending', 'status-max-size',
+        'host-group-full', 'host-revocation-open', 'revoke-ok', 'revoke-returned', 'finish-ok', 'harden-ok', 'promote-ok', 'forget-all-ok', 'forget-one-ok', 'ack-ok',
     ];
     for (const r of required)
         assert.ok(INDEX[`${r}.ndjson`], r);
@@ -44,27 +49,27 @@ test('every fixture replays to the outcome the index states', () => {
     }
 });
 
-test('the foreign-config state is a RESULT with rc 0 and no link; E_FOREIGN_DEVICE comes from setup, host and join only (Robert 8389)', () => {
+test('the foreign-config state is a RESULT with rc 0, the list of peers and no link; E_FOREIGN_DEVICE comes from setup, host, join and promote only (Robert 8389)', () => {
     const r = checkRun('status', linesOf('status-foreign-config.ndjson'), 0);
     assert.equal(r.outcome.result.state, 'foreign-config');
-    assert.equal(r.outcome.result.link, null);
+    assert.ok(r.outcome.result.peers.length > 0 && r.outcome.result.peers.every(p => p.link === null && p.connected === null));
     for (const f of ['setup-foreign-device', 'host-foreign-device', 'join-foreign-device'])
         assert.equal(INDEX[`${f}.ndjson`].expect, 'error:E_FOREIGN_DEVICE');
     assert.equal(INDEX['status-foreign-device.ndjson'], undefined);
     const asStatus = emit.bind(null, {event: 'error', code: 'E_FOREIGN_DEVICE'});
-    for (const verb of ['status', 'own-id', 'forget'])
-        assert.throws(() => asStatus(verb), /not raised by/);
-    for (const verb of ['setup', 'host', 'join'])
+    for (const verb of ['status', 'own-id', 'forget', 'revoke', 'finish', 'harden', 'ack'])
+        assert.throws(() => asStatus(verb), /not raised by/);                  // revoke, forget and harden must run in foreign-config (PLAN-0.2.6 F7)
+    for (const verb of ['setup', 'host', 'join', 'promote'])
         assert.doesNotThrow(() => asStatus(verb));
     const line = JSON.stringify({v: 1, event: 'error', code: 'E_FOREIGN_DEVICE'});
     assert.equal(parse(line, 'status'), null);
     assert.deepEqual(parse(line, 'join'), {event: 'error', code: 'E_FOREIGN_DEVICE'});
 });
 
-test('error codes: the closed list, the pinned information pair, the reserved and the bridge-only codes', () => {
-    assert.deepEqual([...INFORMATION_CODES].sort(), ['E_ALREADY_PAIRED', 'E_STFOLDER_EXISTS']);
+test('error codes: the closed list, the pinned information codes, the reserved and the bridge-only codes', () => {
+    assert.deepEqual([...INFORMATION_CODES].sort(), ['E_ALREADY_PAIRED', 'E_GROUP_FULL', 'E_REVOCATION_OPEN', 'E_STFOLDER_EXISTS']);
     for (const c of ERROR_CODES)
-        assert.equal(isNeutralCode(c), c === 'E_STFOLDER_EXISTS' || c === 'E_ALREADY_PAIRED', c);
+        assert.equal(isNeutralCode(c), INFORMATION_CODES.includes(c), c);
     for (const c of ['E_BAD_CODE', 'E_OWN_CODE', 'E_FOREIGN_DEVICE', 'E_NOT_A_CODE', 'E_INTERNAL', 'E_PROTOCOL'])
         assert.equal(isNeutralCode(c), false, c);
     assert.deepEqual([...RESERVED_CODES], ['E_BAD_CODE', 'E_OWN_CODE', 'E_NOT_UP_TO_DATE']);
@@ -72,7 +77,7 @@ test('error codes: the closed list, the pinned information pair, the reserved an
         assert.equal(ERROR_CODES.includes(c), false);
         assert.throws(() => emit({event: 'error', code: c}, 'join'), /may raise/);       // never emitted today
     }
-    for (const c of ['E_PENDING_AMBIGUOUS', 'E_BAD_ID', 'E_OWN_ID', 'E_FOREIGN_DEVICE'])
+    for (const c of ['E_PENDING_AMBIGUOUS', 'E_BAD_ID', 'E_OWN_ID', 'E_FOREIGN_DEVICE', 'E_GROUP_FULL', 'E_REVOCATION_OPEN'])
         assert.ok(ERROR_CODES.includes(c), c);
     for (const c of BRIDGE_ONLY_CODES) {
         assert.throws(() => emit({event: 'error', code: c}, 'host'), /may raise/);
@@ -156,32 +161,113 @@ test('result of host and join is the proof: link stable with connected_s, up_to_
     assert.equal(parse(JSON.stringify({...j, own_id: A.slice(0, 14)}), 'join'), null);        // in full
 });
 
-test('result of status: the closed states, link null unless half or paired, peer present for half and paired', () => {
-    const st = (o = {}) => JSON.stringify({v: 1, event: 'result', state: 'paired', own_id: A, peer: {id: B, name: 'b'}, connected: true, link: 'stable', connected_s: 9, listener: 'ok', shared: true, up_to_date: null, notes: 1, waiting: false, ...o});
+const groupPeer = (id, o = {}) => ({id, name: 'b', introduced_by: null, introducer: true, shared: true, connected: true, link: 'stable', connected_s: 9, new: false, returned: false, ...o});
+const statusOf = (o = {}) => ({v: 1, event: 'result', state: 'paired', own_id: A, peers: [groupPeer(B)], computers: 2, max_computers: MAX_COMPUTERS, over_limit: false, revocation_open: false,
+    harden_pending: 0, promote_pending: 0, listener: 'ok', up_to_date: null, notes: 1, waiting: false, ...o});
+
+test('result of status: the closed states, the list of peers, links null where they are not measured (PLAN-0.2.6 3.2)', () => {
+    const st = (o = {}) => JSON.stringify(statusOf(o));
     assert.ok(parse(st(), 'status'));
     assert.equal(parse(st({state: 'connected'}), 'status'), null);
-    assert.equal(parse(st({state: 'foreign-config'}), 'status'), null);                       // link must be null there
-    assert.ok(parse(st({state: 'foreign-config', link: null, connected_s: null, listener: null, shared: null, up_to_date: null}), 'status'));
-    assert.equal(parse(st({state: 'set-up', peer: null}), 'status'), null);                   // a link without a peer state
-    assert.equal(parse(st({peer: null}), 'status'), null);
-    assert.equal(parse(st({link: 'maybe'}), 'status'), null);
-    assert.equal(parse(st({connected_s: null}), 'status'), null);                             // stable needs the count
-    assert.equal(parse(st({link: 'flapping'}), 'status'), null);                              // and a count needs stable
-    assert.ok(parse(st({link: 'flapping', connected_s: null}), 'status'));
-    assert.equal(parse(st({up_to_date: true}), 'status'), null);                              // always null in 0.2.5
+    assert.equal(parse(st({state: 'foreign-config'}), 'status'), null);                       // links must be null there
+    const noLink = {connected: null, link: null, connected_s: null};
+    assert.ok(parse(st({state: 'foreign-config', listener: null, peers: [groupPeer(B, noLink)]}), 'status'));
+    assert.ok(parse(st({state: 'foreign-config', listener: null, peers: []}), 'status'));
+    assert.equal(parse(st({state: 'foreign-config', listener: 'ok', peers: [groupPeer(B, noLink)]}), 'status'), null);
+    assert.equal(parse(st({state: 'set-up'}), 'status'), null);                               // set-up has no peers
+    assert.ok(parse(st({state: 'set-up', peers: [], computers: 1, listener: 'degraded'}), 'status'));
+    assert.equal(parse(st({peers: []}), 'status'), null);                                     // paired needs peers
+    assert.equal(parse(st({state: 'half'}), 'status'), null);                                 // half: none shared
+    assert.ok(parse(st({state: 'half', peers: [groupPeer(B, {shared: false})]}), 'status'));
+    assert.equal(parse(st({peers: [groupPeer(B, {shared: false})]}), 'status'), null);        // paired: at least one shared
+    assert.equal(parse(st({peers: [groupPeer(B, {link: 'maybe'})]}), 'status'), null);
+    assert.equal(parse(st({peers: [groupPeer(B, {connected_s: null})]}), 'status'), null);    // stable needs the count
+    assert.equal(parse(st({peers: [groupPeer(B, {link: 'flapping'})]}), 'status'), null);     // and a count needs stable
+    assert.ok(parse(st({peers: [groupPeer(B, {link: 'flapping', connected_s: null})]}), 'status'));
+    assert.equal(parse(st({peers: [groupPeer(B, {link: null})]}), 'status'), null);           // link, connected and connected_s are null together
+    assert.equal(parse(st({up_to_date: true}), 'status'), null);                              // always null
     for (const l of ['ok', 'degraded', 'down', null])
         assert.ok(parse(st({listener: l}), 'status'), String(l));
     for (const l of ['fine', 'OK', 5, undefined])
         assert.equal(parse(st({listener: l}), 'status'), null, String(l));
-    assert.equal(parse(st({state: 'foreign-config', link: null, connected_s: null, shared: null, listener: 'ok'}), 'status'), null);       // only set-up, half, paired
-    assert.ok(parse(st({state: 'set-up', peer: null, link: null, connected_s: null, shared: null, listener: 'degraded'}), 'status'));
+    for (const state of ['no-syncthing', 'not-set-up', 'stfolder-conflict']) {
+        assert.ok(parse(st({state, peers: [], computers: null, listener: null, own_id: null, notes: null}), 'status'), state);
+        assert.equal(parse(st({state, peers: [], listener: 'ok'}), 'status'), null, state);
+        assert.equal(parse(st({state, peers: [groupPeer(B)], listener: null}), 'status'), null, state);
+        assert.equal(parse(st({state, peers: [], listener: null, over_limit: true}), 'status'), null, state);
+    }
     assert.equal(parse(st({waiting: null}), 'status'), null);
     assert.equal(parse(st({own_id: 'nope'}), 'status'), null);
-    for (const k of ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'listener', 'shared', 'up_to_date', 'notes', 'waiting']) {
-        const o = JSON.parse(st());
+    for (const k of ['state', 'own_id', 'peers', 'computers', 'max_computers', 'over_limit', 'revocation_open', 'harden_pending', 'promote_pending', 'listener', 'up_to_date', 'notes', 'waiting']) {
+        const o = statusOf();
         delete o[k];
         assert.equal(parse(JSON.stringify(o), 'status'), null, `missing ${k}`);
     }
+    for (const k of ['peer', 'connected', 'link', 'connected_s', 'shared'])                    // the 0.2.5 top-level fields are gone
+        assert.equal(parse(JSON.stringify({...statusOf(), [k]: null}), 'status')[k], undefined, k);
+});
+
+test('status peers: every field of a peer is checked, at most MAX_COMPUTERS entries, no duplicate fields of text', () => {
+    const st = o => parse(JSON.stringify(statusOf(o)), 'status');
+    const one = o => st({peers: [groupPeer(B, o)]});
+    assert.ok(one({}));
+    assert.ok(one({name: null}));
+    assert.ok(one({introduced_by: A}));
+    for (const bad of [{id: A.slice(1)}, {name: 'x'.repeat(33)}, {name: ''}, {name: 'caf\u00e9'}, {introduced_by: 'x'}, {introduced_by: A.toLowerCase()}, {introducer: 1}, {shared: null}, {new: 'no'}, {returned: undefined}, {connected: 'yes'}])
+        assert.equal(one(bad), null, JSON.stringify(bad));
+    assert.equal(parse(JSON.stringify(statusOf({peers: [groupPeer(B), 5]})), 'status'), null);
+    const ten = Array.from({length: MAX_COMPUTERS}, (_, i) => groupPeer(makeId(i)));
+    assert.ok(st({peers: ten}));
+    assert.equal(st({peers: [...ten, groupPeer(makeId(99))]}), null);
+    assert.equal(st({max_computers: 1}), null);
+    assert.equal(st({harden_pending: -1}), null);
+    assert.equal(st({promote_pending: 1.5}), null);
+    assert.equal(st({computers: 0}), null);
+    assert.equal(st({revocation_open: 'yes'}), null);
+});
+
+test('status over the limit: the links are not measured, the list may be cut, the state is the one of the whole list; an unread list is half with no peers', () => {
+    const ten = Array.from({length: MAX_COMPUTERS}, (_, i) => groupPeer(makeId(i), {connected: null, link: null, connected_s: null}));
+    const o = {over_limit: true, computers: 12, peers: ten};
+    assert.ok(parse(JSON.stringify(statusOf(o)), 'status'));
+    assert.ok(parse(JSON.stringify(statusOf({...o, state: 'half'})), 'status'));              // the shared flags of the cut part are unknown
+    assert.equal(parse(JSON.stringify(statusOf({...o, peers: [groupPeer(B)]})), 'status'), null);       // a measured link while over the limit
+    assert.ok(parse(JSON.stringify(statusOf({over_limit: true, state: 'half', peers: [], computers: 40})), 'status'));
+    assert.equal(parse(JSON.stringify(statusOf({over_limit: true, state: 'set-up', peers: [], computers: 40})), 'status'), null);
+});
+
+test('the largest status line fits with margin: 9 peers, every field at its maximum, under 3500 bytes (PLAN-0.2.6 F7, T-N25)', () => {
+    const line = linesOf('status-max-size.ndjson').at(-1);
+    const bytes = new TextEncoder().encode(line).length;
+    assert.ok(bytes < 3500, `${bytes} bytes`);
+    assert.ok(bytes < MAX_LINE_BYTES * 0.9);
+    const ev = parse(line, 'status');
+    assert.equal(ev.peers.length, MAX_PEERS);
+    assert.ok(ev.peers.every(p => p.name.length === 32 && p.introduced_by !== null && p.new && p.returned));
+    assert.equal(emit(ev, 'status'), line);
+});
+
+test('results of the new verbs: revoke, finish, harden, promote, ack, forget with a remaining count', () => {
+    const rd = (verb, o) => parse(JSON.stringify({v: 1, event: 'result', ...o}), verb);
+    const rv = {removed: [B], returned: [], offline: [{id: A, name: null}], remaining: 2, revocation_open: true};
+    assert.ok(rd('revoke', rv));
+    for (const bad of [{removed: [B, B]}, {removed: ['x']}, {returned: [A.slice(1)]}, {offline: [{id: A}]}, {offline: [5]}, {remaining: -1}, {remaining: 1.5}, {revocation_open: false}, {revocation_open: 'true'}])
+        assert.equal(rd('revoke', {...rv, ...bad}), null, JSON.stringify(bad));
+    assert.ok(rd('finish', {revocation_open: false}));
+    assert.equal(rd('finish', {revocation_open: true}), null);
+    for (const verb of ['harden', 'promote', 'ack']) {
+        assert.ok(rd(verb, {changed: 0}), verb);
+        assert.equal(rd(verb, {changed: -1}), null, verb);
+        assert.equal(rd(verb, {changed: 'one'}), null, verb);
+    }
+    assert.ok(rd('forget', {state: 'set-up', remaining: 0}));
+    assert.ok(rd('forget', {state: null, remaining: 3}));
+    assert.equal(rd('forget', {state: 'set-up', remaining: 3}), null);                       // set-up is zero peers
+    assert.equal(rd('forget', {state: null, remaining: 0}), null);
+    assert.equal(rd('forget', {state: 'set-up'}), null);
+    assert.equal(rd('forget', {remaining: 0}), null);
+    const big = Array.from({length: MAX_PEERS + 1}, (_, i) => makeId(i));
+    assert.equal(rd('revoke', {...rv, removed: big}), null);
 });
 
 test('emit: strict; a line that parse reads back identically; unknown event, unknown field, bad value, missing verb throw', () => {
@@ -194,8 +280,14 @@ test('emit: strict; a line that parse reads back identically; unknown event, unk
     assert.throws(() => emit({...ev, name: 'x'.repeat(33)}));
     assert.throws(() => emit({event: 'result', own_id: A}), /needs its verb/);
     assert.throws(() => emit({event: 'progress', step: 'brand-new', state: 'start'}), /unknown progress step/);
-    assert.throws(() => emit({event: 'error', code: 'E_BAD_ID'}, 'host'));                   // E_BAD_ID is join's
-    assert.doesNotThrow(() => emit({event: 'error', code: 'E_BAD_ID'}, 'join'));
+    assert.throws(() => emit({event: 'error', code: 'E_BAD_ID'}, 'host'));                   // E_BAD_ID is the verbs with a typed or listed ID
+    for (const verb of ['join', 'forget', 'revoke', 'promote', 'ack'])
+        assert.doesNotThrow(() => emit({event: 'error', code: 'E_BAD_ID'}, verb), verb);
+    assert.throws(() => emit({event: 'error', code: 'E_GROUP_FULL'}, 'join'));
+    assert.doesNotThrow(() => emit({event: 'error', code: 'E_GROUP_FULL'}, 'host'));
+    assert.throws(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'revoke'));         // revoke and finish always run
+    assert.throws(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'finish'));
+    assert.doesNotThrow(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'promote'));
     assert.throws(() => emit({event: 'error', code: 'E_EXPIRED'}, 'join'));
     assert.throws(() => emit({event: 'error', code: 'E_PENDING_AMBIGUOUS'}, 'join'));
     assert.throws(() => emit({event: 'error', code: 'E_INTERNAL', step: 'unknown-step'}));
@@ -227,7 +319,7 @@ test('the run checker: events that belong to host or join only, per verb', () =>
     assert.equal(checkRun('host', [cand, link, peer, err], 1).ok, true);
     assert.equal(checkRun('join', [link, peer, err], 1).ok, true);
     assert.equal(checkRun('join', [cand, err], 1).code, 'E_PROTOCOL');                    // no candidate in join
-    for (const verb of ['status', 'setup', 'own-id', 'forget']) {
+    for (const verb of ['status', 'setup', 'own-id', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack']) {
         for (const e of [cand, link, peer])
             assert.equal(checkRun(verb, [e, err], 1).code, 'E_PROTOCOL', `${verb}`);
     }
@@ -244,15 +336,38 @@ test('the run checker: 64 KiB in total and a streaming feed that stops at the fi
     assert.throws(() => createRunChecker('connect'));
 });
 
-test('argv and stdin: the verb list is closed, the only flag is forget --stop, and no typed text becomes an argument', () => {
-    assert.deepEqual([...VERBS], ['status', 'setup', 'own-id', 'host', 'join', 'forget']);
-    for (const v of VERBS)
+test('argv and stdin: the verb list is closed, IDs are canonical positional arguments, and no typed text becomes an argument', () => {
+    assert.deepEqual([...VERBS], ['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack']);
+    assert.deepEqual([...ID_VERBS], ['forget', 'revoke', 'promote', 'ack']);
+    for (const v of VERBS.filter(v => !ID_VERBS.includes(v)))
         assert.deepEqual(argvFor(v), [v]);
-    assert.deepEqual(argvFor('forget', {stop: true}), ['forget', '--stop']);
-    assert.deepEqual(argvFor('forget', {stop: false}), ['forget']);
+    assert.deepEqual(argvFor('forget', {all: true}), ['forget', '--all']);
+    assert.deepEqual(argvFor('forget', {all: true, stop: true}), ['forget', '--all', '--stop']);
+    assert.deepEqual(argvFor('forget', {all: true, stop: false}), ['forget', '--all']);
+    assert.deepEqual(argvFor('forget', {}, [B]), ['forget', B]);
+    assert.deepEqual(argvFor('revoke', {}, [A, B]), ['revoke', A, B]);
+    assert.deepEqual(argvFor('promote', {}, [B]), ['promote', B]);
+    assert.deepEqual(argvFor('ack', {}, [B]), ['ack', B]);
+    assert.deepEqual(argvFor('ack', {all: true}), ['ack', '--all']);
     assert.throws(() => argvFor('connect'));
     assert.throws(() => argvFor('host', {stop: true}));
     assert.throws(() => argvFor('forget', {name: 'x'}));
+    assert.throws(() => argvFor('forget'));                                            // 0.2.5's bare `forget` is gone: --all or one ID
+    assert.throws(() => argvFor('forget', {}, [A, B]));                                 // one ID
+    assert.throws(() => argvFor('forget', {stop: true}, [B]));                          // --stop only with --all
+    assert.throws(() => argvFor('forget', {all: true}, [B]));                           // --all and IDs exclude each other
+    assert.throws(() => argvFor('revoke'));
+    assert.throws(() => argvFor('revoke', {all: true}));
+    assert.throws(() => argvFor('promote', {all: true}));
+    assert.throws(() => argvFor('ack'));
+    assert.throws(() => argvFor('status', {}, [B]));                                    // a verb without IDs takes none
+    assert.throws(() => argvFor('finish', {}, [B]));
+    assert.throws(() => argvFor('revoke', {}, [B, B]));                                 // no duplicates
+    for (const bad of ['--home=/x', '-H', B.toLowerCase(), B.slice(1), `${B} `, '', 5, null, `${B}\n`])
+        assert.throws(() => argvFor('revoke', {}, [bad]), String(bad));
+    assert.throws(() => argvFor('revoke', {}, Array.from({length: MAX_PEERS + 1}, (_, i) => makeId(i))));
+    assert.doesNotThrow(() => argvFor('revoke', {}, Array.from({length: MAX_PEERS}, (_, i) => makeId(i))));
+    assert.throws(() => argvFor('forget', {all: 'yes'}));
     assert.equal(joinStdin(A), `${A}\n`);
     assert.equal(joinStdin(`${A}\r\n`), `${A}\n`);
     assert.equal(joinStdin(`${A}\nrest`), null);
@@ -273,6 +388,31 @@ test('argv and stdin: the verb list is closed, the only flag is forget --stop, a
         assert.equal(parseAcceptLine(bad), null, String(bad));
 });
 
+test('parseArgs is the reverse of argvFor: the engine reads its own command line with the same closed rules', () => {
+    assert.deepEqual(parseArgs(['status']), {verb: 'status', flags: {}, ids: []});
+    assert.deepEqual(parseArgs(['forget', '--all', '--stop']), {verb: 'forget', flags: {all: true, stop: true}, ids: []});
+    assert.deepEqual(parseArgs(['forget', B]), {verb: 'forget', flags: {}, ids: [B]});
+    assert.deepEqual(parseArgs(['revoke', A, B]), {verb: 'revoke', flags: {}, ids: [A, B]});
+    assert.deepEqual(parseArgs(['ack', '--all']), {verb: 'ack', flags: {all: true}, ids: []});
+    for (const verb of VERBS) {
+        for (const [flags, ids] of [[{}, []], [{all: true}, []], [{all: true, stop: true}, []], [{}, [B]], [{}, [A, B]]]) {
+            let argv = null;
+            try {
+                argv = argvFor(verb, flags, ids);
+            } catch {
+                assert.throws(() => parseArgs([verb, ...(flags.all ? ['--all'] : []), ...(flags.stop ? ['--stop'] : []), ...ids]), verb);
+                continue;
+            }
+            const back = parseArgs(argv);
+            assert.deepEqual([back.verb, back.ids], [verb, ids], verb);
+            assert.deepEqual(argvFor(back.verb, back.flags, back.ids), argv, verb);
+        }
+    }
+    for (const bad of [[], [''], [5], ['connect'], ['status', 'x'], ['status', '--all'], ['forget', '--stop'], ['forget', '--all', '--all'], ['forget', '--all', B],
+        ['revoke'], ['revoke', '-H'], ['revoke', '--home=/x', B], ['revoke', B.toLowerCase()], ['promote', '--all'], ['join', B], ['host', '--stop']])
+        assert.throws(() => parseArgs(bad), JSON.stringify(bad));
+});
+
 test('every fixture line that the engine could have written is what emit() writes for parse() of it (the fixtures come from emit)', () => {
     let compared = 0;
     for (const [file, meta] of Object.entries(INDEX)) {
@@ -290,16 +430,16 @@ test('every fixture line that the engine could have written is what emit() write
             compared++;
         }
     }
-    assert.ok(compared >= 40, `only ${compared} lines compared`);
+    assert.ok(compared >= 90, `only ${compared} lines compared`);
 });
 
 test('a result with an invalid peer ID or a null where the state demands one is not read', () => {
     const base = JSON.parse(linesOf('status-paired.ndjson').at(-1));
     const read = o => parse(JSON.stringify(o), 'status');
     assert.notEqual(read(base), null);
-    assert.equal(read({...base, peer: {id: A.slice(1), name: 'x'}}), null);
-    assert.equal(read({...base, peer: {id: `x${B}`, name: 'x'}}), null);        // garbage in front of an otherwise valid ID
-    assert.equal(read({...base, state: 'not-set-up'}), null);                   // link/shared/up_to_date must be null outside half and paired
-    assert.equal(read({...base, state: 'half', peer: null}), null);
+    assert.equal(read({...base, peers: [{...base.peers[0], id: A.slice(1)}]}), null);
+    assert.equal(read({...base, peers: [{...base.peers[0], id: `x${B}`}]}), null);        // garbage in front of an otherwise valid ID
+    assert.equal(read({...base, state: 'not-set-up'}), null);                             // peers and a listener only in the states that have them
+    assert.equal(read({...base, state: 'half', peers: []}), null);
     assert.equal(read({...base, notes: -1}), null);
 });

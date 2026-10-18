@@ -1,38 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// `cetli-sync <verb> [--stop]`: the engine of the sync window. One JSON object per line on stdout (sync/protocol.js), exactly one terminal line,
+// `cetli-sync <verb> [--all] [--stop] [<ID>...]`: the engine of the sync window. One JSON object per line on stdout (sync/protocol.js), exactly one terminal line,
 // exit code 0 after a `result`, 1 after an `error`, 2 for a usage error. The code is never an argument: `join` reads the ID of the other computer
-// from stdin (one line), `host` reads `accept <ID>` lines from stdin and stops at once on EOF. Launcher: `gjs -m <datadir>/cetli/sync/main.js "$@"`.
+// from stdin (one line), `host` reads `accept <ID>` lines from stdin and stops at once on EOF. The IDs of `forget`, `revoke`, `promote` and `ack` are
+// canonical positional arguments (sync/protocol.js parseArgs). Launcher: `gjs -m <datadir>/cetli/sync/main.js "$@"`.
 import System from 'system';
 
 import {defaultDirs} from '../src/gio-layer.js';
 import {createEngine} from './engine.js';
 import * as real from './gio-ports.js';
 import {dedicatedHome} from './paths.js';
-import {argvFor, emit} from './protocol.js';
+import {emit, parseArgs} from './protocol.js';
 import {createRunPort} from './runport.js';
 import GLib from 'gi://GLib';
 
 const out = line => print(line);
 
 function usage() {
-    printerr('usage: cetli-sync status|setup|own-id|host|join|forget [--stop]');
+    printerr('usage: cetli-sync status|setup|own-id|host|join|finish|harden | forget <ID>|--all [--stop] | revoke|promote <ID>... | ack <ID>...|--all');
     System.exit(2);
 }
 
 async function main(args) {
-    const verb = args[0];
-    const flags = {};
-    for (const a of args.slice(1)) {
-        if (a === '--stop')
-            flags.stop = true;
-        else
-            usage();
-    }
+    let parsed;
     try {
-        argvFor(verb, flags);
+        parsed = parseArgs(args);
     } catch {
         usage();
     }
+    const {verb, flags, ids} = parsed;
     const homeDir = GLib.get_home_dir();
     const home = dedicatedHome(homeDir);
     const input = verb === 'host' || verb === 'join' ? real.openInput() : {lines: () => [], eof: () => true};
@@ -50,7 +45,7 @@ async function main(args) {
         now: real.now, monotonic: real.monotonic, sleep: real.sleep,
         input, emit: emitEvent, log: real.log,
     });
-    const arg = verb === 'forget' ? flags : verb === 'join' ? await input.firstLine() : undefined;
+    const arg = verb === 'join' ? await input.firstLine() : ['forget', 'revoke', 'promote', 'ack'].includes(verb) ? {all: flags.all === true, stop: flags.stop === true, ids} : undefined;
     const outcome = await engine.perform(verb, arg);
     if (outcome.result) {
         emitEvent(outcome.result);
