@@ -52,8 +52,26 @@ const rgbOf = s => {
     return [c.r, c.g, c.b];
 };
 
+// A popover or window that has just been opened, shown or recoloured can have no frame yet on a loaded machine: its snapshot is empty,
+// to_node() is null and render_texture fails with "Argument root may not be null". shoot() therefore waits (at most 10 s, as drawn()
+// of red-render-smoke.js) until a snapshot of the widget is not empty, and takes the picture in the same turn of the main loop. This
+// rules out the missing first frame; it does not rule out a picture of a half-updated widget, which the sleeps before the calls and
+// the checks on the pixels still have to catch. How often the old failure came was not measured (rare).
+async function drawn(widget) {
+    for (let i = 0; i < 50; i++) {
+        if (widget.get_width() > 0 && widget.get_height() > 0) {
+            const snap = new Gtk.Snapshot();
+            new Gtk.WidgetPaintable({widget}).snapshot(snap, widget.get_width(), widget.get_height());
+            if (snap.to_node() !== null)
+                return;
+        }
+        await sleep(200);
+    }
+}
+
 // The popover (with its background) drawn to a PNG and read back: at(x, y) -> [r, g, b] in the coordinates of the popover.
-function shoot(widget, path) {
+async function shoot(widget, path) {
+    await drawn(widget);
     const w = widget.get_width(), h = widget.get_height();
     const snap = new Gtk.Snapshot();
     new Gtk.WidgetPaintable({widget}).snapshot(snap, w, h);
@@ -91,7 +109,7 @@ async function scenario() {
         w.menuButton.popup();
         await sleep(700);
         check(grid.get_mapped(), `${scheme}: the popover is open and the grid is drawn`);
-        const shot = shoot(popover, `${base}/grid-${scheme}.png`);
+        const shot = await shoot(popover, `${base}/grid-${scheme}.png`);
         const cellOf = v => w.dots.get(v).button.get_parent();
         check(grid.get_width() === 220 && GRID_COLORS.every(v => cellOf(v).get_width() === 36 && cellOf(v).get_height() === 36),
             `${scheme}: the circles are 36 px, the grid is ${grid.get_width()} px wide (want 220)`);
@@ -151,7 +169,7 @@ async function scenario() {
     w.setColor('#336699');
     w.menuButton.popup();
     await sleep(700);
-    const shot = shoot(popover, `${base}/grid-custom.png`);
+    const shot = await shoot(popover, `${base}/grid-custom.png`);
     const cc = centre(popover, w.customDot.button);
     check(near(shot.at(cc.x - 12, cc.y - 8), [0x33, 0x66, 0x99], 3), `a #336699 note: the custom circle is filled ${hex(shot.at(cc.x - 12, cc.y - 8))}`);
     check(accent !== null && near(shot.at(cc.x + 21, cc.y), accent, 12) && near(shot.at(cc.x + 3.5, cc.y + 10), accent, 12), 'and it has the ring and the badge');
@@ -167,7 +185,7 @@ async function scenario() {
     for (const color of ['#ee0000', NOTE_BLACK, '#336699']) {
         w.setColor(color);
         await sleep(500);
-        const win = shoot(w.win, `${base}/mark-${color.slice(1)}.png`);
+        const win = await shoot(w.win, `${base}/mark-${color.slice(1)}.png`);
         const [ok, r] = w.markLabel.compute_bounds(w.win);
         const back = win.at(r.get_x() + 1, r.get_y() + 1);
         let text = back;
