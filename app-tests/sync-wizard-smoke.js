@@ -224,6 +224,19 @@ async function scenario() {
     check(await pageIs(w, 'ids') && fake.hosts.length === 2, 'Try again goes back to the ID page and waits again');
     await closeWin(w);
 
+    // ---- a timeout after the accept: Try again asks the status (the other computer is already added), it does not start a second opening
+    w = await open({status: () => status('half', {peer: {id: B, name: null}, connected: false, link: 'none', shared: true, up_to_date: false})});
+    await pageIs(w, 'half');
+    await closeWin(w);
+    w = await open({status: () => status('set-up')});
+    await pageIs(w, 'ids');
+    fake.hosts[0].finish(fail('E_PEER_TIMEOUT', 'connect'));
+    check(await pageIs(w, 'error'), 'E_PEER_TIMEOUT ends on the error page');
+    const statusBefore = fake.count('status');
+    w.w.errAction.emit('clicked');
+    check(await waitFor(() => fake.count('status') === statusBefore + 1) && fake.hosts.length === 1, 'Try again asks the status and starts no second waiting run');
+    await closeWin(w);
+
     // ---- entering the other ID: the waiting run stops, join gets the line as typed, errors stay under the field
     w = await open({
         status: () => status('set-up'),

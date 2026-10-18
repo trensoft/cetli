@@ -346,9 +346,15 @@ export class SyncWizard {
             if (out.ok) {
                 this._showDone(out.result.peer);
             } else {
-                this._showError(out.error.code, () => this._enterIds());
+                this._showError(out.error.code, this._retryFor(out.error.code));
             }
         });
+    }
+
+    // After the other computer was added, "Try again" must not start a second opening (the engine would refuse: this computer is already set
+    // up with another one): it asks the status again, which shows the half-finished state with "Stop syncing".
+    _retryFor(code) {
+        return code === 'E_PEER_TIMEOUT' || code === 'E_NOT_UP_TO_DATE' ? () => this.refresh() : () => this._enterIds();
     }
 
     _showCandidate(c) {
@@ -425,7 +431,7 @@ export class SyncWizard {
             this._enterIds(out.error.code === 'E_BAD_ID' ? S.syncBadId() : S.syncOwnIdEntered());
             this._keepEntryError = false;
         } else {
-            this._showError(out.error.code, () => this._enterIds());
+            this._showError(out.error.code, this._retryFor(out.error.code));
         }
     }
 
