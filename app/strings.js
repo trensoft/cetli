@@ -180,7 +180,7 @@ export function syncLinkText(key) {
     switch (key) {
     case 'connected': return _('Connected');
     case 'catching-up': return _('Connected, the notes are still arriving');
-    case 'unstable': return _('The connection is unstable');
+    case 'unstable': return _('The connection is not confirmed yet');
     case 'offline': return _('Not connected right now');
     case 'checking': return _('Checking the connection…');
     default: return '';

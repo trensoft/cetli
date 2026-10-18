@@ -492,7 +492,7 @@ msgid "Connected, the notes are still arriving"
 msgstr ""
 
 #: app/strings.js
-msgid "The connection is unstable"
+msgid "The connection is not confirmed yet"
 msgstr ""
 
 #: app/strings.js
