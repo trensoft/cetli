@@ -318,3 +318,47 @@ test('a failing step carries its step name; an unexpected exception is E_INTERNA
     assert.equal(JSON.stringify(w.journal).includes(FAKE_KEY), false);
     assert.deepEqual(await createEngine(w.ports()).perform('connect'), {error: {code: 'E_INTERNAL'}});
 });
+
+// ---- status.listener (Interface 2a): from `show system` -> connectionServiceStatus, tcp:// and quic:// entries only -----------------
+
+test('status.listener: ok / degraded / down / null from connectionServiceStatus; the relay entry is ignored; an odd shape is null, never an error', async () => {
+    const listener = async (system, {afterProbe = false} = {}) => {
+        const w = await createWorld();
+        await w.setUp();
+        let calls = 0;
+        // the daemon probe of status is the same call: with afterProbe the first answer is a good one and `system` comes after it
+        w.system = () => (afterProbe && calls++ === 0 ? {rc: 0, out: '{}'} : system);
+        return (await w.engine().perform('status')).result.listener;
+    };
+    const json = o => ({rc: 0, out: JSON.stringify({myID: OWN, connectionServiceStatus: o})});
+    const ok = {error: null, lanAddresses: ['tcp://192.168.1.2:22100']};
+    const relayDown = ['dynamic+https://relays.syncthing.net/endpoint', {error: 'dial tcp: network is unreachable', lanAddresses: []}];
+    assert.equal(await listener(json({'tcp://0.0.0.0:22100': ok, 'quic://0.0.0.0:22100': ok})), 'ok');
+    assert.equal(await listener(json({'tcp://0.0.0.0:22100': ok, 'quic://0.0.0.0:22100': ok, [relayDown[0]]: relayDown[1]})), 'ok', 'a relay error is not a listener fault');
+    assert.equal(await listener(json({'tcp://0.0.0.0:22100': {error: 'listen tcp 0.0.0.0:22100: bind: address already in use', lanAddresses: []}, 'quic://0.0.0.0:22100': ok})), 'degraded');
+    assert.equal(await listener(json({'quic://0.0.0.0:22100': {error: 'x'}})), 'degraded');
+    assert.equal(await listener(json({'tcp://0.0.0.0:22100': ['', []], 'quic://0.0.0.0:22100': ['bind failed', []]})), 'degraded', 'the array shape [error, lanAddresses]');
+    assert.equal(await listener(json({'tcp://0.0.0.0:22100': ['', []]})), 'ok');
+    assert.equal(await listener(json({[relayDown[0]]: relayDown[1]})), null, 'no tcp or quic entry: nothing is claimed ok');
+    assert.equal(await listener(json({})), null);
+    for (const odd of [null, 'text', [], 5, {'tcp://0.0.0.0:22100': 5}, {'tcp://0.0.0.0:22100': {error: 7}}, {'tcp://0.0.0.0:22100': null}])
+        assert.equal(await listener(json(odd)), null, JSON.stringify(odd));
+    assert.equal(await listener({rc: 0, out: 'not json'}), null);
+    assert.equal(await listener({rc: 0, out: JSON.stringify([])}), null);
+    assert.equal(await listener({rc: 1, out: 'timeout'}, {afterProbe: true}), 'down', 'the call does not get an answer');
+    const dead = await createWorld();
+    await dead.setUp();
+    dead.system = () => ({rc: 1, out: 'timeout'});
+    assert.deepEqual((await dead.engine().perform('status')).error, {code: 'E_SERVICE_TIMEOUT'}, 'a daemon that never answers stays the error with the log hint');
+});
+
+test('status.listener is null where the state is not set-up, half or paired; an empty list of the stub reads null too', async () => {
+    const none = await createWorld();
+    none.installBackend();
+    const r = (await none.engine().perform('status')).result;
+    assert.deepEqual([r.state, r.listener], ['not-set-up', null]);
+    const w = await createWorld();
+    await w.setUp();
+    const s = (await w.engine().perform('status')).result;
+    assert.deepEqual([s.state, s.listener], ['set-up', null]);
+});

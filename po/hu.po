@@ -515,6 +515,14 @@ msgid "Checking the connection…"
 msgstr "A kapcsolat ellenőrzése…"
 
 #: app/strings.js
+msgid "This computer could not open its sync port. Connecting may still work, but may take longer."
+msgstr "Ez a számítógép nem tudta megnyitni a szinkronizálási portját. A csatlakozás ettől még működhet, de tovább tarthat."
+
+#: app/strings.js
+msgid "The sync program does not answer right now."
+msgstr "A szinkronizáló program jelenleg nem válaszol."
+
+#: app/strings.js
 msgid "Other computer"
 msgstr "Másik számítógép"
 

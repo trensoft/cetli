@@ -22,7 +22,7 @@ test('the fixture directory and index.json list the same files', () => {
 test('the fixtures the Interface file names exist (section 5, with the 0.2.5 names where the code form is reserved)', () => {
     const required = [
         'status-no-syncthing', 'status-not-set-up', 'status-stfolder-conflict', 'status-foreign-config', 'status-set-up', 'status-half',
-        'status-paired', 'status-flapping', 'host-foreign-device', 'join-foreign-device', 'setup-foreign-device', 'setup-ok', 'setup-fail-systemd',
+        'status-paired', 'status-flapping', 'status-listener-degraded', 'host-foreign-device', 'join-foreign-device', 'setup-foreign-device', 'setup-ok', 'setup-fail-systemd',
         'host-ok', 'host-expired', 'host-stdin-eof', 'join-ok', 'join-flapping', 'forget-ok', 'oversize', 'not-json', 'v2',
     ];
     for (const r of required)
@@ -157,11 +157,11 @@ test('result of host and join is the proof: link stable with connected_s, up_to_
 });
 
 test('result of status: the closed states, link null unless half or paired, peer present for half and paired', () => {
-    const st = (o = {}) => JSON.stringify({v: 1, event: 'result', state: 'paired', own_id: A, peer: {id: B, name: 'b'}, connected: true, link: 'stable', connected_s: 9, shared: true, up_to_date: null, notes: 1, waiting: false, ...o});
+    const st = (o = {}) => JSON.stringify({v: 1, event: 'result', state: 'paired', own_id: A, peer: {id: B, name: 'b'}, connected: true, link: 'stable', connected_s: 9, listener: 'ok', shared: true, up_to_date: null, notes: 1, waiting: false, ...o});
     assert.ok(parse(st(), 'status'));
     assert.equal(parse(st({state: 'connected'}), 'status'), null);
     assert.equal(parse(st({state: 'foreign-config'}), 'status'), null);                       // link must be null there
-    assert.ok(parse(st({state: 'foreign-config', link: null, connected_s: null, shared: null, up_to_date: null}), 'status'));
+    assert.ok(parse(st({state: 'foreign-config', link: null, connected_s: null, listener: null, shared: null, up_to_date: null}), 'status'));
     assert.equal(parse(st({state: 'set-up', peer: null}), 'status'), null);                   // a link without a peer state
     assert.equal(parse(st({peer: null}), 'status'), null);
     assert.equal(parse(st({link: 'maybe'}), 'status'), null);
@@ -169,9 +169,15 @@ test('result of status: the closed states, link null unless half or paired, peer
     assert.equal(parse(st({link: 'flapping'}), 'status'), null);                              // and a count needs stable
     assert.ok(parse(st({link: 'flapping', connected_s: null}), 'status'));
     assert.equal(parse(st({up_to_date: true}), 'status'), null);                              // always null in 0.2.5
+    for (const l of ['ok', 'degraded', 'down', null])
+        assert.ok(parse(st({listener: l}), 'status'), String(l));
+    for (const l of ['fine', 'OK', 5, undefined])
+        assert.equal(parse(st({listener: l}), 'status'), null, String(l));
+    assert.equal(parse(st({state: 'foreign-config', link: null, connected_s: null, shared: null, listener: 'ok'}), 'status'), null);       // only set-up, half, paired
+    assert.ok(parse(st({state: 'set-up', peer: null, link: null, connected_s: null, shared: null, listener: 'degraded'}), 'status'));
     assert.equal(parse(st({waiting: null}), 'status'), null);
     assert.equal(parse(st({own_id: 'nope'}), 'status'), null);
-    for (const k of ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'shared', 'up_to_date', 'notes', 'waiting']) {
+    for (const k of ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'listener', 'shared', 'up_to_date', 'notes', 'waiting']) {
         const o = JSON.parse(st());
         delete o[k];
         assert.equal(parse(JSON.stringify(o), 'status'), null, `missing ${k}`);

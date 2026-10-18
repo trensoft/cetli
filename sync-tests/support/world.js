@@ -34,6 +34,7 @@ export function createWorld(opts = {}) {
         connections: new Map(),                    // id -> boolean | (nowMs) -> boolean
         pending: {},                               // id -> {time, name, address}
         pendingBytes: null,                        // pretend the output is this large
+        system: null,                              // (world) -> {rc, out}: a different answer of `show system`
         failConnections: null,                     // (nowMs) -> boolean: `show connections` fails (rc 1) when true
         afterAdd: null,                            // (id) -> void: a hook that changes a device right after it was added (a foreign edit)
         failCli: new Set(),                        // exact `config devices add`-style prefixes that fail (rc 1)
@@ -115,7 +116,7 @@ export function createWorld(opts = {}) {
             return {rc: 1, out: `syncthing: error: Get "http://unix/rest/system/config": dial unix ${home}/gui.sock: connect: no such file or directory\n`};
         const [a, b, c, d, e] = args;
         if (a === 'show' && b === 'system')
-            return {rc: 0, out: JSON.stringify({myID: w.ownId, connectionServiceStatus: {}}) + '\n'};
+            return w.system ? w.system(w) : {rc: 0, out: JSON.stringify({myID: w.ownId, connectionServiceStatus: {}}) + '\n'};
         if (a === 'show' && b === 'connections') {
             if (w.failConnections?.(w.mono))
                 return {rc: 1, out: 'syncthing: error: timeout\n'};

@@ -503,6 +503,14 @@ msgid "Checking the connection…"
 msgstr ""
 
 #: app/strings.js
+msgid "This computer could not open its sync port. Connecting may still work, but may take longer."
+msgstr ""
+
+#: app/strings.js
+msgid "The sync program does not answer right now."
+msgstr ""
+
+#: app/strings.js
 msgid "Other computer"
 msgstr ""
 

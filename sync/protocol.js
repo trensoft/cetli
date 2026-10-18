@@ -24,6 +24,7 @@ export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join',
 export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'device', 'share', 'connect', 'sync']);
 export const PROGRESS_STATES = Object.freeze(['start', 'ok']);
 export const STATUS_STATES = Object.freeze(['no-syncthing', 'not-set-up', 'stfolder-conflict', 'foreign-config', 'set-up', 'half', 'paired']);
+export const LISTENER_STATES = Object.freeze(['ok', 'degraded', 'down']);
 export const LINK_STATES = Object.freeze(['none', 'flapping', 'stable']);
 // The two wire strings that name the sync program. The window (app/) is not allowed to contain that word in code (static test), so it
 // refers to them through these identifiers.
@@ -79,7 +80,7 @@ const isPeer = v => isObj(v) && isCanonicalId(v.id) && isName(v.name);
 
 const RESULT_SCHEMAS = {
     status: r => STATUS_STATES.includes(r.state) && idOrNull(r.own_id) && (r.peer === null || isPeer(r.peer)) && boolOrNull(r.connected) &&
-        (r.link === null || LINK_STATES.includes(r.link)) && connectedSOk(r) && boolOrNull(r.shared) && r.up_to_date === null &&
+        (r.link === null || LINK_STATES.includes(r.link)) && connectedSOk(r) && (r.listener === null || LISTENER_STATES.includes(r.listener)) && boolOrNull(r.shared) && r.up_to_date === null &&
         (r.notes === null || isCount(r.notes)) && isBool(r.waiting) && statusRules(r),
     setup: r => isCanonicalId(r.own_id) && r.state === 'set-up',
     'own-id': r => isCanonicalId(r.own_id),
@@ -88,7 +89,7 @@ const RESULT_SCHEMAS = {
     forget: r => r.state === 'set-up',
 };
 const RESULT_KEYS = {
-    status: ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'shared', 'up_to_date', 'notes', 'waiting'],
+    status: ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'listener', 'shared', 'up_to_date', 'notes', 'waiting'],
     setup: ['own_id', 'state'],
     'own-id': ['own_id'],
     host: ['peer', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
@@ -106,7 +107,7 @@ const connectedResult = r => r.link === 'stable' && connectedSOk(r) && r.up_to_d
 // `link` is null unless the state is half or paired; foreign-config takes precedence over paired, so its link is null too.
 function statusRules(r) {
     if (r.state !== 'half' && r.state !== 'paired')
-        return r.link === null && r.connected_s === null && r.up_to_date === null && r.shared === null;
+        return r.link === null && r.connected_s === null && r.up_to_date === null && r.shared === null && (r.state === 'set-up' || r.listener === null);
     return r.peer !== null;
 }
 

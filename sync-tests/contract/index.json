@@ -148,5 +148,10 @@
     "verb": "status",
     "rc": 0,
     "expect": "E_PROTOCOL"
+  },
+  "status-listener-degraded.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
   }
 }

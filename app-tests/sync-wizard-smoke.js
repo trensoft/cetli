@@ -40,8 +40,8 @@ async function waitFor(cond, limit = 8000) {
 
 const A = 'F6HEWOE-4KSACQ5-5MAX7IC-HAP3EGW-AQYBTIX-V74MXIF-ZB3GZN6-4T3QYQZ';
 const B = 'VTTWEJK-SMIOBMH-3FIWS7V-JFC2CL4-FCR3BU6-PEPADRQ-EYVVD3Z-BIGMUQ5';
-const status = (state, extra = {}) => ({ok: true, result: {event: 'result', state, own_id: A, peer: null, connected: null, link: null, connected_s: null, shared: null, up_to_date: null, notes: null, waiting: false, ...extra}});
-const paired = (extra = {}) => status('paired', {peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', connected_s: 9, shared: true, up_to_date: null, notes: 3, ...extra});
+const status = (state, extra = {}) => ({ok: true, result: {event: 'result', state, own_id: A, peer: null, connected: null, link: null, connected_s: null, listener: null, shared: null, up_to_date: null, notes: null, waiting: false, ...extra}});
+const paired = (extra = {}) => status('paired', {peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', connected_s: 9, listener: 'ok', shared: true, up_to_date: null, notes: 3, ...extra});
 const fail = (code, step = null) => ({ok: false, error: {code, step}});
 
 // The fake bridge: `answers[verb]` is a function (opts) -> outcome | Promise. `host` is a controllable handle.
@@ -280,6 +280,19 @@ async function scenario() {
         check(labelText(w.w.pairedLink) === S.syncLinkText(key) && labelText(w.w.pairedLink) !== S.syncLinkText('connected'), `link ${JSON.stringify(extra)}: ${key}, never "Connected"`);
         await closeWin(w);
     }
+    // the listener note: neutral (no error style), only for degraded and down, hidden for ok and null
+    for (const [listener, shown] of [['degraded', true], ['down', true], ['ok', false], [null, false]]) {
+        w = await open({status: () => paired({listener})});
+        await pageIs(w, 'paired');
+        check(w.w.pairedListener.get_visible() === shown && (labelText(w.w.pairedListener) !== '') === shown, `listener ${listener}: ${shown ? 'a note' : 'no note'} on the paired page`);
+        check(!w.w.pairedListener.has_css_class('error') && !w.w.pairedStop.has_css_class('suggested-action'), `listener ${listener}: neutral, no red`);
+        check(labelText(w.w.pairedLink) === S.syncLinkText('connected'), `listener ${listener}: the link line is unchanged`);
+        await closeWin(w);
+    }
+    w = await open({status: () => status('set-up', {listener: 'degraded'})});
+    await pageIs(w, 'ids');
+    check(w.w.idsListener.get_visible() && labelText(w.w.idsListener) === S.syncListenerText('degraded') && !w.w.idsListener.has_css_class('error'), 'the ID page carries the same neutral note');
+    await closeWin(w);
     w = await open({status: () => paired(), forget: () => ({ok: true, result: {event: 'result', state: 'set-up'}})});
     await pageIs(w, 'paired');
     w.w.pairedStop.emit('clicked');

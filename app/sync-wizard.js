@@ -168,7 +168,9 @@ export class SyncWizard {
         w.entryError = this._text('');
         w.entryError.add_css_class('error');
         w.entryError.set_visible(false);
-        this._addPage('ids', [w.ownIdHeading, w.ownIdCaption, w.ownId.box, w.ownIdCopy, w.ownIdHint, waitBox, w.cand, w.enterHeading, entryRow, w.entryError]);
+        w.idsListener = this._text('');
+        w.idsListener.set_visible(false);
+        this._addPage('ids', [w.ownIdHeading, w.ownIdCaption, w.ownId.box, w.ownIdCopy, w.ownIdHint, waitBox, w.cand, w.enterHeading, entryRow, w.entryError, w.idsListener]);
 
         // connecting
         w.connStep = this._text('');
@@ -190,6 +192,7 @@ export class SyncWizard {
         // paired (page S)
         w.pairedPeer = this._text('');
         w.pairedLink = this._text('');
+        w.pairedListener = this._text('');
         w.pairedPeerId = this._idLabels();
         w.pairedOwnCaption = this._text(S.syncOwnIdHeading());
         w.pairedOwnCaption.add_css_class('heading');
@@ -200,7 +203,7 @@ export class SyncWizard {
         w.pairedOwn = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 4, visible: false});
         w.pairedOwn.append(w.pairedOwnCaption);
         w.pairedOwn.append(w.pairedOwnId.box);
-        this._addPage('paired', [this._title(S.syncPairedTitle()), w.pairedLink, w.pairedPeer, w.pairedPeerId.box, w.pairedShowOwn, w.pairedOwn, w.pairedStop, w.pairedClose]);
+        this._addPage('paired', [this._title(S.syncPairedTitle()), w.pairedLink, w.pairedListener, w.pairedPeer, w.pairedPeerId.box, w.pairedShowOwn, w.pairedOwn, w.pairedStop, w.pairedClose]);
 
         // half
         w.halfStop = this._button(S.syncStopShort(), () => this._confirmStop(), true);
@@ -267,6 +270,7 @@ export class SyncWizard {
         if (page === 'ids') {
             this.ownId = result.own_id;
             this._enterIds();
+            this._setListenerNote(this.w.idsListener, result);
         } else if (page === 'paired') {
             this.ownId = result.own_id;
             this._fillPaired(result);
@@ -286,8 +290,16 @@ export class SyncWizard {
         w.pairedPeer.set_label(`${S.syncPeerHeading()}: ${name}`);
         w.pairedPeerId.set(result.peer?.id ?? '');
         w.pairedLink.set_label(S.syncLinkText(linkKey(result)));
+        this._setListenerNote(w.pairedListener, result);
         w.pairedOwnId.set(result.own_id ?? '');
         w.pairedOwn.set_visible(false);
+    }
+
+    // A neutral line (no error style) for a listener that is `degraded` or `down`; empty and hidden otherwise.
+    _setListenerNote(label, result) {
+        const text = S.syncListenerText(result?.listener);
+        label.set_label(text);
+        label.set_visible(text !== '');
     }
 
     _togglePairedOwn() {
@@ -319,6 +331,7 @@ export class SyncWizard {
         this.acceptSent = false;
         w.cand.set_visible(false);
         w.entryError.set_visible(message !== null);
+        w.idsListener.set_visible(false);
         w.entryError.set_label(message ?? '');
         w.entry.set_sensitive(true);
         this._onEntryChanged();

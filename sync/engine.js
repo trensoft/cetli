@@ -231,6 +231,40 @@ export function createEngine(ports) {
         };
     }
 
+    // The state of the listeners for `status` (Interface 2a): `cli show system`, key connectionServiceStatus (address -> {error, ...} or
+    // [error, ...]). Only the tcp:// and quic:// entries count; the relay entry carries an error whenever the network is unreachable, which is
+    // not a listener fault. An unreadable or unexpected shape is null (never an error), and so is a list without a tcp/quic entry: nothing
+    // is claimed `ok` that was not seen. `down`: the call itself does not get an answer.
+    async function listenerState() {
+        const r = await run.syncthing('cli', ['show', 'system']);
+        if (r.rc !== 0 && !r.tooLarge)
+            return 'down';
+        let o;
+        try {
+            o = JSON.parse(r.out);
+        } catch {
+            return null;
+        }
+        const entries = o?.connectionServiceStatus;
+        if (!isObj(entries))
+            return null;
+        let seen = 0;
+        let degraded = false;
+        for (const [address, v] of Object.entries(entries)) {
+            if (!/^(tcp|quic)[46]?:\/\//.test(address))
+                continue;
+            if (!Array.isArray(v) && !isObj(v))
+                return null;
+            const error = Array.isArray(v) ? v[0] : v.error;
+            if (error !== undefined && error !== null && typeof error !== 'string')
+                return null;
+            seen++;
+            if (typeof error === 'string' && error !== '')
+                degraded = true;
+        }
+        return seen === 0 ? null : degraded ? 'degraded' : 'ok';
+    }
+
     // status: the first not-connected sample ends the run; only the success path pays the K samples.
     async function measureLink(peerId) {
         const tracker = createLinkTracker(peerId);
@@ -309,7 +343,7 @@ export function createEngine(ports) {
     // ---- verbs ---------------------------------------------------------------------------------------------------------
 
     async function status() {
-        const base = {event: 'result', state: 'not-set-up', own_id: null, peer: null, connected: null, link: null, connected_s: null, shared: null, up_to_date: null, notes: null, waiting: false};
+        const base = {event: 'result', state: 'not-set-up', own_id: null, peer: null, connected: null, link: null, connected_s: null, listener: null, shared: null, up_to_date: null, notes: null, waiting: false};
         if (!backendInstalled())
             return {result: {...base, state: 'no-syncthing'}};
         const ours = holdsFolder();
@@ -332,13 +366,14 @@ export function createEngine(ports) {
         const peer = peers[0] ?? null;
         if (foreign)
             return {result: {...base, state: 'foreign-config', own_id: own}};
+        const listener = await listenerState();
         if (peer === null)
-            return {result: {...base, state: 'set-up', own_id: own, notes: countNotes()}};
+            return {result: {...base, state: 'set-up', own_id: own, listener, notes: countNotes()}};
         const isShared = shared(peer);
         const m = await measureLink(peer.id);
         return {result: {
             ...base, state: isShared ? 'paired' : 'half', own_id: own, peer: {id: peer.id, name: null}, connected: m.connected, link: m.link,
-            connected_s: m.connectedS, shared: isShared, up_to_date: null, notes: countNotes(),
+            connected_s: m.connectedS, listener, shared: isShared, up_to_date: null, notes: countNotes(),
         }};
     }
 

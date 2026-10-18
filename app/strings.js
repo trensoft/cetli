@@ -187,6 +187,14 @@ export function syncLinkText(key) {
     default: return '';
     }
 }
+// A neutral note under the status (no red, no button): the listener state of `status`. Only `degraded` and `down` are shown.
+export function syncListenerText(state) {
+    switch (state) {
+    case 'degraded': return _('This computer could not open its sync port. Connecting may still work, but may take longer.');
+    case 'down': return _('The sync program does not answer right now.');
+    default: return '';
+    }
+}
 export const syncPeerHeading = () => _('Other computer');
 export const syncShowOwnId = () => _('Show the ID of this computer');
 export const syncStop = () => _('Stop syncing with this computer');
