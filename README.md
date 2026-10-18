@@ -31,8 +31,8 @@ that knocks, after you have compared the ID shown there with the ID on the other
 groups); or type the ID of the other computer into the field. The window says *Connected* only when the program has proof from
 the other computer's side. **Stop syncing** removes the other computer and its share; it never removes the folder or a note.
 
-What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): two computers are the supported case. Three
-or more through one middle computer worked on loopback only. Not measured: a real network behind a default firewall or NAT,
+What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): two computers are the supported case.
+cetli pairs a computer with exactly one other computer; three or more cannot be set up in this version. Not measured: a real network behind a default firewall or NAT,
 relays, a real RHEL 10 session. A computer whose notes folder is already synchronised by a Syncthing you set up by hand is
 left exactly as it is.
 
