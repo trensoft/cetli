@@ -233,8 +233,11 @@ export function createEngine(ports) {
 
     // The state of the listeners for `status` (Interface 2a): `cli show system`, key connectionServiceStatus (address -> {error, ...} or
     // [error, ...]). Only the tcp:// and quic:// entries count; the relay entry carries an error whenever the network is unreachable, which is
-    // not a listener fault. An unreadable or unexpected shape is null (never an error), and so is a list without a tcp/quic entry: nothing
-    // is claimed `ok` that was not seen. `down`: the call itself does not get an answer.
+    // not a listener fault. An unreadable or unexpected shape is null (never an error), and so is a list without a tcp/quic entry or an
+    // entry without its error field: nothing is claimed `ok` that was not seen. Measured on the real syncthing 2.1.6 binary (John, 8621):
+    // an OBJECT address -> {error, lanAddresses, wanAddresses}, `error` null when healthy, a string for a busy port, on tcp:// and quic://.
+    // The array shape is kept as a tolerance; the real binary does not give it. Not measured: dynamic+https:// relay entries, tcp4/tcp6/quic4
+    // entries, the `default` listenAddress. `down`: the call itself does not get an answer.
     async function listenerState() {
         const r = await run.syncthing('cli', ['show', 'system']);
         if (r.rc !== 0 && !r.tooLarge)
@@ -255,8 +258,12 @@ export function createEngine(ports) {
                 continue;
             if (!Array.isArray(v) && !isObj(v))
                 return null;
+            // `ok` needs the error field to be there: {} or [] says nothing about the listener (the real syncthing 2.1.6 always has
+            // the key, `null` when the listener is fine)
+            if (Array.isArray(v) ? v.length < 1 : !Object.hasOwn(v, 'error'))
+                return null;
             const error = Array.isArray(v) ? v[0] : v.error;
-            if (error !== undefined && error !== null && typeof error !== 'string')
+            if (error !== null && typeof error !== 'string')
                 return null;
             seen++;
             if (typeof error === 'string' && error !== '')

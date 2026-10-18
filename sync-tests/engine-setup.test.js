@@ -352,6 +352,34 @@ test('status.listener: ok / degraded / down / null from connectionServiceStatus;
     assert.deepEqual((await dead.engine().perform('status')).error, {code: 'E_SERVICE_TIMEOUT'}, 'a daemon that never answers stays the error with the log hint');
 });
 
+test('status.listener: the two raw shapes of the real syncthing 2.1.6 (healthy, busy port) and the missing error key', async () => {
+    // connectionServiceStatus as the real binary gave it (John, 8621, 203-connectionServiceStatus-real-binary.log): an OBJECT keyed by the
+    // listener URI, every entry {error, lanAddresses, wanAddresses}; `error` is null when healthy and a string for a busy port. Two
+    // configs measured (healthy, busy port), tcp:// and quic:// only; relay, tcp4/tcp6/quic4 and `default` entries were not measured.
+    const healthy = {
+        'quic://127.0.0.1:22731': {error: null, lanAddresses: ['quic://127.0.0.1:22731'], wanAddresses: ['quic://127.0.0.1:22731']},
+        'tcp://127.0.0.1:22731': {error: null, lanAddresses: ['tcp://127.0.0.1:22731'], wanAddresses: ['tcp://127.0.0.1:22731']},
+    };
+    const busy = {
+        'quic://127.0.0.1:22732': {error: 'listen udp 127.0.0.1:22732: bind: address already in use', lanAddresses: ['quic://127.0.0.1:22732'], wanAddresses: ['quic://127.0.0.1:22732']},
+        'tcp://127.0.0.1:22732': {error: 'listen tcp 127.0.0.1:22732: bind: address already in use', lanAddresses: ['tcp://127.0.0.1:22732'], wanAddresses: ['tcp://127.0.0.1:22732']},
+    };
+    const listener = async o => {
+        const w = await createWorld();
+        await w.setUp();
+        w.system = () => ({rc: 0, out: JSON.stringify({myID: OWN, connectionServiceStatus: o})});
+        return (await w.engine().perform('status')).result.listener;
+    };
+    assert.equal(await listener(healthy), 'ok', '`error: null` is present, so the key counts as seen');
+    assert.equal(await listener(busy), 'degraded');
+    assert.equal(await listener({'tcp://127.0.0.1:22731': {error: null}}), 'ok');
+    // no error key: nothing says the listener is fine
+    assert.equal(await listener({'tcp://127.0.0.1:22731': {}}), null);
+    assert.equal(await listener({'tcp://127.0.0.1:22731': {lanAddresses: [], wanAddresses: []}}), null);
+    assert.equal(await listener({'tcp://127.0.0.1:22731': []}), null);
+    assert.equal(await listener({'tcp://127.0.0.1:22731': {error: null}, 'quic://127.0.0.1:22731': {}}), null, 'one entry without the key is enough for null');
+});
+
 test('status.listener is null where the state is not set-up, half or paired; an empty list of the stub reads null too', async () => {
     const none = await createWorld();
     none.installBackend();
