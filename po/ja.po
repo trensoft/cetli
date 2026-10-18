@@ -1,0 +1,291 @@
+# Translation template of cetli.
+# Copyright (C) 2026 TrenSoft
+# This file is distributed under the same license as the cetli package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: cetli 0.1.0\n"
+"Report-Msgid-Bugs-To: https://github.com/trensoft/cetli/issues\n"
+"POT-Creation-Date: 2026-10-17 07:13+0000\n"
+"PO-Revision-Date: 2026-10-17 07:13+0000\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid "Cetli"
+msgstr ""
+
+#: data/io.github.trensoft.cetli.desktop.in
+#: data/io.github.trensoft.cetli.metainfo.xml.in app/strings.js
+msgid "Small notes on the desktop that sync between your computers"
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"cetli keeps short notes in small windows on the GNOME desktop. Every note is "
+"one plain file in a folder, so the folder can be kept in step between your "
+"computers with a tool such as Syncthing."
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"If two computers change the same note before they meet, cetli keeps both "
+"versions and shows the second one as a note of its own."
+msgstr ""
+
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid "TrenSoft"
+msgstr ""
+
+#: app/strings.js
+msgid "New note"
+msgstr ""
+
+#: app/strings.js
+msgid "Delete note"
+msgstr ""
+
+#: app/strings.js
+msgid "About cetli"
+msgstr ""
+
+#: app/strings.js
+msgid "Main menu"
+msgstr ""
+
+#: app/strings.js
+msgid "Color"
+msgstr ""
+
+#: app/strings.js
+msgid "Note text"
+msgstr ""
+
+#. Translators: the title in the header of a red note, meaning "this note matters" (not "urgent", not "a famous person").
+#: app/strings.js
+msgid "Important"
+msgstr "重要"
+
+#: app/strings.js
+msgid "Yellow"
+msgstr ""
+
+#: app/strings.js
+msgid "Green"
+msgstr ""
+
+#: app/strings.js
+msgid "Blue"
+msgstr ""
+
+#: app/strings.js
+msgid "Pink"
+msgstr ""
+
+#: app/strings.js
+msgid "Purple"
+msgstr ""
+
+#: app/strings.js
+msgid "Gray"
+msgstr ""
+
+#: app/strings.js
+msgid "Black"
+msgstr ""
+
+#: app/strings.js
+msgid "White"
+msgstr ""
+
+#: app/strings.js
+msgid "RHEL red"
+msgstr ""
+
+#: app/strings.js
+msgid "A newer version arrived from the other computer"
+msgstr ""
+
+#: app/strings.js
+msgid "Deleted on the other computer"
+msgstr ""
+
+#: app/strings.js
+msgid "The note file is gone"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the file has a date in the future, waiting"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the note file cannot be read"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the note file needs a newer cetli"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the other version could not be kept"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the other version could not be kept (disk full?)"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the file could not be written"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: the note is too large"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: too many notes"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: revision limit reached"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: this note cannot be saved"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved"
+msgstr ""
+
+#: app/strings.js
+msgid "Not saved: closing loses this text. Close again to discard it."
+msgstr ""
+
+#: app/strings.js
+#, javascript-format
+msgid "%d unresolved"
+msgstr ""
+
+#: app/strings.js
+msgid "Conflicting copies of notes were kept; cetli does not merge them yet"
+msgstr ""
+
+#: app/strings.js
+msgid "The code of this project was written with the help of AI agents."
+msgstr ""
+
+#: app/strings.js
+msgid "Custom color"
+msgstr ""
+
+#: app/strings.js
+msgid "Choose a color"
+msgstr ""
+
+#: app/strings.js
+msgid "All notes"
+msgstr ""
+
+#. Translators: shown in the "All notes" list for a note that has no text.
+#: app/strings.js
+msgid "(empty note)"
+msgstr ""
+
+# ---- All notes: search, cards, delete (0.2.2) ----
+#: app/strings.js
+msgid "Search notes…"
+msgstr ""
+
+#: app/strings.js
+msgid "No notes"
+msgstr ""
+
+#: app/strings.js
+msgid "After you create notes, they will appear here"
+msgstr ""
+
+#: app/strings.js
+msgid "No results"
+msgstr ""
+
+#: app/strings.js
+msgid "Try a different search"
+msgstr ""
+
+#. Translators: tooltips of the eye button on a card in the "All notes" list: the note window is open / closed now.
+#: app/strings.js
+msgid "Hide note"
+msgstr ""
+
+#: app/strings.js
+msgid "Show note"
+msgstr ""
+
+#: app/strings.js
+msgid "Delete note?"
+msgstr ""
+
+#: app/strings.js
+msgid "This cannot be undone. To only hide the note, close it instead."
+msgstr ""
+
+#: app/strings.js
+msgid "Cancel"
+msgstr ""
+
+#: app/strings.js
+msgid "Delete"
+msgstr ""
+
+#: app/strings.js
+#, javascript-format
+msgid "The note was not deleted (%s)"
+msgstr ""
+
+#: app/strings.js
+msgid "Formatting"
+msgstr ""
+
+#: app/strings.js
+msgid "Bold"
+msgstr ""
+
+#: app/strings.js
+msgid "Italic"
+msgstr ""
+
+#: app/strings.js
+msgid "Underline"
+msgstr ""
+
+#: app/strings.js
+msgid "Strikethrough"
+msgstr ""
+
+#. Translators: the key combination in the brackets is not translated.
+#: app/strings.js
+msgid "Bold (Ctrl+B)"
+msgstr ""
+
+#: app/strings.js
+msgid "Italic (Ctrl+I)"
+msgstr ""
+
+#: app/strings.js
+msgid "Underline (Ctrl+U)"
+msgstr ""
+
+#: app/strings.js
+msgid "Strikethrough (Ctrl+Shift+X)"
+msgstr ""
+
+#: app/strings.js
+msgid "Ctrl+Z does not undo formatting."
+msgstr ""
