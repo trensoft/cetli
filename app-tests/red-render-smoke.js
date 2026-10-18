@@ -58,6 +58,14 @@ async function drawn(win) {
     }
 }
 
+// drawn() and shot() run in the same turn of the main loop (no frame in between), so a snapshot that was not empty a moment ago is not empty
+// now: every picture of the test is taken through here. A window whose size, label or activity just changed has no frame for a while
+// on a loaded machine (the "Argument root may not be null" of 0.2.4 came from the title tests, not from the first frame).
+async function shotOf(win) {
+    await drawn(win);
+    return shot(win);
+}
+
 let shots = 0;
 // The window drawn to a PNG and read back: at(x, y) -> [r, g, b].
 function shot(win) {
@@ -141,7 +149,7 @@ async function bold(scheme) {
     for (const [n, color] of [[1, NOTE_RHEL_RED], [2, 'yellow'], [3, NOTE_BLACK], [4, '#ed0000']]) {
         const w = await open(n, color, DEFAULT);
         const weight = w.view.get_pango_context().get_font_description().get_weight();
-        const m = textMass(shot(w.win), w);
+        const m = textMass(await shotOf(w.win), w);
         mass.set(color, m);
         info(`${scheme} ${color}: the text view draws weight ${weight}, ink of the first line ${m.toFixed(1)}`);
         check(color === NOTE_RHEL_RED ? weight >= Pango.Weight.BOLD : weight === Pango.Weight.NORMAL,
@@ -157,20 +165,20 @@ async function bold(scheme) {
 // 2. the title in a window that is not active, and the buttons of the bar: still dimmed to 50 % there
 async function backdrop(scheme) {
     // the farthest pixel of the buttons of a bar and the strip colour of that bar
-    const buttons = w => {
-        const s = shot(w.win), strip = s.at(Math.floor(s.width / 2), 3);
+    const buttons = async w => {
+        const s = await shotOf(w.win), strip = s.at(Math.floor(s.width / 2), 3);
         const a = ink(s, area(w.addButton, w.win, s.width, s.height), strip), b = ink(s, area(w.menuButton, w.win, s.width, s.height), strip);
         return {s, strip, add: a.far, menu: b.far};
     };
     const alpha = (now, active, strip) => Math.abs(grey(now) - grey(strip)) / Math.abs(grey(active) - grey(strip));
     const y = await open(1, 'yellow', DEFAULT);
-    const yActive = buttons(y);
+    const yActive = await buttons(y);
     const r = await open(2, NOTE_RHEL_RED, DEFAULT);                 // the yellow window is not active now
-    const yBack = buttons(y);
-    const rActive = buttons(r);
+    const yBack = await buttons(y);
+    const rActive = await buttons(r);
     const rTitle = ink(rActive.s, area(r.titleLabel, r.win, rActive.s.width, rActive.s.height), rActive.strip);
     const z = await open(3, 'yellow', DEFAULT);                      // the red window is not active now
-    const rBack = buttons(r);
+    const rBack = await buttons(r);
     const rTitleBack = ink(rBack.s, area(r.titleLabel, r.win, rBack.s.width, rBack.s.height), rBack.strip);
 
     const ay = alpha(yBack.add, yActive.add, yActive.strip), am = alpha(yBack.menu, yActive.menu, yActive.strip);
@@ -201,7 +209,7 @@ async function smallest(scheme) {
         const w = await open(n, NOTE_RHEL_RED, {width: MIN_SIZE, height: 200});
         w.titleLabel.set_label(label);
         await sleep(300);
-        const s = shot(w.win);
+        const s = await shotOf(w.win);
         const min = measureMin(w), W = w.win.get_width();
         const t = ink(s, area(w.titleLabel, w.win, s.width, s.height), s.at(Math.floor(W / 2), 3));
         const [, ab] = w.addButton.compute_bounds(w.win), [, mb] = w.menuButton.compute_bounds(w.win);
@@ -217,7 +225,7 @@ async function smallest(scheme) {
     }
     // the normal window: the title is whole and in the middle, as before
     const w = await open(5, NOTE_RHEL_RED, DEFAULT);
-    const s = shot(w.win);
+    const s = await shotOf(w.win);
     const t = ink(s, area(w.titleLabel, w.win, s.width, s.height), s.at(Math.floor(s.width / 2), 3));
     check(!w.titleLabel.get_layout().is_ellipsized(), `${scheme}: on the normal window "${w.titleLabel.get_label()}" is not cut`);
     check(Math.abs((t.x0 + t.x1) / 2 - s.width / 2) <= 2, `${scheme}: and it stays in the middle (centre ${((t.x0 + t.x1) / 2).toFixed(1)} of ${s.width / 2})`);

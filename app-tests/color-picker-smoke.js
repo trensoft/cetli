@@ -100,8 +100,8 @@ async function scenario() {
         }
     };
     walk(ctl.ctl.menu, 0);
-    check(flat.join(' ') === `| custom:colors | app.all-notes:${S.menuAllNotes()} win.delete:${S.menuDeleteNote()} | win.about:${S.menuAbout()}`,
-        `menu order: the grid, a separator, All notes, Delete note, then About (${flat.join(' ')})`);
+    check(flat.join(' ') === `| custom:colors | app.all-notes:${S.menuAllNotes()} win.delete:${S.menuDeleteNote()} | app.sync-setup:${S.menuSync()} win.about:${S.menuAbout()}`,
+        `menu order: the grid, a separator, All notes, Delete note, a separator, Sync (0.2.5), About (${flat.join(' ')})`);
     check(!flat.some(e => e.startsWith('app.new-note')), 'New note is not in the menu');
     check(ctl.gtkApp.get_accels_for_action('app.all-notes').join() === '<Control>h', 'All notes has Ctrl+H');
     check(ctl.gtkApp.get_accels_for_action('app.new-note').join() === '<Control>n', 'New note keeps Ctrl+N');
