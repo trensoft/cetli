@@ -308,6 +308,14 @@ const MUTANTS = [
         find: "'button.cetli-fmt label { font-size: 16px; opacity: 1; }'", repl: "'button.cetli-fmt label { font-size: 16px; opacity: 0.6; }'"},
     {id: 'A235', rule: 'formatting: every button has a tone also when it is off', file: 'format-bar.js', gjs: true, tests: ['format-bar-render-smoke.js'],
         find: "background-image: none; background-color: transparent; box-shadow: none;", repl: "background-image: none; background-color: alpha(currentColor, 0.16); box-shadow: none;"},
+    {id: 'A236', rule: '0.2.4 red: the bold rule is on the `text` subnode again (the node test sees the rule go; the DRAWN weight is red-render-smoke.js)', file: 'data.js', gjs: true, tests: ['red-render-smoke.js'],
+        find: "rules.push(`window.${cls} textview.cetli-text { font-weight: 700; }`);", repl: "rules.push(`window.${cls} textview.cetli-text text { font-weight: 700; }`);"},
+    {id: 'A237', rule: '0.2.4 red: the title is dimmed to 50 % with the bar in a window that is not active (2.20:1)', file: 'data.js', gjs: true, tests: ['red-render-smoke.js'],
+        find: "headerbar.cetli-header.cetli-titled:backdrop > windowhandle { filter: none; }", repl: "headerbar.cetli-header.cetli-titled:backdrop > windowhandle { filter: opacity(0.5); }"},
+    {id: 'A238', rule: '0.2.4 red: the buttons of the bar are not dimmed in a window that is not active (the bar filter went, nothing took its place)', file: 'data.js', gjs: true, tests: ['red-render-smoke.js'],
+        find: "label.cetli-unresolved { filter: opacity(0.5); }'", repl: "label.cetli-unresolved { filter: none; }'"},
+    {id: 'A239', rule: '0.2.4 red: the title is not cut with an ellipsis (a long translation widens the bar)', file: 'window.js', gjs: true, tests: ['red-render-smoke.js'],
+        find: "new Gtk.Label({label: '', ellipsize: Pango.EllipsizeMode.END})", repl: "new Gtk.Label({label: ''})"},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
@@ -321,7 +329,7 @@ function runNode(dir) {
 
 // The gjs tests, one after the other; the first one with a failure ends the run (a mutant is killed once).
 // CETLI_GJS_TESTS=a.js,b.js runs only those (for a mutant of one area, and while gtk-smoke.js is timing-flaky on a loaded machine).
-const GJS_TESTS = process.env.CETLI_GJS_TESTS?.split(',') ?? ['marks-gjs-smoke.js', 'preview-marks-smoke.js', 'allnotes-smoke.js', 'gtk-smoke.js', 'color-picker-smoke.js', 'color-render-smoke.js', 'color-grid-render-smoke.js', 'format-bar-smoke.js', 'format-bar-render-smoke.js'];
+const GJS_TESTS = process.env.CETLI_GJS_TESTS?.split(',') ?? ['marks-gjs-smoke.js', 'preview-marks-smoke.js', 'allnotes-smoke.js', 'gtk-smoke.js', 'color-picker-smoke.js', 'color-render-smoke.js', 'color-grid-render-smoke.js', 'red-render-smoke.js', 'format-bar-smoke.js', 'format-bar-render-smoke.js'];
 
 function runGjs(dir, tests = GJS_TESTS) {
     let last = {failed: [], status: 0};
