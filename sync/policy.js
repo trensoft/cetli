@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // PURE: every knob of the group rule in ONE file (PLAN-0.2.6 2.1, PLAN-ADMISSION-0.2.6). The number of computers lives here and nowhere
-// else: the engine imports it, the window gets it from `status.max_computers`. The two switches wait for John's measurements; both
-// branches are built and tested, the values below are the ones the release uses.
+// else: the engine imports it, the window gets it from `status.max_computers`. The two switches were decided by John's measurements
+// (8724); both branches are built and tested, the values below are the ones the release uses.
 
 export const MAX_COMPUTERS = 10;
 // Devices other than the own one (Nicole T-N1/X1): 10 computers are 9 peers, a literal 10 would allow 11 computers.
@@ -12,9 +12,11 @@ export const READ_CAP = MAX_COMPUTERS + 6;
 // Three keep the largest status line under the 3500 byte rule (T-N25).
 export const REMOVED_MAX = 3;
 
-// V-A2: introduced devices get `introducer=false` (the delegation depth stays 1). Needs M-J5; the value is `false` until it is measured.
-export const HARDEN_INTRODUCED = false;
-// The "retired computer" shortcut `forget <ID>` on a directly accepted device. Needs M-J1; `false` until it is measured.
+// V-A2: introduced devices get `introducer=false`. M-J5 PASS (log 228): ON. A mitigation, not a guarantee: the entry arrives with the flag
+// set and only the next run of the engine lowers it, so no text promises an immediate effect or a delegation depth.
+export const HARDEN_INTRODUCED = true;
+// The "retired computer" shortcut `forget <ID>` on a directly accepted device. M-J1 FAIL (logs 224, 231: an offline follower brings the
+// removed computer back): OFF for good in this release. The code stays behind the switch; no window offers it.
 export const SHORTCUT_REMOVE = false;
 
 // Wait between the first and the second read-back of `revoke`: one reconnect cycle (Nicole [H], M-J3 may change it).

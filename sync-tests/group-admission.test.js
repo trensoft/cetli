@@ -241,7 +241,7 @@ test('status of a group: how each computer came, new and returned rows, the coun
     assert.deepEqual([by(a).introduced_by, by(b).introduced_by, by(c).introduced_by], [null, a, b]);
     assert.deepEqual([by(a).new, by(b).new, by(c).new], [false, true, true]);
     assert.deepEqual([by(a).returned, by(b).returned, by(c).returned], [false, false, true]);
-    assert.deepEqual([r.computers, r.max_computers, r.revocation_open, r.harden_pending, r.promote_pending], [4, 10, false, 0, 0]);
+    assert.deepEqual([r.computers, r.max_computers, r.revocation_open, r.harden_pending, r.promote_pending], [4, 10, false, 1, 0]);   // b arrived with the flag: harden lowers it
     // the largest status the engine can produce: 9 peers, introduced, new, returned, 32-character names
     const big = await ready();
     const list = ids(MAX_PEERS);

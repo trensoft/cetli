@@ -720,8 +720,11 @@ msgstr ""
 #: app/strings.js
 msgid ""
 "To be sure, open this list on each of your other computers and choose the "
-"same action there. Press Finish here only when you have done it everywhere. "
-"Until then this computer takes no additions from other computers."
+"same action there. Press Finish here only when you have done it everywhere: "
+"the permissions come back on only at the next reconnection, and if the "
+"removed computer is still listed on any computer, it brings the removed "
+"computer back. Until then this computer takes no additions from other "
+"computers."
 msgstr ""
 
 #: app/strings.js

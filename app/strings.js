@@ -241,7 +241,7 @@ export const syncRemoveTooMany = max => fill(_('Select at most %s computers at o
 export const syncRevokingTitle = () => _('Removing…');
 export const syncRevokeRemoved = list => fill(_('Removed on this computer: %s. Your notes can still reach it through other computers that have not removed it yet.'), list);
 export const syncRevokeOffline = list => fill(_('These computers were offline just now: %s. If one of them still knows the removed computer, it can bring it back to every computer that has not done this removal yet. It cannot bring it back here while this computer is limited. Open cetli on it and do the same there.'), list);
-export const syncRevokeNext = () => _('To be sure, open this list on each of your other computers and choose the same action there. Press Finish here only when you have done it everywhere. Until then this computer takes no additions from other computers.');
+export const syncRevokeNext = () => _('To be sure, open this list on each of your other computers and choose the same action there. Press Finish here only when you have done it everywhere: the permissions come back on only at the next reconnection, and if the removed computer is still listed on any computer, it brings the removed computer back. Until then this computer takes no additions from other computers.');
 export const syncFinishButton = () => _('Finish: I did this on all my computers');
 export const syncFinishShort = () => _('Finish');
 

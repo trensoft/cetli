@@ -156,6 +156,8 @@ test('remove paths: lost is always there; "I still have it" needs the policy swi
     const st = fixture('status-group-new');
     assert.deepEqual(removePaths(st, B, false), ['lost']);
     assert.deepEqual(removePaths(st, B, true), ['have', 'lost']);
+    assert.deepEqual(removePaths(st, B), ['lost'], 'the release value of the switch (M-J1 FAIL): no window offers the shortcut');
+    assert.equal(forgetId(st, B), null);
     assert.deepEqual(removePaths(st, P, true), ['lost'], 'an introduced row: only the freeze path');
     const ret = group([peer(B, {returned: true}), peer(P, {new: true})]);
     assert.deepEqual(removePaths(ret, B, true), ['lost']);

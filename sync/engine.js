@@ -164,13 +164,15 @@ export function createEngine(ports) {
         if (!ids.every(isCanonicalId))
             throw new Fail('E_CLI_FAILED');
         const devices = [];
+        // The daemon neither filters nor limits what an introducer sends (M-I5, M-I6): at most READ_CAP `dump-json` calls, and the name is
+        // reduced to the displayName gate the moment it is read (a 100 000 character name is never kept).
         if (ids.length <= READ_CAP) {
             for (const id of ids) {
                 const d = json(await cli(['config', 'devices', id, 'dump-json']));
                 if (!isObj(d) || d.deviceID !== id)
                     throw new Fail('E_CLI_FAILED');
                 devices.push({
-                    id, name: typeof d.name === 'string' ? d.name : '', introducer: d.introducer === true, autoAcceptFolders: d.autoAcceptFolders === true,
+                    id, name: displayName(d.name) ?? '', introducer: d.introducer === true, autoAcceptFolders: d.autoAcceptFolders === true,
                     skipIntroductionRemovals: d.skipIntroductionRemovals === true, introducedBy: typeof d.introducedBy === 'string' ? d.introducedBy : 'invalid',
                 });
             }

@@ -22,8 +22,8 @@ test('policy: 10 computers are 9 peers, the cap of the device list sits above th
     }
 });
 
-test('policy: both switches are off until John has measured them (M-J5, M-J1)', () => {
-    assert.equal(HARDEN_INTRODUCED, false);
+test('policy: the hardening is on (M-J5 PASS), the quick removal is off for good (M-J1 FAIL)', () => {
+    assert.equal(HARDEN_INTRODUCED, true);
     assert.equal(SHORTCUT_REMOVE, false);
 });
 
