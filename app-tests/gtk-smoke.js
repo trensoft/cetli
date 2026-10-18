@@ -239,7 +239,8 @@ async function scenario() {
     await sleep(2300);
     const filesBefore = noteFiles().length;
     remoteWrite(id4, {rev: fileRec(id4).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'valid remote'});
-    await sleep(1000);
+    // wait for the state the checks below read (the retried save is done and its copy of the remote version exists), 5 s at most
+    await until(() => fileRec(id4).text === 'typed' && w4.mark === null && !w4._dirty() && noteFiles().length === filesBefore + 1, 5000);
     check(w4._bufferText() === 'typed', `an unsaved window never takes the remote text, however quiet it is (${w4._bufferText()})`);
     check(fileRec(id4).text === 'typed' && w4.mark === null && !w4._dirty(), 'the retried save wrote the typed text, cleared the mark, and the window is clean');
     check(noteFiles().length === filesBefore + 1, `the remote version was kept as a copy (${filesBefore} -> ${noteFiles().length} files)`);
@@ -252,7 +253,7 @@ async function scenario() {
     await sleep(600);
     check(w5.mark?.kind === 'refused', 'refused again');
     w5.win.close();
-    await sleep(300);
+    await until(() => w5.mark?.text === S.markCloseUnsaved(), 5000);
     check(windows.has(id5) && w5.win.get_visible() && w5.mark?.text === S.markCloseUnsaved(), `the first close only warns (${w5.mark?.text})`);
     w5.win.close();
     await sleep(500);
