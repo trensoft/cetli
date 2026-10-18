@@ -114,11 +114,6 @@
     "rc": 1,
     "expect": "error:E_PEER_TIMEOUT"
   },
-  "join-not-up-to-date.ndjson": {
-    "verb": "join",
-    "rc": 1,
-    "expect": "error:E_NOT_UP_TO_DATE"
-  },
   "join-bad-id.ndjson": {
     "verb": "join",
     "rc": 1,

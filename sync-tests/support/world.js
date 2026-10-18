@@ -34,7 +34,7 @@ export function createWorld(opts = {}) {
         connections: new Map(),                    // id -> boolean | (nowMs) -> boolean
         pending: {},                               // id -> {time, name, address}
         pendingBytes: null,                        // pretend the output is this large
-        completion: opts.completion ?? null,       // evidence(peerId) -> {remote, completion} | null
+        failConnections: null,                     // (nowMs) -> boolean: `show connections` fails (rc 1) when true
         afterAdd: null,                            // (id) -> void: a hook that changes a device right after it was added (a foreign edit)
         failCli: new Set(),                        // exact `config devices add`-style prefixes that fail (rc 1)
         ownId: opts.ownId ?? OWN,
@@ -117,6 +117,8 @@ export function createWorld(opts = {}) {
         if (a === 'show' && b === 'system')
             return {rc: 0, out: JSON.stringify({myID: w.ownId, connectionServiceStatus: {}}) + '\n'};
         if (a === 'show' && b === 'connections') {
+            if (w.failConnections?.(w.mono))
+                return {rc: 1, out: 'syncthing: error: timeout\n'};
             const connections = {};
             for (const id of w.devices.keys()) {
                 if (id === w.ownId)
@@ -249,11 +251,10 @@ export function createWorld(opts = {}) {
     w.ports = () => ({
         run, files, dirs: {homeDir, notes, home}, now: () => w.clock, monotonic: () => w.mono,
         sleep: async ms => { w.sleeps++; tickTo(w.mono + ms); },
-        evidence: async id => (w.completion ? w.completion(id, w) : null),
         input: {lines: () => stdin.queue.splice(0), eof: () => stdin.eofFlag},
         emit: ev => w.events.push(ev),
         log: m => w.journal.push(m),
-        timing: opts.timing, linkRule: opts.linkRule,
+        timing: opts.timing,
     });
     w.engine = () => createEngine(w.ports());
     // convenience for the states a test starts from

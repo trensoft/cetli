@@ -170,6 +170,8 @@ export const syncConnectingText = () => _('The other computer must also have the
 
 export const syncDoneTitle = () => _('Connected');
 export const syncDoneText = name => fill(_('Connected to %s.'), name);
+// "Connected for N seconds": N is what the engine itself watched (about 9), a lower bound, not the age of the link.
+export const syncDoneSeconds = n => fill(_('Connected for %s seconds.'), String(n));
 export const syncDonePeerId = () => _('ID of the other computer:');
 // Translators: the quoted words are the names of the texts and the button in this window, keep them the same as the translations of
 // "Connected", "This computer" and "Stop syncing".
@@ -179,7 +181,6 @@ export const syncPairedTitle = () => _('Sync');
 export function syncLinkText(key) {
     switch (key) {
     case 'connected': return _('Connected');
-    case 'catching-up': return _('Connected, the notes are still arriving');
     case 'unstable': return _('The connection is not confirmed yet');
     case 'offline': return _('Not connected right now');
     case 'checking': return _('Checking the connection…');
@@ -214,7 +215,6 @@ export function syncErrorText(code) {
     case 'E_ALREADY_PAIRED': return _('This computer is already set up with another computer. Stop syncing with it first.');
     case 'E_HALF_STATE_OTHER': return _('This computer is set up for a different computer. Stop syncing with it first.');
     case 'E_PEER_TIMEOUT': return _('Still waiting. The other computer must also have the ID of this computer entered, and its sync window must be open; then check that the ID shown there is right. A firewall on either computer can also be the cause: the ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may still come up, but may take longer.');
-    case 'E_NOT_UP_TO_DATE': return _('The computers are connected, but the notes have not arrived yet.');
     case 'E_EXPIRED': return _('Stopped waiting after 15 minutes.');
     case 'E_PENDING_TOO_LARGE': return _('Too many connection attempts were seen to judge them safely. Nothing was accepted.');
     case 'E_PENDING_AMBIGUOUS': return _('More than one computer is knocking. Close this window and try again.');

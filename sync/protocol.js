@@ -33,13 +33,14 @@ export const CODE_NO_BACKEND = 'E_NO_SYNCTHING';
 // The closed list of error codes (section 3). Information codes are shown neutral by the window: rc 1 and the closed list stay.
 export const ERROR_CODES = Object.freeze([
     'E_NO_SYNCTHING', 'E_NO_USER_SYSTEMD', 'E_SERVICE_TIMEOUT', 'E_CONFIG_UNSAFE', 'E_CLI_FAILED',
-    'E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED', 'E_HALF_STATE_OTHER', 'E_PEER_TIMEOUT', 'E_NOT_UP_TO_DATE', 'E_EXPIRED',
+    'E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED', 'E_HALF_STATE_OTHER', 'E_PEER_TIMEOUT', 'E_EXPIRED',
     'E_PENDING_TOO_LARGE', 'E_PENDING_AMBIGUOUS', 'E_BAD_ID', 'E_OWN_ID', 'E_FOREIGN_DEVICE',
     'E_BUSY', 'E_PROTOCOL', 'E_ENGINE_DIED', 'E_INTERNAL',
 ]);
 export const INFORMATION_CODES = Object.freeze(['E_STFOLDER_EXISTS', 'E_ALREADY_PAIRED']);
-// Reserved for 0.2.6 (the code form): in the Interface file's closed list, but not emitted today and not accepted on the wire.
-export const RESERVED_CODES = Object.freeze(['E_BAD_CODE', 'E_OWN_CODE']);
+// Reserved for 0.2.6 (the code form; E_NOT_UP_TO_DATE needs a `cli` source for the other computer's completion): in the Interface file's
+// closed list, but not emitted today and not accepted on the wire.
+export const RESERVED_CODES = Object.freeze(['E_BAD_CODE', 'E_OWN_CODE', 'E_NOT_UP_TO_DATE']);
 // Raised by the bridge, never by the engine: an engine line that carries one is a violation.
 export const BRIDGE_ONLY_CODES = Object.freeze(['E_BUSY', 'E_PROTOCOL', 'E_ENGINE_DIED']);
 export const GENERIC_CODE = 'E_INTERNAL';
@@ -52,7 +53,6 @@ const CODE_SCOPE = Object.freeze({
     E_PENDING_AMBIGUOUS: ['host'],
     E_EXPIRED: ['host'],
     E_PEER_TIMEOUT: ['host', 'join'],
-    E_NOT_UP_TO_DATE: ['host', 'join'],
     E_FOREIGN_DEVICE: ['setup', 'host', 'join'],             // `status` reports the state foreign-config instead; own-id and forget do not read it
 });
 
@@ -79,7 +79,7 @@ const isPeer = v => isObj(v) && isCanonicalId(v.id) && isName(v.name);
 
 const RESULT_SCHEMAS = {
     status: r => STATUS_STATES.includes(r.state) && idOrNull(r.own_id) && (r.peer === null || isPeer(r.peer)) && boolOrNull(r.connected) &&
-        (r.link === null || LINK_STATES.includes(r.link)) && boolOrNull(r.shared) && boolOrNull(r.up_to_date) &&
+        (r.link === null || LINK_STATES.includes(r.link)) && connectedSOk(r) && boolOrNull(r.shared) && r.up_to_date === null &&
         (r.notes === null || isCount(r.notes)) && isBool(r.waiting) && statusRules(r),
     setup: r => isCanonicalId(r.own_id) && r.state === 'set-up',
     'own-id': r => isCanonicalId(r.own_id),
@@ -88,21 +88,25 @@ const RESULT_SCHEMAS = {
     forget: r => r.state === 'set-up',
 };
 const RESULT_KEYS = {
-    status: ['state', 'own_id', 'peer', 'connected', 'link', 'shared', 'up_to_date', 'notes', 'waiting'],
+    status: ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'shared', 'up_to_date', 'notes', 'waiting'],
     setup: ['own_id', 'state'],
     'own-id': ['own_id'],
-    host: ['peer', 'connected', 'link', 'up_to_date', 'notes'],
-    join: ['peer', 'own_id', 'connected', 'link', 'up_to_date', 'notes'],
+    host: ['peer', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
+    join: ['peer', 'own_id', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
     forget: ['state'],
 };
 
-// `result` of host and join is already the proof: link stable AND up to date, nothing else (section 3, `link`).
-const connectedResult = r => r.link === 'stable' && r.up_to_date === true;
+// `connected_s` is a count of whole seconds exactly when the link is stable, otherwise null (section 3, `link`).
+const connectedSOk = o => (o.link === 'stable') === (o.connected_s !== null && o.connected_s !== undefined) && (o.connected_s === null || isCount(o.connected_s));
+
+// `result` of host and join is already the proof the engine can give: link stable, and nothing about the notes (`up_to_date` is null in
+// 0.2.5, there is no `cli` source for it).
+const connectedResult = r => r.link === 'stable' && connectedSOk(r) && r.up_to_date === null;
 
 // `link` is null unless the state is half or paired; foreign-config takes precedence over paired, so its link is null too.
 function statusRules(r) {
     if (r.state !== 'half' && r.state !== 'paired')
-        return r.link === null && r.up_to_date === null && r.shared === null;
+        return r.link === null && r.connected_s === null && r.up_to_date === null && r.shared === null;
     return r.peer !== null;
 }
 
@@ -116,7 +120,7 @@ function fieldsOk(event, verb) {
     case 'candidate':
         return isCanonicalId(event.id) && isName(event.name) && Object.hasOwn(event, 'name');
     case 'link':
-        return LINK_STATES.includes(event.state) && isBool(event.up_to_date);
+        return LINK_STATES.includes(event.state) && Object.hasOwn(event, 'connected_s') && connectedSOk({link: event.state, connected_s: event.connected_s});
     case 'peer':
         return isCanonicalId(event.id) && isName(event.name) && Object.hasOwn(event, 'name');
     case 'error':
@@ -136,7 +140,7 @@ export const EVENT_NAMES = Object.freeze(['progress', 'candidate', 'link', 'peer
 
 // The keys an event may carry besides `event` (and `v` on the wire). A result without a known verb carries none.
 const EVENT_KEYS = {
-    progress: ['step', 'state'], candidate: ['id', 'name'], link: ['state', 'up_to_date'], peer: ['id', 'name'], error: ['code', 'step'],
+    progress: ['step', 'state'], candidate: ['id', 'name'], link: ['state', 'connected_s'], peer: ['id', 'name'], error: ['code', 'step'],
 };
 const eventKeys = (name, verb) => name === 'result' ? (verb === null ? [] : RESULT_KEYS[verb] ?? []) : EVENT_KEYS[name];
 

@@ -6,7 +6,6 @@ import {createWorld, isoOf, OWN, PEER, OTHER, THIRD} from './support/world.js';
 import {checkRun, emit} from '../sync/protocol.js';
 import {createEngine, TIMING} from '../sync/engine.js';
 
-const valid = () => ({remote: 'valid', completion: 100});
 async function ready(opts) {
     const w = createWorld(opts);
     await w.setUp();
@@ -20,15 +19,14 @@ const perform = (w, verb, arg) => createEngine(w.ports()).perform(verb, arg);
 const addCalls = w => w.calls.map(c => c.argv).filter(a => a.includes('add') && (a.includes('devices')));
 const ranPending = w => w.calls.some(c => c.argv.includes('pending'));
 
-test('host: one computer knocks, the window accepts that ID, the link becomes stable and up to date: a result and nothing sooner', async () => {
+test('host: one computer knocks, the window accepts that ID, the link becomes stable (ten unbroken samples): a result and nothing sooner', async () => {
     const w = await ready();
-    w.completion = valid;
     knock(w, 3000);
     accept(w, 7000);
     connect(w, 7500);
     const r = await perform(w, 'host');
     assert.deepEqual(r.result.peer, {id: PEER, name: 'laptop-b'});
-    assert.deepEqual([r.result.link, r.result.up_to_date, r.result.connected], ['stable', true, true]);
+    assert.deepEqual([r.result.link, r.result.up_to_date, r.result.connected, r.result.connected_s], ['stable', null, true, 9]);
     const cand = w.events.filter(e => e.event === 'candidate');
     assert.deepEqual(cand, [{event: 'candidate', id: PEER, name: 'laptop-b'}], 'one candidate, announced once');
     assert.ok(kinds(w).indexOf('candidate') < kinds(w).indexOf('peer') && kinds(w).indexOf('peer') < kinds(w).indexOf('link'));
@@ -107,7 +105,6 @@ test('T8: the name is display text only: 5000 characters, control characters and
     ];
     for (const [raw, shown] of cases) {
         const w = await ready();
-        w.completion = valid;
         knock(w, 3000, PEER, raw);
         accept(w, 7000);
         connect(w, 7500);
@@ -122,7 +119,6 @@ test('T8: the name is display text only: 5000 characters, control characters and
 
 test('host: only the first accept counts, other lines are ignored, an accept written before any candidate is judged at once', async () => {
     const w = await ready();
-    w.completion = valid;
     knock(w, 3000);
     w.at(5000, x => { x.write('hello\n'); x.write(`ACCEPT ${PEER}\n`); x.write(`accept ${PEER.toLowerCase()}\n`); x.write(`accept ${PEER} extra\n`); });
     accept(w, 7000);
@@ -197,61 +193,100 @@ test('host: a device that came in foreign after the add makes the accept step fa
     assert.equal(r.error.code, 'E_FOREIGN_DEVICE');
 });
 
-test('the log-114 shape: 18 connected samples but no completion evidence is flapping: no result, a timeout, never "stable"', async () => {
-    for (const evidence of [() => null, () => ({remote: 'unknown', completion: 0}), () => ({remote: 'unknown', completion: 100})]) {
-        const w = await ready();
-        w.completion = evidence;
-        knock(w, 3000);
-        accept(w, 7000);
-        connect(w, 7500);
-        const r = await perform(w, 'host');
-        assert.equal(r.result, undefined);
-        assert.deepEqual(r.error, {code: 'E_PEER_TIMEOUT', step: 'connect'});
-        assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
-        assert.equal(w.events.some(e => e.event === 'link' && e.state === 'flapping'), true);
-        assert.ok(w.mono - 7000 >= TIMING.peerTimeoutMs);
-    }
+test('the log-114 shape (18 connected samples, then the peer drops): flapping, a timeout, never "stable" and no result', async () => {
+    const w = await ready();
+    knock(w, 3000);
+    accept(w, 7000);
+    w.connections.set(PEER, ms => ms >= 7500 && ms < 7500 + 18 * 55);       // 18 raw reads at 55 ms: under one second of truth
+    const r = await perform(w, 'host');
+    assert.equal(r.result, undefined);
+    assert.deepEqual(r.error, {code: 'E_PEER_TIMEOUT', step: 'connect'});
+    assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
+    assert.equal(w.events.some(e => e.event === 'link' && e.state === 'flapping'), true);
+    assert.ok(w.mono - 7000 >= TIMING.peerTimeoutMs);
 });
 
-test('"connected" for fewer than 10 samples proves nothing: one true read and then false is flapping, not stable (mutant: threshold 1)', async () => {
+test('88 raw reads at about 55 ms (a 4.75 s burst) and then false: flapping, no result (Interface 3 test)', async () => {
     const w = await ready();
-    w.completion = valid;
+    knock(w, 3000);
+    accept(w, 7000);
+    w.connections.set(PEER, ms => ms >= 7000 && ms < 7000 + 88 * 54);
+    const r = await perform(w, 'host');
+    assert.equal(r.result, undefined);
+    assert.equal(r.error.code, 'E_PEER_TIMEOUT');
+    assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
+});
+
+test('"connected" for fewer than 10 samples proves nothing: three samples and a drop is flapping, not stable (mutant: threshold 1)', async () => {
+    const w = await ready();
     knock(w, 3000);
     accept(w, 7000);
     w.connections.set(PEER, ms => ms >= 7000 && ms < 8000 + 3000);          // three samples only, then it drops
     const r = await perform(w, 'host');
     assert.equal(r.error.code, 'E_PEER_TIMEOUT');
     assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
-    // and the stable state needs the evidence at the moment of the claim, even after ten good samples
+});
+
+test('a failed or timed-out `show connections` in the middle of the ten samples restarts the count (mutant: a failed call does not reset it)', async () => {
+    const w = await ready();
+    knock(w, 3000);
+    accept(w, 7000);
+    connect(w, 7000);
+    w.failConnections = ms => ms >= 12000 && ms < 12500;                    // the sixth sample fails
+    const r = await perform(w, 'host');
+    assert.equal(r.result.link, 'stable');
+    assert.ok(w.mono >= 12000 + 9 * 1000, 'ten NEW samples after the failure');
+    assert.ok(w.events.some(e => e.event === 'link' && e.state === 'flapping'));
+    // the run does not end on a failed call: host keeps sampling; nine good samples and a failure over and over never give stable
     const v = await ready();
-    v.completion = () => null;
     knock(v, 3000);
     accept(v, 7000);
     connect(v, 7000);
+    v.failConnections = ms => (ms - 7000) % 10_000 >= 9_000;
     assert.equal((await perform(v, 'host')).error.code, 'E_PEER_TIMEOUT');
+    assert.equal(v.events.some(e => e.event === 'link' && e.state === 'stable'), false);
 });
 
-test('stable but the notes do not arrive: E_NOT_UP_TO_DATE after the extra five minutes, not a result', async () => {
+test('a gap of more than twice the sample pause restarts the count (a slow call): 4.8 s of samples, a 2.5 s hole, 4.8 s of samples is not ten', async () => {
     const w = await ready();
-    w.completion = () => ({remote: 'valid', completion: 40});
+    knock(w, 3000);
+    accept(w, 7000);
+    connect(w, 7000);
+    // the engine's own sleeps are 1 s; a call that took 2.5 s shows as a gap on the monotonic clock
+    const base = w.ports();
+    let hole = true;
+    const ports = {...base, sleep: async ms => { if (hole && w.mono >= 11000) { hole = false; await base.sleep(ms + 2500); } else await base.sleep(ms); }};
+    const r = await createEngine(ports).perform('host');
+    assert.equal(r.result.link, 'stable');
+    assert.ok(w.mono >= 11000 + 2500 + 9 * 1000, 'the count began again after the hole');
+    assert.equal(r.result.connected_s, 9);
+});
+
+test('ten samples taken faster than the pause are not ten seconds: the time rule (mutant: the count alone)', async () => {
+    const w = await ready();
+    knock(w, 3000);
+    accept(w, 7000);
+    w.connections.set(PEER, ms => ms >= 7000 && ms < 7000 + 88 * 55);          // the 4.75 s burst of M-W6b
+    const base = w.ports();
+    const ports = {...base, sleep: ms => base.sleep(ms === TIMING.linkGapMs ? 55 : ms)};         // a sampler that is 18 times too fast
+    const r = await createEngine(ports).perform('host');
+    assert.equal(r.result, undefined, 'under five seconds of connection is never a result, however many samples');
+    assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
+});
+
+test('there is no E_NOT_UP_TO_DATE and no "sync" step any more: a stable link is the result', async () => {
+    const w = await ready();
     knock(w, 3000);
     accept(w, 7000);
     connect(w, 7000);
     const r = await perform(w, 'host');
-    assert.deepEqual(r.error, {code: 'E_NOT_UP_TO_DATE', step: 'sync'});
-    assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable' && e.up_to_date === false), true);
-    // it becomes up to date late: still a result
-    const late = await ready();
-    late.completion = (id, x) => ({remote: 'valid', completion: x.mono > 100_000 ? 100 : 60});
-    knock(late, 3000);
-    accept(late, 7000);
-    connect(late, 7000);
-    assert.equal((await perform(late, 'host')).result.up_to_date, true);
+    assert.equal(r.result.up_to_date, null);
+    assert.equal(w.events.some(e => e.event === 'progress' && e.step === 'sync'), false);
+    assert.equal(JSON.stringify(w.journal).includes('NOT_UP_TO_DATE'), false);
 });
 
 test('link events: only on a change, at most one per sample', async () => {
     const w = await ready();
-    w.completion = valid;
     knock(w, 3000);
     accept(w, 7000);
     connect(w, 7500);
@@ -266,7 +301,6 @@ test('link events: only on a change, at most one per sample', async () => {
 
 test('join: the typed ID is canonicalised by the engine, added, shared, and the result needs the same stable proof', async () => {
     const w = await ready();
-    w.completion = valid;
     connect(w, 100);
     const r = await perform(w, 'join', `  ${PEER.toLowerCase().replace(/-/g, ' ')} \n`);
     assert.deepEqual(r.result.peer, {id: PEER, name: null});
@@ -293,13 +327,11 @@ test('join: E_BAD_ID and E_OWN_ID before any write; no code path of today produc
 
 test('join: the same peer again is idempotent; a missing share is finished; another peer is refused (rows 10-12)', async () => {
     const w = await ready();
-    w.completion = valid;
     w.pair(PEER);
     connect(w, 100);
     assert.equal((await perform(w, 'join', PEER)).result.peer.id, PEER);
     assert.equal(addCalls(w).length, 0, 'already shared: nothing is added again');
     const half = await ready();
-    half.completion = valid;
     half.pair(PEER, {shared: false});
     connect(half, 100);
     assert.equal((await perform(half, 'join', PEER)).result.peer.id, PEER);
@@ -314,13 +346,13 @@ test('join: the same peer again is idempotent; a missing share is finished; anot
     assert.equal(otherHalf.devices.has(PEER), true, 'nothing is replaced or removed');
 });
 
-test('join: the wrong-ID shape (connected, no completion) ends in a timeout with link flapping, never a result', async () => {
+test('join: the wrong-ID shape (a 4.8 s connected burst) ends in a timeout with link flapping, never a result', async () => {
     const w = await ready();
-    w.completion = () => ({remote: 'unknown', completion: 0});
-    connect(w, 100);
+    w.connections.set(PEER, ms => ms < 4800);
     const r = await perform(w, 'join', PEER);
     assert.deepEqual(r.error, {code: 'E_PEER_TIMEOUT', step: 'connect'});
     assert.equal(w.events.some(e => e.event === 'link' && e.state === 'flapping'), true);
+    assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
     const none = await ready();
     const rn = await perform(none, 'join', PEER);
     assert.equal(rn.error.code, 'E_PEER_TIMEOUT');
@@ -338,24 +370,24 @@ test('join: foreign device or odd folder before the add: nothing is added', asyn
     assert.equal(addCalls(f).length, 0);
 });
 
-test('status link rule: paired + connected + evidence valid + 100 = stable; without evidence flapping; not connected = none', async () => {
-    const mk = async (evidence, connected) => {
+test('status link rule: paired + ten unbroken connected samples = stable with connected_s; one not-connected sample = none; up_to_date always null', async () => {
+    const mk = async connected => {
         const w = await ready();
         w.pair(PEER);
-        w.completion = evidence;
         w.connections.set(PEER, connected);
         return (await perform(w, 'status')).result;
     };
-    let r = await mk(valid, true);
-    assert.deepEqual([r.state, r.link, r.up_to_date, r.connected], ['paired', 'stable', true, true]);
-    r = await mk(() => ({remote: 'valid', completion: 30}), true);
-    assert.deepEqual([r.link, r.up_to_date], ['stable', false]);
-    r = await mk(() => null, true);
-    assert.deepEqual([r.link, r.up_to_date, r.connected], ['flapping', false, true], 'no way to read the evidence: never stable');
-    r = await mk(() => ({remote: 'unknown', completion: 0}), true);
-    assert.equal(r.link, 'flapping');
-    r = await mk(valid, false);
-    assert.deepEqual([r.link, r.connected], ['none', false]);
+    let r = await mk(true);
+    assert.deepEqual([r.state, r.link, r.connected_s, r.up_to_date, r.connected], ['paired', 'stable', 9, null, true]);
+    r = await mk(false);
+    assert.deepEqual([r.link, r.connected_s, r.up_to_date, r.connected], ['none', null, null, false]);
+    r = await mk(ms => ms < 4800);
+    assert.deepEqual([r.link, r.connected_s, r.up_to_date], ['flapping', null, null]);
+    const half = await ready();
+    half.pair(PEER, {shared: false});
+    half.connections.set(PEER, true);
+    const h = (await perform(half, 'status')).result;
+    assert.deepEqual([h.state, h.link, h.connected_s], ['half', 'stable', 9]);
     const quick = await ready();
     quick.pair(PEER);
     const s0 = quick.sleeps;
@@ -365,40 +397,19 @@ test('status link rule: paired + connected + evidence valid + 100 = stable; with
 
 test('the journal carries codes, steps and field names only: no ID, no name, no address', async () => {
     const w = await ready();
-    w.completion = () => null;
     knock(w, 3000, PEER, 'secret-looking-name');
     accept(w, 7000);
-    connect(w, 7500);
-    await perform(w, 'host');
+    await perform(w, 'host');                                                // never connects: a timeout, so there is a journal line
     const j = JSON.stringify(w.journal);
     for (const s of [PEER, OWN, 'secret-looking-name', '127.0.0.1', 'caller-key'])
         assert.equal(j.includes(s), false, s);
     assert.ok(w.journal.length >= 1);
 });
 
-// ---- option (a) of 0G.2: the link decided by unbroken connected samples alone ------------------------------------------------------
+// ---- the wrong-ID shape of M-W6b ----------------------------------------------------------------------------------------------------
 
-test('samples rule: ten unbroken connected samples at 1 s are stable, with no evidence at all; the default rule is the strict one', async () => {
-    const w = await ready({linkRule: 'samples'});
-    knock(w, 3000);
-    accept(w, 7000);
-    connect(w, 7000);
-    const r = await perform(w, 'host');
-    assert.deepEqual([r.result.link, r.result.up_to_date], ['stable', true]);
-    assert.ok(w.mono >= 7000 + 9 * 1000, 'not before ten samples');
-    const strict = await ready();
-    knock(strict, 3000);
-    accept(strict, 7000);
-    connect(strict, 7000);
-    assert.equal((await perform(strict, 'host')).error.code, 'E_PEER_TIMEOUT', 'without the option the engine needs the evidence');
-    const { readFileSync } = await import('node:fs');
-    assert.match(readFileSync(new URL('../sync/main.js', import.meta.url), 'utf8'), /const LINK_RULE = 'evidence';/, 'the product ships the strict rule until it is decided');
-    const base = (await ready()).ports();
-    assert.throws(() => createEngine({...base, linkRule: 'nonsense'}), RangeError);
-});
-
-test('samples rule: the wrong-ID shape of M-W6b (a 4.8 s burst, then 0.9 s bursts every 20 s) never gives stable; a flicker shorter than ten samples neither', async () => {
-    const w = await ready({linkRule: 'samples'});
+test('the wrong-ID shape of M-W6b (a 4.8 s burst, then 0.9 s bursts every 20 s) never gives stable; nine good samples and a drop neither', async () => {
+    const w = await ready();
     knock(w, 3000);
     accept(w, 7000);
     const t0 = 7000;
@@ -407,24 +418,19 @@ test('samples rule: the wrong-ID shape of M-W6b (a 4.8 s burst, then 0.9 s burst
     assert.deepEqual(r.error, {code: 'E_PEER_TIMEOUT', step: 'connect'});
     assert.equal(w.events.some(e => e.event === 'link' && e.state === 'stable'), false);
     // nine good samples and a drop, over and over: flapping, never stable (mutant: threshold 9 or less)
-    const v = await ready({linkRule: 'samples'});
+    const v = await ready();
     knock(v, 3000);
     accept(v, 7000);
     v.connections.set(PEER, ms => (ms - 7000) % 10_000 < 9_000);
     assert.equal((await perform(v, 'host')).error.code, 'E_PEER_TIMEOUT');
     assert.equal(v.events.some(e => e.event === 'link' && e.state === 'stable'), false);
     // the same shapes for join and for status
-    const j = await ready({linkRule: 'samples'});
+    const j = await ready();
     j.connections.set(PEER, ms => ms % 20_000 < 4800);
     assert.equal((await perform(j, 'join', PEER)).error.code, 'E_PEER_TIMEOUT');
-    const st = await ready({linkRule: 'samples'});
+    const st = await ready();
     st.pair(PEER);
     st.connections.set(PEER, ms => ms < 4800);
     const s = (await perform(st, 'status')).result;
-    assert.deepEqual([s.link, s.up_to_date], ['flapping', false]);
-    const ok = await ready({linkRule: 'samples'});
-    ok.pair(PEER);
-    ok.connections.set(PEER, true);
-    const o = (await perform(ok, 'status')).result;
-    assert.deepEqual([o.link, o.up_to_date, o.state], ['stable', true, 'paired']);
+    assert.deepEqual([s.link, s.connected_s, s.up_to_date], ['flapping', null, null]);
 });

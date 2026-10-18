@@ -481,6 +481,11 @@ msgid "Connected to %s."
 msgstr "Kapcsolódva ehhez: %s."
 
 #: app/strings.js
+#, javascript-format
+msgid "Connected for %s seconds."
+msgstr "%s másodperce kapcsolódva."
+
+#: app/strings.js
 msgid "ID of the other computer:"
 msgstr "A másik számítógép azonosítója:"
 
@@ -496,10 +501,6 @@ msgstr "Most nyisd meg a cetlit a másik számítógépen. Ott is ezt kell látn
 #: app/strings.js
 msgid "Sync"
 msgstr "Szinkron"
-
-#: app/strings.js
-msgid "Connected, the notes are still arriving"
-msgstr "Kapcsolódva, a jegyzetek még érkeznek"
 
 #: app/strings.js
 msgid "The connection is not confirmed yet"
@@ -621,10 +622,6 @@ msgid ""
 "ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may "
 "still come up, but may take longer."
 msgstr "Még várunk. A másik számítógépen is be kell írni ennek a számítógépnek az azonosítóját, és a szinkronablakának nyitva kell lennie; aztán ellenőrizd, hogy az ott látható azonosító helyes-e. Ok lehet bármelyik számítógép tűzfala is: a portok a TCP és UDP 22100, valamint az UDP 21127. Közvetítőn keresztül még létrejöhet a kapcsolat, de tovább tarthat."
-
-#: app/strings.js
-msgid "The computers are connected, but the notes have not arrived yet."
-msgstr "A számítógépek kapcsolódtak, de a jegyzetek még nem érkeztek meg."
 
 #: app/strings.js
 msgid "Stopped waiting after 15 minutes."

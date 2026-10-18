@@ -40,8 +40,8 @@ async function waitFor(cond, limit = 8000) {
 
 const A = 'F6HEWOE-4KSACQ5-5MAX7IC-HAP3EGW-AQYBTIX-V74MXIF-ZB3GZN6-4T3QYQZ';
 const B = 'VTTWEJK-SMIOBMH-3FIWS7V-JFC2CL4-FCR3BU6-PEPADRQ-EYVVD3Z-BIGMUQ5';
-const status = (state, extra = {}) => ({ok: true, result: {event: 'result', state, own_id: A, peer: null, connected: null, link: null, shared: null, up_to_date: null, notes: null, waiting: false, ...extra}});
-const paired = (extra = {}) => status('paired', {peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', shared: true, up_to_date: true, notes: 3, ...extra});
+const status = (state, extra = {}) => ({ok: true, result: {event: 'result', state, own_id: A, peer: null, connected: null, link: null, connected_s: null, shared: null, up_to_date: null, notes: null, waiting: false, ...extra}});
+const paired = (extra = {}) => status('paired', {peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', connected_s: 9, shared: true, up_to_date: null, notes: 3, ...extra});
 const fail = (code, step = null) => ({ok: false, error: {code, step}});
 
 // The fake bridge: `answers[verb]` is a function (opts) -> outcome | Promise. `host` is a controllable handle.
@@ -134,7 +134,7 @@ async function scenario() {
         ['stfolder conflict', status('stfolder-conflict', {own_id: null}), 'info-stfolder'],
         ['foreign config', status('foreign-config', {peer: {id: B, name: null}, connected: true}), 'info-foreign'],
         ['set up', status('set-up'), 'ids'],
-        ['half', status('half', {peer: {id: B, name: null}, connected: false, link: 'none', shared: false, up_to_date: false}), 'half'],
+        ['half', status('half', {peer: {id: B, name: null}, connected: false, link: 'none', connected_s: null, shared: false, up_to_date: null}), 'half'],
         ['paired', paired(), 'paired'],
     ]) {
         const w = await open({status: () => answer});
@@ -188,10 +188,11 @@ async function scenario() {
     w.w.candAccept.emit('clicked');
     check(host.accepted.length === 1, 'a second click sends nothing');
     host.emit({event: 'peer', id: B, name: 'laptop-b'});
-    host.finish({ok: true, result: {event: 'result', peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', up_to_date: true, notes: 4}});
+    host.finish({ok: true, result: {event: 'result', peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', connected_s: 9, up_to_date: null, notes: 4}});
     check(await pageIs(w, 'done'), 'the result shows the done page');
     check(labelText(w.w.doneText) === S.syncDoneText('laptop-b') && rowsText(w.w.donePeerId) === B, 'the name and the FULL ID of the other computer');
     check(labelText(w.w.doneCheck) === S.syncCheckOther(), 'the sentence to check the other computer is on the page');
+    check(labelText(w.w.doneSeconds) === S.syncDoneSeconds(9) && !labelText(w.w.doneSeconds).includes('ynced'), 'the done page says "Connected for 9 seconds", never "Synced"');
     await closeWin(w);
 
     // ---- errors: red with a button, red without (foreign device), neutral (information codes)
@@ -225,7 +226,7 @@ async function scenario() {
     await closeWin(w);
 
     // ---- a timeout after the accept: Try again asks the status (the other computer is already added), it does not start a second opening
-    w = await open({status: () => status('half', {peer: {id: B, name: null}, connected: false, link: 'none', shared: true, up_to_date: false})});
+    w = await open({status: () => status('half', {peer: {id: B, name: null}, connected: false, link: 'none', connected_s: null, shared: true, up_to_date: null})});
     await pageIs(w, 'half');
     await closeWin(w);
     w = await open({status: () => status('set-up')});
@@ -241,7 +242,7 @@ async function scenario() {
     w = await open({
         status: () => status('set-up'),
         join: opts => (opts.stdin.startsWith('bad') ? fail('E_BAD_ID') : opts.stdin.startsWith('own') ? fail('E_OWN_ID') :
-            {ok: true, result: {event: 'result', peer: {id: B, name: null}, own_id: A, connected: true, link: 'stable', up_to_date: true, notes: 1}}),
+            {ok: true, result: {event: 'result', peer: {id: B, name: null}, own_id: A, connected: true, link: 'stable', connected_s: 9, up_to_date: null, notes: 1}}),
     });
     await pageIs(w, 'ids');
     check(!w.w.connect.get_sensitive(), 'Connect is off while the field is empty');
@@ -267,13 +268,13 @@ async function scenario() {
     // ---- the paired page and Stop syncing
     w = await open({status: () => paired(), forget: () => ({ok: true, result: {event: 'result', state: 'set-up'}})});
     await pageIs(w, 'paired');
-    check(labelText(w.w.pairedLink) === S.syncLinkText('connected'), 'stable and up to date: "Connected"');
+    check(labelText(w.w.pairedLink) === S.syncLinkText('connected'), 'stable: "Connected" (and no count on the status page)');
     check(rowsText(w.w.pairedPeerId) === B, 'the peer ID in full');
     check(!w.w.pairedOwn.get_visible(), 'the own ID is hidden until asked');
     w.w.pairedShowOwn.emit('clicked');
     check(w.w.pairedOwn.get_visible() && rowsText(w.w.pairedOwnId) === A, 'then shown in full');
     await closeWin(w);
-    for (const [extra, key] of [[{up_to_date: false}, 'catching-up'], [{link: 'flapping', up_to_date: false}, 'unstable'], [{link: 'none', up_to_date: false}, 'offline'], [{link: null, up_to_date: null}, 'checking']]) {
+    for (const [extra, key] of [[{link: 'flapping', connected_s: null}, 'unstable'], [{link: 'none', connected_s: null}, 'offline'], [{link: null, connected_s: null}, 'checking']]) {
         w = await open({status: () => paired(extra)});
         await pageIs(w, 'paired');
         check(labelText(w.w.pairedLink) === S.syncLinkText(key) && labelText(w.w.pairedLink) !== S.syncLinkText('connected'), `link ${JSON.stringify(extra)}: ${key}, never "Connected"`);

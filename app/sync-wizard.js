@@ -180,11 +180,12 @@ export class SyncWizard {
         // done
         w.doneTitle = this._title(S.syncDoneTitle());
         w.doneText = this._text('');
+        w.doneSeconds = this._text('');
         w.donePeerCaption = this._text(S.syncDonePeerId());
         w.donePeerId = this._idLabels();
         w.doneCheck = this._text(S.syncCheckOther());
         w.doneClose = this._button(S.syncClose(), () => this.win.close(), true);
-        this._addPage('done', [w.doneTitle, w.doneText, w.donePeerCaption, w.donePeerId.box, w.doneCheck, w.doneClose]);
+        this._addPage('done', [w.doneTitle, w.doneText, w.doneSeconds, w.donePeerCaption, w.donePeerId.box, w.doneCheck, w.doneClose]);
 
         // paired (page S)
         w.pairedPeer = this._text('');
@@ -344,7 +345,7 @@ export class SyncWizard {
                 return;
             this.hostRun = null;
             if (out.ok) {
-                this._showDone(out.result.peer);
+                this._showDone(out.result.peer, out.result.connected_s);
             } else {
                 this._showError(out.error.code, this._retryFor(out.error.code));
             }
@@ -354,7 +355,7 @@ export class SyncWizard {
     // After the other computer was added, "Try again" must not start a second opening (the engine would refuse: this computer is already set
     // up with another one): it asks the status again, which shows the half-finished state with "Stop syncing".
     _retryFor(code) {
-        return code === 'E_PEER_TIMEOUT' || code === 'E_NOT_UP_TO_DATE' ? () => this.refresh() : () => this._enterIds();
+        return code === 'E_PEER_TIMEOUT' ? () => this.refresh() : () => this._enterIds();
     }
 
     _showCandidate(c) {
@@ -425,7 +426,7 @@ export class SyncWizard {
         if (this.closed || generation !== this.hostGeneration)
             return;
         if (out.ok) {
-            this._showDone(out.result.peer);
+            this._showDone(out.result.peer, out.result.connected_s);
         } else if (out.error.code === 'E_BAD_ID' || out.error.code === 'E_OWN_ID') {
             this._keepEntryError = true;
             this._enterIds(out.error.code === 'E_BAD_ID' ? S.syncBadId() : S.syncOwnIdEntered());
@@ -447,9 +448,10 @@ export class SyncWizard {
             finish();
     }
 
-    _showDone(peer) {
+    _showDone(peer, connectedS) {
         const w = this.w;
         w.doneText.set_label(S.syncDoneText(peer?.name ?? S.syncNameUnreadable()));
+        w.doneSeconds.set_label(Number.isInteger(connectedS) ? S.syncDoneSeconds(connectedS) : '');
         w.donePeerId.set(peer?.id ?? '');
         this._show('done');
     }

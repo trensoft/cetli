@@ -23,11 +23,9 @@ test('every status state has exactly one page, all of them known pages', () => {
         assert.equal(pageForStatus(bad), 'error');
 });
 
-test('"Connected" needs a paired state, link stable AND up to date; nothing else says it', () => {
-    const p = o => ({state: 'paired', link: 'stable', up_to_date: true, connected: true, ...o});
+test('"Connected" needs a paired state and link stable; up_to_date (null in 0.2.5) neither adds nor removes it, nothing else says it', () => {
+    const p = o => ({state: 'paired', link: 'stable', connected_s: 9, up_to_date: null, connected: true, ...o});
     assert.equal(isConnected(p()), true);
-    assert.equal(isConnected(p({up_to_date: false})), false);
-    assert.equal(isConnected(p({up_to_date: null})), false);
     assert.equal(isConnected(p({link: 'flapping'})), false);
     assert.equal(isConnected(p({link: 'none'})), false);
     assert.equal(isConnected(p({link: null})), false);
@@ -38,14 +36,13 @@ test('"Connected" needs a paired state, link stable AND up to date; nothing else
 });
 
 test('linkKey: one key per link situation; connected only through isConnected', () => {
-    const p = o => ({state: 'paired', link: 'stable', up_to_date: true, ...o});
+    const p = o => ({state: 'paired', link: 'stable', connected_s: 9, up_to_date: null, ...o});
     assert.equal(linkKey(p()), 'connected');
-    assert.equal(linkKey(p({up_to_date: false})), 'catching-up');
-    assert.equal(linkKey(p({link: 'flapping', up_to_date: false})), 'unstable');
-    assert.equal(linkKey(p({link: 'none', up_to_date: false})), 'offline');
+    assert.equal(linkKey(p({link: 'flapping', connected_s: null})), 'unstable');
+    assert.equal(linkKey(p({link: 'none', connected_s: null})), 'offline');
     assert.equal(linkKey(p({link: null})), 'checking');
     assert.equal(linkKey({state: 'half'}), 'none');
-    for (const s of [p(), p({up_to_date: false}), p({link: 'flapping'}), p({link: 'none'}), p({link: null})])
+    for (const s of [p(), p({link: 'flapping'}), p({link: 'none'}), p({link: null})])
         assert.equal(linkKey(s) === 'connected', isConnected(s));
 });
 
@@ -85,8 +82,8 @@ test('the ID page reducer: a candidate, its replacement, the accept, the link', 
     s = idsReducer(s, {event: 'peer', id: A, name: null});
     assert.equal(s.candidate, null);
     assert.deepEqual(s.peer, {id: A, name: null});
-    s = idsReducer(s, {event: 'link', state: 'stable', up_to_date: false});
-    assert.deepEqual(s.link, {state: 'stable', upToDate: false});
+    s = idsReducer(s, {event: 'link', state: 'stable', connected_s: 9});
+    assert.deepEqual(s.link, {state: 'stable', connectedS: 9});
     s = idsReducer(s, {event: 'progress', step: 'share', state: 'ok'});
     assert.equal(s.step, 'share');
     assert.equal(idsReducer(s, {event: 'nothing'}), s);

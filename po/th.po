@@ -469,6 +469,11 @@ msgid "Connected to %s."
 msgstr ""
 
 #: app/strings.js
+#, javascript-format
+msgid "Connected for %s seconds."
+msgstr ""
+
+#: app/strings.js
 msgid "ID of the other computer:"
 msgstr ""
 
@@ -483,10 +488,6 @@ msgstr ""
 
 #: app/strings.js
 msgid "Sync"
-msgstr ""
-
-#: app/strings.js
-msgid "Connected, the notes are still arriving"
 msgstr ""
 
 #: app/strings.js
@@ -608,10 +609,6 @@ msgid ""
 "there is right. A firewall on either computer can also be the cause: the "
 "ports are TCP and UDP 22100 and UDP 21127. A connection through a relay may "
 "still come up, but may take longer."
-msgstr ""
-
-#: app/strings.js
-msgid "The computers are connected, but the notes have not arrived yet."
 msgstr ""
 
 #: app/strings.js

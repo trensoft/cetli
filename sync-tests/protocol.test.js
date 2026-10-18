@@ -67,7 +67,7 @@ test('error codes: the closed list, the pinned information pair, the reserved an
         assert.equal(isNeutralCode(c), c === 'E_STFOLDER_EXISTS' || c === 'E_ALREADY_PAIRED', c);
     for (const c of ['E_BAD_CODE', 'E_OWN_CODE', 'E_FOREIGN_DEVICE', 'E_NOT_A_CODE', 'E_INTERNAL', 'E_PROTOCOL'])
         assert.equal(isNeutralCode(c), false, c);
-    assert.deepEqual([...RESERVED_CODES], ['E_BAD_CODE', 'E_OWN_CODE']);
+    assert.deepEqual([...RESERVED_CODES], ['E_BAD_CODE', 'E_OWN_CODE', 'E_NOT_UP_TO_DATE']);
     for (const c of RESERVED_CODES) {
         assert.equal(ERROR_CODES.includes(c), false);
         assert.throws(() => emit({event: 'error', code: c}, 'join'), /may raise/);       // never emitted today
@@ -133,17 +133,22 @@ test('candidate and peer: the FULL canonical ID with valid check characters, the
     assert.equal(parse(JSON.stringify({v: 1, event: 'peer', id: B.slice(0, 14), name: null})), null);          // no prefix: the full ID (Interface 2a)
 });
 
-test('link: state none|flapping|stable and a boolean up_to_date', () => {
-    for (const s of ['none', 'flapping', 'stable'])
-        assert.ok(parse(JSON.stringify({v: 1, event: 'link', state: s, up_to_date: false})));
-    for (const bad of [{state: 'connected', up_to_date: true}, {state: 'stable'}, {state: 'stable', up_to_date: 'yes'}, {up_to_date: true}])
-        assert.equal(parse(JSON.stringify({v: 1, event: 'link', ...bad})), null);
+const emitThrows = ev => { try { emit({event: 'link', ...ev}); return false; } catch { return true; } };
+
+test('link: state none|flapping|stable and connected_s, a whole number exactly when stable', () => {
+    for (const s of ['none', 'flapping'])
+        assert.ok(parse(JSON.stringify({v: 1, event: 'link', state: s, connected_s: null})));
+    assert.ok(parse(JSON.stringify({v: 1, event: 'link', state: 'stable', connected_s: 9})));
+    for (const bad of [{state: 'connected', connected_s: 9}, {state: 'stable'}, {state: 'stable', connected_s: null}, {state: 'stable', connected_s: 'nine'},
+        {state: 'stable', connected_s: 9.5}, {state: 'stable', connected_s: -1}, {state: 'flapping', connected_s: 9}, {state: 'none', connected_s: 0}, {connected_s: 9},
+        {state: 'none'}, {state: 'none', up_to_date: false}, {state: 'stable', connected_s: 9, up_to_date: true}])
+        assert.equal(emitThrows(bad) || parse(JSON.stringify({v: 1, event: 'link', ...bad})) === null, true, JSON.stringify(bad));
 });
 
-test('result of host and join is the proof: link stable AND up to date, otherwise it is not a result (section 3)', () => {
-    const base = {v: 1, event: 'result', peer: {id: B, name: 'b'}, connected: true, link: 'stable', up_to_date: true, notes: 3};
+test('result of host and join is the proof: link stable with connected_s, up_to_date null, otherwise it is not a result (section 3)', () => {
+    const base = {v: 1, event: 'result', peer: {id: B, name: 'b'}, connected: true, link: 'stable', connected_s: 9, up_to_date: null, notes: 3};
     assert.ok(parse(JSON.stringify(base), 'host'));
-    for (const bad of [{link: 'flapping'}, {link: 'none'}, {link: null}, {up_to_date: false}, {up_to_date: null}, {connected: 'true'}, {notes: -1}, {notes: 1.5}, {peer: null}, {peer: {id: B}}])
+    for (const bad of [{link: 'flapping'}, {link: 'none'}, {link: null}, {up_to_date: false}, {up_to_date: true}, {connected_s: null}, {connected_s: 1.5}, {connected: 'true'}, {notes: -1}, {notes: 1.5}, {peer: null}, {peer: {id: B}}])
         assert.equal(parse(JSON.stringify({...base, ...bad}), 'host'), null, JSON.stringify(bad));
     const j = {...base, own_id: A};
     assert.ok(parse(JSON.stringify(j), 'join'));
@@ -152,17 +157,21 @@ test('result of host and join is the proof: link stable AND up to date, otherwis
 });
 
 test('result of status: the closed states, link null unless half or paired, peer present for half and paired', () => {
-    const st = (o = {}) => JSON.stringify({v: 1, event: 'result', state: 'paired', own_id: A, peer: {id: B, name: 'b'}, connected: true, link: 'stable', shared: true, up_to_date: true, notes: 1, waiting: false, ...o});
+    const st = (o = {}) => JSON.stringify({v: 1, event: 'result', state: 'paired', own_id: A, peer: {id: B, name: 'b'}, connected: true, link: 'stable', connected_s: 9, shared: true, up_to_date: null, notes: 1, waiting: false, ...o});
     assert.ok(parse(st(), 'status'));
     assert.equal(parse(st({state: 'connected'}), 'status'), null);
     assert.equal(parse(st({state: 'foreign-config'}), 'status'), null);                       // link must be null there
-    assert.ok(parse(st({state: 'foreign-config', link: null, shared: null, up_to_date: null}), 'status'));
+    assert.ok(parse(st({state: 'foreign-config', link: null, connected_s: null, shared: null, up_to_date: null}), 'status'));
     assert.equal(parse(st({state: 'set-up', peer: null}), 'status'), null);                   // a link without a peer state
     assert.equal(parse(st({peer: null}), 'status'), null);
     assert.equal(parse(st({link: 'maybe'}), 'status'), null);
+    assert.equal(parse(st({connected_s: null}), 'status'), null);                             // stable needs the count
+    assert.equal(parse(st({link: 'flapping'}), 'status'), null);                              // and a count needs stable
+    assert.ok(parse(st({link: 'flapping', connected_s: null}), 'status'));
+    assert.equal(parse(st({up_to_date: true}), 'status'), null);                              // always null in 0.2.5
     assert.equal(parse(st({waiting: null}), 'status'), null);
     assert.equal(parse(st({own_id: 'nope'}), 'status'), null);
-    for (const k of ['state', 'own_id', 'peer', 'connected', 'link', 'shared', 'up_to_date', 'notes', 'waiting']) {
+    for (const k of ['state', 'own_id', 'peer', 'connected', 'link', 'connected_s', 'shared', 'up_to_date', 'notes', 'waiting']) {
         const o = JSON.parse(st());
         delete o[k];
         assert.equal(parse(JSON.stringify(o), 'status'), null, `missing ${k}`);
@@ -206,7 +215,7 @@ test('the run checker: exactly one terminal line, last; rc must agree; nothing a
 
 test('the run checker: events that belong to host or join only, per verb', () => {
     const cand = emit({event: 'candidate', id: B, name: 'n'});
-    const link = emit({event: 'link', state: 'none', up_to_date: false});
+    const link = emit({event: 'link', state: 'none', connected_s: null});
     const peer = emit({event: 'peer', id: B, name: null});
     const err = JSON.stringify({v: 1, event: 'error', code: 'E_INTERNAL'});
     assert.equal(checkRun('host', [cand, link, peer, err], 1).ok, true);

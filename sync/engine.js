@@ -9,15 +9,9 @@
 //   files:    {exists(p), readText(p), writeText(p, text, mode), mkdirp(p, mode), modeOf(p), isDir(p), isSymlink(p), listNames(p)}
 //   dirs:     {homeDir, notes, home}    the user's home, the core's notes directory, the dedicated instance's home
 //   now(), monotonic(), sleep(ms)       wall clock ms, monotonic ms, a timer
-//   evidence(peerId) -> {remote, completion} | null      the positive "the peer has our folder" signal; null = no way to read it (NOT measured)
 //   input:    {lines() -> string[], eof() -> bool}       host only: what the window wrote on stdin
 //   emit(event), log(text)              events of the protocol (without v), a journal line (codes and field names only)
 //   timing?:  overrides of the constants below (tests)
-//   linkRule?: 'evidence' (default) | 'samples'. How `stable` is decided (PLAN-WIZARD 0G.2). 'evidence': `linkSamples` unbroken connected
-//             samples AND the positive signal of ports.evidence(); with no way to read it (null) the link is never stable and host/join end in
-//             E_PEER_TIMEOUT (fails closed). 'samples': option (a) of 0G.2, the unbroken connected samples alone (K x 1 s, above the 4.8 s
-//             longest wrong-ID burst measured, reserve about 2x); `up_to_date` is then not measurable and is taken as true, so the window
-//             must not say "synced". The choice is main.js's one constant; it waits for Robert's Interface text (up_to_date, "for N seconds").
 // }
 import {NAME_MAIN} from '../src/constants.js';
 import {ConfigEditError, PORTS_OWN, editConfig, readFolderIds, verifyConfig} from './confedit.js';
@@ -27,10 +21,9 @@ import {BACKEND_EXE, FOLDER_ID, UNIT_NAME, socketPath} from './paths.js';
 import {parseAcceptLine} from './protocol.js';
 
 export const TIMING = Object.freeze({
-    linkSamples: 10,                       // LINK_SAMPLES: consecutive connected samples before the evidence is read (a debounce, not the criterion)
-    linkGapMs: 1000,                       // LINK_GAP_MS
+    linkSamples: 10,                       // LINK_SAMPLES: consecutive connected samples that make the link stable (Interface 3)
+    linkGapMs: 1000,                       // LINK_GAP_MS: the pause between two samples; a longer gap than twice this ends the run
     peerTimeoutMs: 5 * 60 * 1000,          // E_PEER_TIMEOUT
-    upToDateMs: 5 * 60 * 1000,             // E_NOT_UP_TO_DATE: stable, but the notes did not arrive
     hostWindowMs: 15 * 60 * 1000,          // E_EXPIRED
     pendingPollMs: 2000,
     tickMs: 100,
@@ -72,9 +65,6 @@ export function folderAnomaly(folders, notesPath) {
 export function createEngine(ports) {
     const {run, files, dirs, emit, log} = ports;
     const t = {...TIMING, ...(ports.timing ?? {})};
-    const linkRule = ports.linkRule ?? 'evidence';
-    if (linkRule !== 'evidence' && linkRule !== 'samples')
-        throw new RangeError('linkRule');
     const configPath = `${dirs.home}/config.xml`;
     const sock = socketPath(dirs.home);
     const editArgs = {socketPath: sock, ports: PORTS_OWN};
@@ -196,42 +186,46 @@ export function createEngine(ports) {
         return isObj(c) ? c.connected === true : false;
     }
 
-    // A tracker for ONE peer. Raw `connected` is never proof (M-W6): `stable` needs `linkSamples` consecutive connected samples AND the
-    // positive evidence from the peer's side; without a way to read that evidence (ports.evidence() -> null) it is never `stable`.
+    // A tracker for ONE peer. Raw `connected` is never proof (M-W6): `stable` is `linkSamples` CONSECUTIVE connected samples taken
+    // `linkGapMs` apart on the monotonic clock (Interface 3, option (a) of 0G.2; there is no `cli` completion, so nothing says "synced").
+    // A failed or timed-out call, a not-connected sample, or a gap of more than twice `linkGapMs` between two samples restarts the count.
+    // `connectedS` is the length of the unbroken run this engine saw, first to last sample, in whole seconds; null unless stable.
     function createLinkTracker(peerId) {
         let consecutive = 0;
+        let runStart = null;
+        let lastAt = null;
         let everConnected = false;
-        const v = {link: 'none', upToDate: false, connected: false};
+        const v = {link: 'none', connectedS: null, connected: false};
         return {
             get value() { return {...v}; },
             async sample() {
-                const connected = await readConnected(peerId);
+                let connected = false;
+                try {
+                    connected = await readConnected(peerId);
+                } catch (e) {
+                    if (!(e instanceof Fail))
+                        throw e;                                              // a failed call is a broken sample, not the end of the run
+                }
+                const at = ports.monotonic();
+                if (lastAt !== null && at - lastAt > 2 * t.linkGapMs)
+                    consecutive = 0;
+                lastAt = at;
                 v.connected = connected;
                 if (!connected) {
                     consecutive = 0;
                     v.link = everConnected ? 'flapping' : 'none';
-                    v.upToDate = false;
+                    v.connectedS = null;
                     return {...v};
                 }
                 everConnected = true;
+                if (consecutive === 0)
+                    runStart = at;
                 consecutive++;
-                v.link = 'flapping';
-                v.upToDate = false;
-                if (consecutive >= t.linkSamples && linkRule === 'samples') {
-                    v.link = 'stable';
-                    v.upToDate = true;
-                } else if (consecutive >= t.linkSamples) {
-                    let ev = null;
-                    try {
-                        ev = await ports.evidence(peerId);
-                    } catch {
-                        ev = null;
-                    }
-                    if (ev && ev.remote === 'valid') {
-                        v.link = 'stable';
-                        v.upToDate = ev.completion === 100;
-                    }
-                }
+                // the count AND the time: ten samples that were taken closer than the gap prove less than ten seconds
+                const spanMs = at - runStart;
+                const stable = consecutive >= t.linkSamples && spanMs >= (t.linkSamples - 1) * t.linkGapMs;
+                v.link = stable ? 'stable' : 'flapping';
+                v.connectedS = stable ? Math.floor(spanMs / 1000) : null;
                 return {...v};
             },
         };
@@ -250,34 +244,25 @@ export function createEngine(ports) {
         return tracker.value;
     }
 
-    // host and join: sample until stable AND up to date. Events on every change, at most one per sample (one per second).
+    // host and join: sample until stable. Events on every change of the state, at most one per sample (one per second).
     async function awaitStable(peerId, {stop = () => false} = {}) {
         const tracker = createLinkTracker(peerId);
         const t0 = ports.monotonic();
-        let stableAt = null;
         let last = null;
         progress('connect', 'start');
         for (;;) {
             if (stop())
                 throw new Fail('E_EXPIRED', 'connect');
             const s = await tracker.sample();
-            if (last === null || s.link !== last.link || s.upToDate !== last.upToDate)
-                emit({event: 'link', state: s.link, up_to_date: s.upToDate});
+            if (last === null || s.link !== last.link)
+                emit({event: 'link', state: s.link, connected_s: s.connectedS});
             last = s;
-            if (s.link === 'stable' && stableAt === null) {
-                stableAt = ports.monotonic();
+            if (s.link === 'stable') {
                 progress('connect', 'ok');
-                progress('sync', 'start');
-            }
-            if (s.link === 'stable' && s.upToDate) {
-                progress('sync', 'ok');
                 return s;
             }
-            const now = ports.monotonic();
-            if (stableAt === null && now - t0 >= t.peerTimeoutMs)
+            if (ports.monotonic() - t0 >= t.peerTimeoutMs)
                 throw new Fail('E_PEER_TIMEOUT', 'connect');
-            if (stableAt !== null && now - stableAt >= t.upToDateMs)
-                throw new Fail('E_NOT_UP_TO_DATE', 'sync');
             await ports.sleep(t.linkGapMs);
         }
     }
@@ -324,7 +309,7 @@ export function createEngine(ports) {
     // ---- verbs ---------------------------------------------------------------------------------------------------------
 
     async function status() {
-        const base = {event: 'result', state: 'not-set-up', own_id: null, peer: null, connected: null, link: null, shared: null, up_to_date: null, notes: null, waiting: false};
+        const base = {event: 'result', state: 'not-set-up', own_id: null, peer: null, connected: null, link: null, connected_s: null, shared: null, up_to_date: null, notes: null, waiting: false};
         if (!backendInstalled())
             return {result: {...base, state: 'no-syncthing'}};
         const ours = holdsFolder();
@@ -353,7 +338,7 @@ export function createEngine(ports) {
         const m = await measureLink(peer.id);
         return {result: {
             ...base, state: isShared ? 'paired' : 'half', own_id: own, peer: {id: peer.id, name: null}, connected: m.connected, link: m.link,
-            shared: isShared, up_to_date: m.upToDate, notes: countNotes(),
+            connected_s: m.connectedS, shared: isShared, up_to_date: null, notes: countNotes(),
         }};
     }
 
@@ -476,7 +461,7 @@ export function createEngine(ports) {
         });
     }
 
-    const connectedResult = (peer, own) => ({event: 'result', peer, ...(own ? {own_id: own} : {}), connected: true, link: 'stable', up_to_date: true, notes: countNotes()});
+    const connectedResult = (peer, own, link) => ({event: 'result', peer, ...(own ? {own_id: own} : {}), connected: true, link: 'stable', connected_s: link.connectedS, up_to_date: null, notes: countNotes()});
 
     // `host`: wait for ONE computer, show it, accept exactly the ID the window names (0H.1, 0H.2).
     async function host() {
@@ -530,8 +515,8 @@ export function createEngine(ports) {
                     throw new Fail('E_PENDING_AMBIGUOUS');
                 await addPeer(now.id, own);
                 emit({event: 'peer', id: now.id, name: now.name});
-                await awaitStable(now.id, {stop: () => input.eof()});
-                return {result: connectedResult({id: now.id, name: now.name}, null)};
+                const link = await awaitStable(now.id, {stop: () => input.eof()});
+                return {result: connectedResult({id: now.id, name: now.name}, null, link)};
             }
             if (!accepted && ports.monotonic() - lastPoll >= t.pendingPollMs) {
                 lastPoll = ports.monotonic();
@@ -558,8 +543,8 @@ export function createEngine(ports) {
         if (!others.some(d => d.id === peerId) || !peersOf(cfg, own).shared({id: peerId}))
             await addPeer(peerId, own);                                      // a new peer, or the same one with the share missing (row 12)
         emit({event: 'peer', id: peerId, name: null});
-        await awaitStable(peerId);
-        return {result: connectedResult({id: peerId, name: null}, own)};
+        const link = await awaitStable(peerId);
+        return {result: connectedResult({id: peerId, name: null}, own, link)};
     }
 
     // ---- the one entry the dispatcher uses -------------------------------------------------------------------------------

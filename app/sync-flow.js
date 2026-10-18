@@ -23,9 +23,10 @@ export function pageForStatus(result) {
     }
 }
 
-// "Connected" is said only for a paired state whose link is stable AND whose notes are up to date. Raw `connected` is diagnostics.
+// "Connected" is said only for a paired state whose link is stable (ten unbroken connected samples, Interface 3). Raw `connected` is
+// diagnostics, and nothing says "synced": there is no `cli` source for the other computer's completion (`up_to_date` is null).
 export function isConnected(status) {
-    return status?.state === 'paired' && status.link === 'stable' && status.up_to_date === true;
+    return status?.state === 'paired' && status.link === 'stable';
 }
 
 // Which line the status page shows (a key; strings.js has the text).
@@ -35,7 +36,7 @@ export function linkKey(status) {
     if (status.link === null || status.link === undefined)
         return 'checking';
     if (status.link === 'stable')
-        return status.up_to_date === true ? 'connected' : 'catching-up';
+        return 'connected';
     if (status.link === 'flapping')
         return 'unstable';
     return 'offline';
@@ -53,7 +54,6 @@ const ACTIONS = Object.freeze({
     E_ALREADY_PAIRED: 'none',
     E_HALF_STATE_OTHER: 'stop',
     E_PEER_TIMEOUT: 'retry',
-    E_NOT_UP_TO_DATE: 'retry',
     E_EXPIRED: 'retry',
     E_PENDING_TOO_LARGE: 'none',
     E_PENDING_AMBIGUOUS: 'retry',
@@ -91,7 +91,7 @@ export function idsReducer(state, event) {
     case 'peer':
         return {...state, peer: {id: event.id, name: event.name}, candidate: null};
     case 'link':
-        return {...state, link: {state: event.state, upToDate: event.up_to_date}};
+        return {...state, link: {state: event.state, connectedS: event.connected_s}};
     case 'progress':
         return {...state, step: event.step, stepState: event.state};
     default:
