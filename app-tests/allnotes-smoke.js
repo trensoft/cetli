@@ -114,6 +114,8 @@ async function scenario() {
     check(await waitFor(() => list.rows.has(idB)), 'a new note gets a row');
     const [idC, wC] = await newNote();
     check(await waitFor(() => list.rows.has(idC)), 'and a third');
+    check(wB.color !== NOTE_RHEL_RED && wC.color !== NOTE_RHEL_RED && COLORS.includes(wB.color) && COLORS.includes(wC.color),
+        `only the first note is red: the second and third get a name colour (${wB.color}, ${wC.color})`);
     check(await waitFor(() => order().join() === [...aliveIds()].map(i => list.rows.get(i)).sort((a, b) => (a.updated < b.updated ? 1 : (a.updated === b.updated ? (a.id < b.id ? 1 : -1) : -1))).map(i => i.id).join()),
         'the rows are ordered the most recently changed first, the id on a tie');
     check(order()[0] === idC, 'the note just made is the first row');

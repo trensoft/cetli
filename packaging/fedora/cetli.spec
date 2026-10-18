@@ -123,7 +123,7 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 
 %changelog
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.4-1
-- A new note is red (RHEL red, #ee0000), and the red is the first circle of the colour grid; no existing note changes colour
+- The very first note (when no note exists yet) is red (RHEL red, #ee0000); every later new note gets a colour as before. The red is the first circle of the colour grid; no existing note changes colour
 - The header of a red note shows the title "Important" (white, bold, larger than the text, in the middle, cut with an ellipsis on a very small window, as readable in a window that is not active); the title is translated in the language catalogs, the other texts of the new catalogs stay English until they are translated
 - The text of a red note is bold (a look of the colour: nothing is stored in the note)
 - Fix: a note with a custom colour (the red, #3f3d3c, #336699 ...) drew black text when it started from its file; the text colour is right now

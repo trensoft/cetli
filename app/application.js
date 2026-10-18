@@ -128,8 +128,18 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         return win;
     }
 
+    // Only the very first note is red (0.2.4): when no live note exists yet. Every later new note gets the base colour the core picks
+    // (src/colors.js, as before 0.2.4). The check and the create are one step in a chain, so two quick "new" clicks on an empty store
+    // do not both see "no note" and make two red ones.
+    let newNoteChain = Promise.resolve();
+    function createNoteRed1st() {
+        const step = newNoteChain.then(() => store.createNote(store.listNotes().some(n => !n.deleted) ? {text: ''} : {text: '', color: NOTE_RHEL_RED}));
+        newNoteChain = step.catch(() => {});
+        return step;
+    }
+
     async function newNote(from) {
-        const res = await store.createNote({text: '', color: NOTE_RHEL_RED});   // a new note is red (0.2.4); the core's random pick (src/colors.js) is not used here
+        const res = await createNoteRed1st();
         if (!res.ok) {
             from?._setMark('refused', S.markNotSaved(res.cause.code));
             return null;

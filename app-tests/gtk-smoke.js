@@ -83,7 +83,7 @@ async function scenario() {
     check(w.win.get_title() === `cetli-${id}`, `window title is cetli-<uuid> (${w.win.get_title()})`);
     check(w.win.get_visible(), 'window is shown');
     check(noteFiles().length === 1, 'the new note is a file');
-    // a new note is red (0.2.4): the exact #ee0000 in the file, the class of that colour on the window and no class of a name colour;
+    // the first note is red (0.2.4): the exact #ee0000 in the file, the class of that colour on the window and no class of a name colour;
     // the "Important" title is shown for this colour only, and the text is bold by style (nothing in the file but the colour)
     check(fileRec(id).color === NOTE_RHEL_RED && w.win.has_css_class('cetli-x-ee0000') && !NOTE_COLOR_IDS.some(c => w.win.has_css_class(`cetli-${c}`)),
         `default colour: the red (${fileRec(id).color})`);
@@ -158,6 +158,9 @@ async function scenario() {
 
     // layout.json: an entry written by the extension; closing a window writes open=false, nothing else changes
     const [id2, w2] = [...windows].find(([k]) => k !== id);
+    // only the first note is red: the second gets a name colour from the core's pick, not the red
+    check(fileRec(id2).color !== NOTE_RHEL_RED && NOTE_COLOR_IDS.includes(fileRec(id2).color) && !w2.win.has_css_class('cetli-x-ee0000'),
+        `the second new note is not red (${fileRec(id2).color})`);
     await ctl.store.saveLayout({[id2]: {x: 10, y: 20, w: 321, h: 222, monitor: '1920x1080+0+0', open: true}});
     w2.win.close();
     await sleep(500);

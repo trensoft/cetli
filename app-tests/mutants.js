@@ -316,6 +316,8 @@ const MUTANTS = [
         find: "label.cetli-unresolved { filter: opacity(0.5); }'", repl: "label.cetli-unresolved { filter: none; }'"},
     {id: 'A239', rule: '0.2.4 red: the title is not cut with an ellipsis (a long translation widens the bar)', file: 'window.js', gjs: true, tests: ['red-render-smoke.js'],
         find: "new Gtk.Label({label: '', ellipsize: Pango.EllipsizeMode.END})", repl: "new Gtk.Label({label: ''})"},
+    {id: 'A240', rule: '0.2.4 red: every new note is red again (only the very first one is, when no live note exists)', file: 'application.js', gjs: true, tests: ['allnotes-smoke.js', 'gtk-smoke.js'],
+        find: "store.listNotes().some(n => !n.deleted) ? {text: ''} : {text: '', color: NOTE_RHEL_RED}", repl: "{text: '', color: NOTE_RHEL_RED}"},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
