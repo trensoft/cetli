@@ -44,6 +44,20 @@ const contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a),
 const hex = c => `#${c.map(v => v.toString(16).padStart(2, '0')).join('')}`;
 const grey = c => (c[0] + c[1] + c[2]) / 3;
 
+// A loaded machine can draw the first frame late: the snapshot of a window that is not drawn yet is empty (to_node() is null, the
+// "Argument root may not be null" of render_texture). Wait for a drawn window, at most 10 s.
+async function drawn(win) {
+    for (let i = 0; i < 50; i++) {
+        if (win.get_width() > 0 && win.get_height() > 0) {
+            const snap = new Gtk.Snapshot();
+            new Gtk.WidgetPaintable({widget: win}).snapshot(snap, win.get_width(), win.get_height());
+            if (snap.to_node() !== null)
+                return;
+        }
+        await sleep(200);
+    }
+}
+
 let shots = 0;
 // The window drawn to a PNG and read back: at(x, y) -> [r, g, b].
 function shot(win) {
@@ -116,6 +130,7 @@ const open = async (n, color, size, text) => {
     const w = new NoteWindow({ctl: ctl.ctl, record: record(n, color, text), size});
     w.present();
     await sleep(900);
+    await drawn(w.win);
     return w;
 };
 const DEFAULT = {width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT};
