@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // 0.2.6 (Petra 9045): "New note" is one creation at a time (the button of the empty list and the menu / Ctrl+N alike), and a refusal of the core is shown.
 // A synchronised, empty notes folder: the list opens with the button.
-import GLib from 'gi://GLib';
+import Gio from 'gi://Gio';
 
 import * as S from '../app/strings.js';
 import {NOTE_RHEL_RED, runStartGate} from './start-gate-support.js';
@@ -35,13 +35,15 @@ runStartGate({marker: true}, async ({app, windows, files, records, check, tick, 
     const shown = [];
     app.allNotes.showError = text => shown.push(text);
     const notes = app.store.dirs.notes;
-    GLib.chmod(notes, 0o555);
+    // GLib.chmod is GLib >= 2.80; the gate machine has 2.74
+    const chmod = mode => Gio.File.new_for_path(notes).set_attribute_uint32('unix::mode', mode, Gio.FileQueryInfoFlags.NONE, null);
+    chmod(0o555);
     try {
         app.gtkApp.activate_action('new-note', null);
         check(await waitFor(() => shown.length === 1), 'a note that cannot be saved is reported in the list');
         check(shown[0]?.startsWith(S.markNotSaved('NO_SUCH_CAUSE')), `with the text of the cause (${shown[0]})`);
     } finally {
-        GLib.chmod(notes, 0o755);
+        chmod(0o755);
     }
     await tick(300);
     check(records().filter(r => !r.deleted).length === 2, 'and no note was made');
