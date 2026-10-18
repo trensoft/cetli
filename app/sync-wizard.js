@@ -300,9 +300,11 @@ export class SyncWizard {
                 this._fillPaired(out.result);
             else
                 this._showForStatus(out.result);                 // no longer paired (stopped on the other side, or the program says otherwise)
+        } else {
+            this.w.pairedLink.set_label(S.syncLinkText('checking'));   // a failed poll: the last good line ("Connected") would be a claim nobody checked
         }
         if (this.page === 'paired')
-            this._schedulePoll();                                // a failed poll changes nothing on screen and is asked again
+            this._schedulePoll();                                // a failed poll leaves the page and is asked again
     }
 
     _copy(text) {

@@ -159,6 +159,24 @@ async function scenario() {
     const after = fake.count('status');
     await tick(POLL_MS * 4);
     check(fake.count('status') === after, 'a closed window asks nothing more');
+
+    // ---- 7. a poll that fails after "Connected" (the sync program stops on this computer): the line is "Checking", never the old "Connected", the page stays and
+    // the poll goes on; the next answer shows the real state
+    fake.answers.status = () => paired();
+    w = app.showSync();
+    await waitFor(() => w.page === 'paired');
+    check(await waitFor(() => shows(w, 'connected')), 'a connected pair shows "Connected" before the poll fails');
+    const seen7 = record(w);
+    fake.answers.status = () => ({ok: false, error: {code: 'E_SERVICE_TIMEOUT', step: null}});
+    check(await waitFor(() => shows(w, 'checking')), 'a poll that fails turns the line to "Checking the connection"');
+    const failedAt = fake.count('status');
+    check(await waitFor(() => fake.count('status') >= failedAt + 2) && w.page === 'paired' && shows(w, 'checking'), 'the paired page stays and the poll goes on while the call fails');
+    check(!shows(w, 'connected') && !shows(w, 'offline'), 'neither "Connected" nor "Not connected right now" is on the line');
+    check(!seen7.includes(text('connected')) && !seen7.includes(text('offline')), 'and neither was set on the way');
+    fake.answers.status = () => paired();
+    check(await waitFor(() => shows(w, 'connected')), 'the next answer that succeeds shows "Connected" again');
+    w.win.close();
+    await tick(80);
 }
 
 scenario().then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {
