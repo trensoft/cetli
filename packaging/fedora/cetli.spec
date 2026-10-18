@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.5
+Version:        0.2.6
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -131,6 +131,15 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.6-1
+- New: cetli syncs up to 10 computers. You connect a new computer to any computer of the group with one ID comparison; the other computers learn the new one by themselves. A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all your computers. cetli guides you through it and never claims a computer is removed from the whole group, only from the one it runs on
+- If you paired computers with 0.2.5, open Sync on each of them and allow the new rule once; until then such a pair behaves as in 0.2.5 (a new computer is not passed on). Going back to 0.2.5 needs "Stop syncing" first
+- Supported and measured: up to 4 Syncthing instances on one machine (loopback) and two real instances. Not measured: 10 computers, a real network behind a default firewall or NAT, connections through relays, a real RHEL 10 with a user service manager; on a real network the computers may connect through the first computer only. A firewall on any computer can stop the pairing: the ports are TCP and UDP 22100 and UDP 21127
+- A computer that an accepted computer adds can add others too (Syncthing copies the right); lowering it again and the quick removal of a computer you still have are built but switched off until they are measured. A group of more than 10 computers (two computers admitted at the same time while they cannot see each other) is shown and stops further additions; cetli removes nothing by itself
+- The engine keeps a small state file (computer IDs only) in the sync home; the window shows how each computer came into the group and which are new. Removing a lost computer first stops this computer from taking anything over from the others, then removes the computer; the window says what must still be done on the other computers
+- A machine whose notes folder is already synchronised by a Syncthing you set up by hand is detected and left exactly as it is; the window says so
+- Tests: the engine, the group rule (sync-tests/, mutants X1-X10 in sync-tests/mutants.js) and the window have their own tests
+
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1
 - New: a sync window (main menu: Sync, and once at the first start): it sets up a Syncthing instance of its own for the notes folder after you press a button, and connects two computers by their device IDs. Both computers show their ID; on the waiting computer one button accepts the computer that knocks, and only after you have compared the ID shown there with the one on the other computer; or the ID of the other computer is typed in. cetli opens a network port and announces itself on the local network while the service runs
 - Supported and measured: two computers; cetli pairs a computer with exactly one other computer. Three or more computers cannot be set up in this version: a computer that is already paired refuses a second one. Not measured: a real network behind a default firewall or NAT, connections through relays, a real RHEL 10 with a user service manager. A firewall on either computer can stop the pairing: the ports are TCP and UDP 22100 and UDP 21127

@@ -52,11 +52,14 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
     const version = read('VERSION').trim();
     assert.equal(spec.match(/^Version:\s+(.*)$/m)[1], version);
     assert.match(spec, new RegExp(`^\\* .* - ${version.replace(/\./g, '\\.')}-1$`, 'm'));
-    const entry = spec.slice(spec.indexOf(`- ${version}-1`), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.4-1'));
-    assert.match(entry, /Supported and measured: two computers/);
-    assert.match(entry, /Not measured/);
+    const entry = spec.slice(spec.indexOf(`- ${version}-1`), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
+    assert.match(entry, /Supported and measured: up to 4 Syncthing instances on one machine/);
+    assert.match(entry, /Not measured: 10 computers/);
     assert.match(entry, /TCP and UDP 22100 and UDP 21127/);
-    assert.match(entry, /cannot|can lose an update/);
+    // Nicole's sentence (PLAN-ADMISSION-0.2.6 0), word for word, in the changelog and in the README
+    const sentence = 'A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all your computers.';
+    assert.ok(entry.includes(sentence));
+    assert.ok(read('README.md').replace(/\s+/g, ' ').includes(sentence));
 });
 
 test('0H.12: env -i is mandatory in ExecStart with exactly HOME and PATH; no EnvironmentFile, PassEnvironment or UnsetEnvironment', () => {

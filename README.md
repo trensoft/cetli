@@ -29,12 +29,20 @@ when it is missing and runs none of them.
 To connect two computers, open **Sync…** on both. Each shows its own ID. On the waiting computer, a button accepts the computer
 that knocks, after you have compared the ID shown there with the ID on the other computer (compare at least the first two
 groups); or type the ID of the other computer into the field. The window says *Connected* only when the program has proof from
-the other computer's side. **Stop syncing** removes the other computer and its share; it never removes the folder or a note.
+the other computer's side.
 
-What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): two computers are the supported case.
-cetli pairs a computer with exactly one other computer; three or more cannot be set up in this version. Not measured: a real network behind a default firewall or NAT,
-relays, a real RHEL 10 session. A computer whose notes folder is already synchronised by a Syncthing you set up by hand is
-left exactly as it is.
+Since 0.2.6 a group has up to 10 computers. To add a computer, open **Sync…** on any computer of the group, press **Add a
+computer** and accept the one that knocks; the new computer types the ID of that computer. The other computers learn the new one by
+themselves. A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all
+your computers. **Sync…** shows how each computer came into the group and guides you through the removal, and it never claims that a
+computer is removed from the whole group, only from the one it runs on. If you paired computers with 0.2.5, open **Sync…** on each of
+them and allow the new rule once. **Stop syncing** removes all other computers and their shares; it never removes the folder or a
+note. Going back to 0.2.5 needs **Stop syncing** first.
+
+What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): up to four Syncthing instances on one machine
+(loopback) and two real instances. Not measured: ten computers, a real network behind a default firewall or NAT, relays, a real RHEL
+10 session; on a real network the computers may connect through the first computer only. A computer whose notes folder is already
+synchronised by a Syncthing you set up by hand is left exactly as it is.
 
 ## Authorship
 
