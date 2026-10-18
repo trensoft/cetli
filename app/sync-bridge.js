@@ -13,7 +13,7 @@ const ENGINE = '/usr/bin/cetli-sync';
 
 // The process of the runner's interface, over a Gio.Subprocess. stdout is read in chunks and cut into lines here, so that a line over
 // MAX_LINE_BYTES or a total over MAX_TOTAL_BYTES is stopped BEFORE it is held in memory; stderr is not read (STDERR_SILENCE).
-function startProcess(argv, {env}) {
+export function startProcess(argv, {env}) {
     const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE});
     launcher.set_environ(env);
     const sub = launcher.spawnv(argv);

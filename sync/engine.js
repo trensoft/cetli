@@ -388,6 +388,8 @@ export function createEngine(ports) {
     }
 
     async function ownIdVerb() {
+        if (!backendInstalled())
+            throw new Fail('E_NO_SYNCTHING');
         return {result: {event: 'result', own_id: await ownId()}};
     }
 

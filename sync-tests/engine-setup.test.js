@@ -257,6 +257,7 @@ test('foreignDevices and folderAnomaly are one predicate each', () => {
 test('own-id: the canonical ID of the instance; no instance, no ID', async () => {
     const w = createWorld();
     assert.deepEqual(await perform(w, 'own-id'), {error: {code: 'E_CLI_FAILED'}});
+    assert.deepEqual(await perform(createWorld({backend: false}), 'own-id'), {error: {code: 'E_NO_SYNCTHING'}});
     await perform(w, 'setup');
     assert.deepEqual(await perform(w, 'own-id'), {result: {event: 'result', own_id: OWN}});
 });
