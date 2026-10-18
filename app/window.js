@@ -6,6 +6,7 @@ import Gdk from 'gi://Gdk?version=4.0';
 import Gtk from 'gi://Gtk?version=4.0';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import Pango from 'gi://Pango';
 
 import {SAVE_COALESCE_MS} from '../src/constants.js';
 import {COLORS, GRID_COLORS, NOTE_RHEL_RED, PALETTE, REMOTE_QUIET_MS, WINDOW_TITLE_PREFIX, cssClassOf, customColorStyle, isCustomColor, parseCustomColor, textColorFor} from './data.js';
@@ -167,7 +168,8 @@ export class NoteWindow {
         header.add_css_class('cetli-header');
         this.header = header;
         // The window title is the contract name, not for the eye; this label is the title of the red note (_applyColorClass).
-        this.titleLabel = new Gtk.Label({label: ''});
+        // cut at the end when a translation is longer than the room between the buttons: the title never widens the bar or the window
+        this.titleLabel = new Gtk.Label({label: '', ellipsize: Pango.EllipsizeMode.END});
         this.titleLabel.add_css_class('cetli-title');
         header.set_title_widget(this.titleLabel);
         this.unresolved = new Gtk.Label({visible: false});
