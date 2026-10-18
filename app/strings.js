@@ -199,7 +199,7 @@ export const syncInfoStfolderTitle = () => _('Sync is already set up here');
 export const syncInfoStfolderText = () => _('The notes of this computer are already synchronised by another Syncthing. cetli leaves it exactly as it is, and your sync keeps working as you set it up.');
 export const syncInfoStfolderHint = () => _('If that Syncthing does not sync this folder any more, delete the hidden folder .stfolder inside the notes folder and open this window again.');
 export const syncInfoForeignTitle = () => _('Nothing was changed');
-export const syncInfoForeignText = () => _('The sync program of cetli lists a computer that was not added here. cetli leaves everything as it is and shows no connection.');
+export const syncInfoForeignText = () => _('The sync program of cetli contains a computer or a folder that was not set up here. cetli leaves everything as it is and shows no connection.');
 
 export const syncErrorTitle = () => _('Sync did not work');
 // The text of an error code. Information codes (a neutral page) are the same function; the window decides the look.

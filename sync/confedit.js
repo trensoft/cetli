@@ -410,3 +410,12 @@ export function verifyConfig(xml, args) {
     }
     return problems;
 }
+
+// The ids of the folders our own instance holds, read from ITS config.xml (our own home, free to read; PLAN-WIZARD 0H.7 "Is it ours?").
+// Only the id attribute of <folder> elements directly under <configuration> is returned; nothing else of the file leaves this function.
+export function readFolderIds(xml) {
+    const doc = parse(xml);
+    if (doc.root.name !== 'configuration')
+        throw new ConfigEditError(REASONS.NOT_UNDERSTOOD, 'configuration', doc.line(doc.root.start));
+    return doc.root.children.filter(n => n.name === 'folder' && typeof n.attrs.id === 'string' && n.attrs.id !== '').map(n => n.attrs.id);
+}

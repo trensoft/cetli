@@ -83,8 +83,8 @@ const RESULT_SCHEMAS = {
         (r.notes === null || isCount(r.notes)) && isBool(r.waiting) && statusRules(r),
     setup: r => isCanonicalId(r.own_id) && r.state === 'set-up',
     'own-id': r => isCanonicalId(r.own_id),
-    host: r => isPeer(r.peer) && r.peer !== null && isBool(r.connected) && connectedResult(r) && isCount(r.notes),
-    join: r => isPeer(r.peer) && isCanonicalId(r.own_id) && isBool(r.connected) && connectedResult(r) && isCount(r.notes),
+    host: r => isPeer(r.peer) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
+    join: r => isPeer(r.peer) && isCanonicalId(r.own_id) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
     forget: r => r.state === 'set-up',
 };
 const RESULT_KEYS = {

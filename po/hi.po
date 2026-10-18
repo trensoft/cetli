@@ -543,8 +543,8 @@ msgstr ""
 
 #: app/strings.js
 msgid ""
-"The sync program of cetli lists a computer that was not added here. cetli "
-"leaves everything as it is and shows no connection."
+"The sync program of cetli contains a computer or a folder that was not set "
+"up here. cetli leaves everything as it is and shows no connection."
 msgstr ""
 
 #: app/strings.js
