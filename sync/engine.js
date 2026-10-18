@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The engine of the sync window (PLAN-WIZARD 0H, 0F, 7.2; PLAN-WIZARD-INTERFACE 2a, 3): the verbs status, setup, own-id, forget, host and join.
+// The engine of the sync window (PLAN-WIZARD 0H, 0F, 7.2; PLAN-WIZARD-INTERFACE 2a, 3; 0.2.6: PLAN-0.2.6, PLAN-ADMISSION-0.2.6): the verbs status,
+// setup, own-id, host, join, forget, revoke, finish, harden, promote and ack, for a group of up to MAX_COMPUTERS computers.
 // No Gio, no process, no file API of its own: everything is injected (`ports`), so a stub Syncthing and a stub file system run it in node.
 // What it never does: read or write the notes, read a foreign config, call the REST interface or touch an API key (it uses `syncthing cli` only),
-// remove a device it did not add, remove the folder or a file, or put anything of a peer (name, address) on a command line or in a log.
+// remove a device nobody named (it removes only IDs in the list it just read, named by the window), remove the folder or a file, or put anything
+// of a peer on a command line or in a log (the one exception is the sanitised label of an accepted computer, as ONE `--name=` argument).
 //
 // ports = {
 //   run:      createRunPort(...)        syncthing(sub, args, opts) -> {rc, out, tooLarge?}, systemctl(args, opts)
@@ -18,7 +20,11 @@ import {ConfigEditError, PORTS_OWN, editConfig, readFolderIds, verifyConfig} fro
 import {canonicalId, displayName, isCanonicalId, parseTypedId} from './ids.js';
 import {markerPaths} from './markers.js';
 import {BACKEND_EXE, FOLDER_ID, UNIT_NAME, socketPath} from './paths.js';
+import {DWELL_MS, HARDEN_INTRODUCED, MAX_COMPUTERS, MAX_PEERS, READ_CAP, SHORTCUT_REMOVE, wantedIntroducer} from './policy.js';
 import {parseAcceptLine} from './protocol.js';
+import {
+    FREEZE_MAX, STATE_FILE, brokenState, freshState, isFrozen, parseState, serializeState, withAck, withFreeze, withTomb, withoutFreeze, withoutTomb,
+} from './state.js';
 
 export const TIMING = Object.freeze({
     linkSamples: 10,                       // LINK_SAMPLES: consecutive connected samples that make the link stable (Interface 3)
@@ -30,9 +36,10 @@ export const TIMING = Object.freeze({
     serviceWaitMs: 30000,
     servicePollMs: 500,
     statusWaitMs: 5000,
+    dwellMs: DWELL_MS,                     // revoke: the wait between the first and the second read-back
 });
 export const PENDING_MAX_BYTES = 16 * 1024 * 1024;
-export const MAX_PEERS = 1;                // one peer (0A row 11); Nicole's N-peer rule replaces this number and the predicate below
+export {MAX_PEERS};                        // the number lives in policy.js (10 computers = 9 peers)
 export const PEER_LABEL = 'other computer';
 
 class Fail extends Error {
@@ -45,26 +52,38 @@ class Fail extends Error {
 
 const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-// ONE predicate for setup, host, join, the accept step and status (Interface 2a): a device is foreign when it is a second introducer, was
-// introduced, auto-accepts folders, or is a peer beyond the allowed number. The engine never removes such an entry itself.
-export function foreignDevices(devices, ownId, maxPeers = MAX_PEERS) {
-    const others = devices.filter(d => d.id !== ownId);
-    const peers = others.length <= maxPeers ? others : [];
-    return devices.filter(d => d.introducer || d.autoAcceptFolders || d.introducedBy !== '' || (d.id !== ownId && !peers.includes(d)));
+// ONE predicate for setup, host, join, the accept step, status and the removal verbs (Interface 2a, invariants I1-I4 of PLAN-ADMISSION-0.2.6 1.3):
+// a device is foreign when the own device is an introducer or auto-accepts folders, or another device auto-accepts folders, keeps
+// removals back (skipIntroductionRemovals), or names an `introducedBy` that is no canonical ID, the own ID or itself. `introducer` is free
+// for the other devices: the daemon copies the flag of the introducer. The count is NOT part of it (overLimit). The engine never removes
+// such an entry itself.
+export function foreignDevices(devices, ownId) {
+    return devices.filter(d => d.id === ownId ?
+        d.introducer || d.autoAcceptFolders :
+        d.autoAcceptFolders || d.skipIntroductionRemovals || (d.introducedBy !== '' && (!isCanonicalId(d.introducedBy) || d.introducedBy === ownId || d.introducedBy === d.id)));
 }
 
-// The folder set of the dedicated instance must be exactly {cetli-notes}: absolute path equal to the notes path, send-receive, shared with no
-// introduced device (7.2, T14). Returns true when something is wrong.
-export function folderAnomaly(folders, notesPath) {
+// I7: more than MAX_PEERS other devices. Detective only: the daemon, not our code, admits an introduced device.
+export const overLimit = (devices, ownId) => devices.filter(d => d.id !== ownId).length > MAX_PEERS;
+
+// The folder set of the dedicated instance must be exactly {cetli-notes}: absolute path equal to the notes path, send-receive, and every
+// folder-device record an ID (own or a listed device, when the devices are given) with an `introducedBy` that is empty or canonical (I6;
+// an introduced computer is in the folder with the introducer's name in that field). Returns true when something is wrong.
+export function folderAnomaly(folders, notesPath, devices = null) {
     if (folders.length !== 1 || folders[0].id !== FOLDER_ID)
         return true;
     const f = folders[0];
-    return f.path !== notesPath || !f.path.startsWith('/') || f.type !== 'sendreceive' || f.devices.some(d => d.introducedBy !== '');
+    if (f.path !== notesPath || !f.path.startsWith('/') || f.type !== 'sendreceive')
+        return true;
+    const known = devices === null ? null : new Set(devices.map(d => d.id));
+    return f.devices.some(d => !isCanonicalId(d.id) || (d.introducedBy !== '' && !isCanonicalId(d.introducedBy)) || (known !== null && !known.has(d.id)));
 }
 
 export function createEngine(ports) {
     const {run, files, dirs, emit, log} = ports;
     const t = {...TIMING, ...(ports.timing ?? {})};
+    // the two switches of policy.js; the tests run both values (PLAN-0.2.6 2.1)
+    const policy = {hardenIntroduced: HARDEN_INTRODUCED, shortcutRemove: SHORTCUT_REMOVE, ...(ports.policy ?? {})};
     const configPath = `${dirs.home}/config.xml`;
     const sock = socketPath(dirs.home);
     const editArgs = {socketPath: sock, ports: PORTS_OWN};
@@ -139,16 +158,24 @@ export function createEngine(ports) {
         }
     }
 
-    // The read-back of the instance: every device with its flags, every folder with its path, type and devices (M-W1 commands).
+    // The read-back of the instance: every device with its flags, every folder with its path, type and devices (M-W1 commands). A list of more
+    // than READ_CAP devices is not read one by one (a hostile introducer can list any number): `overCap` is true, `devices` is empty and
+    // `ids` still holds the listed IDs. `computers` is the number of devices listed (own included).
     async function readConfig() {
+        const ids = lines(await cli(['config', 'devices', 'list']));
+        if (!ids.every(isCanonicalId))
+            throw new Fail('E_CLI_FAILED');
         const devices = [];
-        for (const id of lines(await cli(['config', 'devices', 'list']))) {
-            if (!isCanonicalId(id))
-                throw new Fail('E_CLI_FAILED');
-            const d = json(await cli(['config', 'devices', id, 'dump-json']));
-            if (!isObj(d) || d.deviceID !== id)
-                throw new Fail('E_CLI_FAILED');
-            devices.push({id, introducer: d.introducer === true, autoAcceptFolders: d.autoAcceptFolders === true, introducedBy: typeof d.introducedBy === 'string' ? d.introducedBy : 'invalid'});
+        if (ids.length <= READ_CAP) {
+            for (const id of ids) {
+                const d = json(await cli(['config', 'devices', id, 'dump-json']));
+                if (!isObj(d) || d.deviceID !== id)
+                    throw new Fail('E_CLI_FAILED');
+                devices.push({
+                    id, name: typeof d.name === 'string' ? d.name : '', introducer: d.introducer === true, autoAcceptFolders: d.autoAcceptFolders === true,
+                    skipIntroductionRemovals: d.skipIntroductionRemovals === true, introducedBy: typeof d.introducedBy === 'string' ? d.introducedBy : 'invalid',
+                });
+            }
         }
         const folders = [];
         for (const id of lines(await cli(['config', 'folders', 'list']))) {
@@ -160,7 +187,7 @@ export function createEngine(ports) {
                 devices: f.devices.map(x => ({id: x?.deviceID, introducedBy: typeof x?.introducedBy === 'string' ? x.introducedBy : 'invalid'})),
             });
         }
-        return {devices, folders};
+        return {devices, folders, ids, overCap: ids.length > READ_CAP, computers: ids.length};
     }
 
     function countNotes() {
@@ -171,41 +198,75 @@ export function createEngine(ports) {
         }
     }
 
-    // Own ID aside, the single peer of the instance and whether the folder is shared with it.
+    // The peers of the instance (every device but the own one) and whether the folder is shared with one of them.
     function peersOf(cfg, own) {
         const peers = cfg.devices.filter(d => d.id !== own);
         const folder = cfg.folders.find(f => f.id === FOLDER_ID);
         return {peers, shared: peer => folder?.devices.some(d => d.id === peer.id) ?? false};
     }
 
+    // ---- the state file (sync/state.js): acknowledged computers, tombstones, the open freeze --------------------------------------
+
+    const statePath = `${dirs.home}/${STATE_FILE}`;
+    // {state, missing}. A file that is a link or does not read cleanly is NOT a fresh state: it is an open freeze with nothing known (fail
+    // closed; `finish` repairs it).
+    function loadState() {
+        if (!files.exists(statePath))
+            return {state: freshState(), missing: true};
+        try {
+            if (files.isSymlink(statePath))
+                return {state: brokenState(), missing: false};
+            const r = parseState(files.readText(statePath));
+            return r.ok ? {state: r.state, missing: false} : {state: brokenState(), missing: false};
+        } catch {
+            return {state: brokenState(), missing: false};
+        }
+    }
+    // The first write seeds the directly accepted devices into `ack`: 0.2.5 allowed no other kind, so each was accepted by a click or a typed ID.
+    function saveState(state, cfg, own) {
+        const {missing} = loadState();
+        let next = state;
+        if (missing && cfg) {
+            const direct = cfg.devices.filter(d => d.id !== own && d.introducedBy === '').map(d => d.id);
+            next = withAck(next, direct.filter(id => !next.ack.includes(id)));
+        }
+        files.writeText(statePath, serializeState(next), 0o600);
+        return next;
+    }
+    const isAcked = (ls, d) => ls.state.ack.includes(d.id) || (ls.missing && d.introducedBy === '');
+    // Tombstoned IDs that are in the device list again.
+    const returnedIds = (ls, cfg) => cfg.devices.filter(d => ls.state.tomb.includes(d.id)).map(d => d.id);
+
     // ---- the link (Interface 3, `link` and the "Connected" claim) -------------------------------------------------------
 
-    async function readConnected(peerId) {
-        const o = json(await cli(['show', 'connections']));
-        const c = o?.connections?.[peerId];
-        return isObj(c) ? c.connected === true : false;
+    // One `show connections` call: the `connections` object, or null when the call failed (a broken sample, not the end of a run).
+    async function readConnections() {
+        try {
+            const o = json(await cli(['show', 'connections']));
+            return isObj(o?.connections) ? o.connections : {};
+        } catch (e) {
+            if (!(e instanceof Fail))
+                throw e;
+            return null;
+        }
     }
+    const connectedIn = (connections, peerId) => connections !== null && isObj(connections[peerId]) && connections[peerId].connected === true;
 
     // A tracker for ONE peer. Raw `connected` is never proof (M-W6): `stable` is `linkSamples` CONSECUTIVE connected samples taken
     // `linkGapMs` apart on the monotonic clock (Interface 3, option (a) of 0G.2; there is no `cli` completion, so nothing says "synced").
     // A failed or timed-out call, a not-connected sample, or a gap of more than twice `linkGapMs` between two samples restarts the count.
     // `connectedS` is the length of the unbroken run this engine saw, first to last sample, in whole seconds; null unless stable.
+    // `observe(connected)` takes the answer of a call somebody else made (status reads ONE `show connections` for all peers); `sample()`
+    // makes the call itself (host and join watch one peer).
     function createLinkTracker(peerId) {
         let consecutive = 0;
         let runStart = null;
         let lastAt = null;
         let everConnected = false;
         const v = {link: 'none', connectedS: null, connected: false};
-        return {
+        const tracker = {
             get value() { return {...v}; },
-            async sample() {
-                let connected = false;
-                try {
-                    connected = await readConnected(peerId);
-                } catch (e) {
-                    if (!(e instanceof Fail))
-                        throw e;                                              // a failed call is a broken sample, not the end of the run
-                }
+            observe(connected) {
                 const at = ports.monotonic();
                 if (lastAt !== null && at - lastAt > 2 * t.linkGapMs)
                     consecutive = 0;
@@ -228,7 +289,11 @@ export function createEngine(ports) {
                 v.connectedS = stable ? Math.floor(spanMs / 1000) : null;
                 return {...v};
             },
+            async sample() {
+                return tracker.observe(connectedIn(await readConnections(), peerId));
+            },
         };
+        return tracker;
     }
 
     // The state of the listeners for `status` (Interface 2a): `cli show system`, key connectionServiceStatus (address -> {error, ...} or
@@ -272,17 +337,22 @@ export function createEngine(ports) {
         return seen === 0 ? null : degraded ? 'degraded' : 'ok';
     }
 
-    // status: the first not-connected sample ends the run; only the success path pays the K samples.
-    async function measureLink(peerId) {
-        const tracker = createLinkTracker(peerId);
-        for (let i = 0; i < t.linkSamples + 1; i++) {
-            const s = await tracker.sample();
-            if (!s.connected || s.link === 'stable')
-                return s;
-            if (i < t.linkSamples)
+    // status: ONE `show connections` call per second feeds one tracker per peer. A peer's run ends at its first not-connected sample or when it
+    // is stable; the run ends when every peer is done, so a computer that is off costs one sample and the success path pays the K samples
+    // once for all peers together (as in 0.2.5 for one). Returns the values in the order of `peerIds`.
+    async function measureLinks(peerIds) {
+        const trackers = peerIds.map(id => createLinkTracker(id));
+        let active = trackers.map((_, i) => i);
+        for (let i = 0; i < t.linkSamples + 1 && active.length > 0; i++) {
+            const connections = await readConnections();
+            active = active.filter(k => {
+                const s = trackers[k].observe(connectedIn(connections, peerIds[k]));
+                return s.connected && s.link !== 'stable';
+            });
+            if (active.length > 0 && i < t.linkSamples)
                 await ports.sleep(t.linkGapMs);
         }
-        return tracker.value;
+        return trackers.map(tr => tr.value);
     }
 
     // host and join: sample until stable. Events on every change of the state, at most one per sample (one per second).
@@ -349,8 +419,22 @@ export function createEngine(ports) {
 
     // ---- verbs ---------------------------------------------------------------------------------------------------------
 
+    // How the peers of the instance appear in `status` (PLAN-0.2.6 3.2). The name is a hint only (displayName); `introduced_by` is the
+    // introducer's ID when it is a canonical one.
+    function peerEntry(d, cfg, own, ls, links) {
+        const {shared} = peersOf(cfg, own);
+        return {
+            id: d.id, name: displayName(d.name), introduced_by: d.introducedBy !== '' && isCanonicalId(d.introducedBy) ? d.introducedBy : null,
+            introducer: d.introducer, shared: shared(d), connected: links?.connected ?? null, link: links?.link ?? null, connected_s: links?.connectedS ?? null,
+            new: !isAcked(ls, d), returned: ls.state.tomb.includes(d.id),
+        };
+    }
+
     async function status() {
-        const base = {event: 'result', state: 'not-set-up', own_id: null, peer: null, connected: null, link: null, connected_s: null, listener: null, shared: null, up_to_date: null, notes: null, waiting: false};
+        const base = {
+            event: 'result', state: 'not-set-up', own_id: null, peers: [], computers: null, max_computers: MAX_COMPUTERS, over_limit: false, revocation_open: false,
+            harden_pending: 0, promote_pending: 0, listener: null, up_to_date: null, notes: null, waiting: false,
+        };
         if (!backendInstalled())
             return {result: {...base, state: 'no-syncthing'}};
         const ours = holdsFolder();
@@ -368,20 +452,26 @@ export function createEngine(ports) {
         const cfg = await readConfig();
         if (!cfg.folders.some(f => f.id === FOLDER_ID))
             return {result: {...base, own_id: own}};
-        const foreign = foreignDevices(cfg.devices, own).length > 0 || folderAnomaly(cfg.folders, dirs.notes);
+        const ls = loadState();
+        const open = isFrozen(ls.state);
+        const known = {...base, own_id: own, computers: cfg.computers, revocation_open: open};
+        if (cfg.overCap)                                          // the list is not read: no peers, nothing is known about the share
+            return {result: {...known, state: 'half', over_limit: true}};
+        const foreign = foreignDevices(cfg.devices, own).length > 0 || folderAnomaly(cfg.folders, dirs.notes, cfg.devices);
         const {peers, shared} = peersOf(cfg, own);
-        const peer = peers[0] ?? null;
+        const over = peers.length > MAX_PEERS;
+        const shown = peers.slice(0, MAX_COMPUTERS);
         if (foreign)
-            return {result: {...base, state: 'foreign-config', own_id: own}};
+            return {result: {...known, state: 'foreign-config', over_limit: over, peers: shown.map(d => peerEntry(d, cfg, own, ls, null))}};
+        const harden = peers.filter(d => d.introducedBy !== '' && d.introducer && !wantedIntroducer(d, policy.hardenIntroduced)).length;
+        const promote = open ? 0 : peers.filter(d => d.introducedBy === '' && !d.introducer).length;
         const listener = await listenerState();
-        if (peer === null)
-            return {result: {...base, state: 'set-up', own_id: own, listener, notes: countNotes()}};
-        const isShared = shared(peer);
-        const m = await measureLink(peer.id);
-        return {result: {
-            ...base, state: isShared ? 'paired' : 'half', own_id: own, peer: {id: peer.id, name: null}, connected: m.connected, link: m.link,
-            connected_s: m.connectedS, listener, shared: isShared, up_to_date: null, notes: countNotes(),
-        }};
+        const counters = {over_limit: over, harden_pending: harden, promote_pending: promote, listener, notes: countNotes()};
+        if (peers.length === 0)
+            return {result: {...known, ...counters, state: 'set-up'}};
+        const state = peers.some(shared) ? 'paired' : 'half';
+        const links = over ? [] : await measureLinks(peers.map(d => d.id));
+        return {result: {...known, ...counters, state, peers: shown.map((d, i) => peerEntry(d, cfg, own, ls, links[i]))}};
     }
 
     async function setup() {
@@ -419,8 +509,9 @@ export function createEngine(ports) {
             const cfg = await readConfig();
             if (foreignDevices(cfg.devices, own).length > 0)
                 throw new Fail('E_FOREIGN_DEVICE');
-            if (folderAnomaly(cfg.folders, dirs.notes))
+            if (folderAnomaly(cfg.folders, dirs.notes, cfg.overCap ? null : cfg.devices))
                 throw new Fail('E_CONFIG_UNSAFE');
+            refuseWhileClosed(cfg, own);
         });
         return {result: {event: 'result', own_id: own, state: 'set-up'}};
     }
@@ -431,44 +522,209 @@ export function createEngine(ports) {
         return {result: {event: 'result', own_id: await ownId()}};
     }
 
-    // Removes the device and its share, never the folder, never a file, never the instance (D1). `--stop` also disables the unit.
-    async function forget({stop = false} = {}) {
+    // ---- the group: what host, join and the removal verbs share ---------------------------------------------------------
+
+    // The admission verbs (host, join, setup) are refused while a removal is open (I9: an open freeze, an unreadable state file, or a
+    // tombstoned computer that is back in the list, I8) and, with `full`, while the group is over its limit (I7).
+    function refuseWhileClosed(cfg, own, {full = true} = {}) {
+        const ls = loadState();
+        if (isFrozen(ls.state) || returnedIds(ls, cfg).length > 0)
+            throw new Fail('E_REVOCATION_OPEN');
+        if (full && (cfg.overCap || overLimit(cfg.devices, own)))
+            throw new Fail('E_GROUP_FULL');
+    }
+
+    // The common start of the verbs that act on an existing instance and must ALSO run in foreign-config and over-limit, because they are
+    // the way out of those states (forget, revoke, finish, harden, promote, ack): backend, instance, daemon, config. No invariant is enforced.
+    async function prepareLight() {
         if (!backendInstalled())
             throw new Fail('E_NO_SYNCTHING');
         if (!files.exists(configPath))
-            return {result: {event: 'result', state: 'set-up'}};
+            throw new Fail('E_CLI_FAILED');
         const own = await ownId();
         if (!(await daemonAnswers(t.statusWaitMs)))
             throw new Fail('E_SERVICE_TIMEOUT');
-        const cfg = await step('device', async () => {
-            const c = await readConfig();
-            if (foreignDevices(c.devices, own).length > 0)
-                throw new Fail('E_FOREIGN_DEVICE');
-            return c;
-        });
-        const {peers, shared} = peersOf(cfg, own);
-        if (peers.length > 0) {
-            const peer = peers[0];
+        return {own, cfg: await readConfig()};
+    }
+
+    // Every ID a verb names must be in the list this run just read, and not the own one: else E_BAD_ID and nothing is written.
+    function namedIds(ids, cfg, own) {
+        if (!Array.isArray(ids) || ids.length === 0 || ids.some(id => !cfg.ids.includes(id) || id === own))
+            throw new Fail('E_BAD_ID');
+        return ids;
+    }
+
+    const setIntroducer = (id, value) => cli(['config', 'devices', id, 'introducer', 'set', String(value)]);
+
+    // The share first, then the device, for each ID in the order given; what is already absent is skipped (a rerun after a crash is safe).
+    async function deleteIds(ids, cfg) {
+        const folder = cfg.folders.find(f => f.id === FOLDER_ID);
+        for (const id of ids) {
+            if (folder?.devices.some(d => d.id === id))
+                await cli(['config', 'folders', FOLDER_ID, 'devices', id, 'delete']);
+            if (cfg.ids.includes(id))
+                await cli(['config', 'devices', id, 'delete']);
+        }
+    }
+    const absent = (cfg, ids) => !cfg.ids.some(id => ids.includes(id)) && !cfg.folders.some(f => f.devices.some(d => ids.includes(d.id)));
+
+    // `forget --all [--stop]`: the "start over" and the old "Stop syncing". `forget <ID>`: the shortcut for a computer the user still has
+    // (SHORTCUT_REMOVE, M-J1), only for a directly accepted device: a plain delete of an introduced one is not durable [M 215, 217].
+    // Both remove devices and shares, never the folder, never a file, never the instance (D1).
+    async function forget({all = false, stop = false, ids = []} = {}) {
+        if (!backendInstalled())
+            throw new Fail('E_NO_SYNCTHING');
+        if (!all && !policy.shortcutRemove)
+            throw new Fail('E_BAD_ID');
+        if (all && !files.exists(configPath))
+            return {result: {event: 'result', state: 'set-up', remaining: 0}};
+        const {own, cfg} = await prepareLight();
+        if (all) {
+            const targets = cfg.ids.filter(id => id !== own);
+            await step('device', async () => {
+                // lower every flag first: a peer that stays flagged could hand a removed computer back
+                const flagged = cfg.overCap ? targets.slice(0, FREEZE_MAX) : cfg.devices.filter(d => d.id !== own && d.introducer).map(d => d.id);
+                for (const id of flagged)
+                    await setIntroducer(id, false);
+            });
             await step('share', async () => {
-                if (shared(peer))
-                    await cli(['config', 'folders', FOLDER_ID, 'devices', peer.id, 'delete']);
-                await cli(['config', 'devices', peer.id, 'delete']);
+                await deleteIds(targets, cfg);
                 const after = await readConfig();                           // read back: what IS
-                if (after.devices.some(d => d.id === peer.id) || after.folders.some(f => f.devices.some(d => d.id === peer.id)))
+                if (!absent(after, targets))
                     throw new Fail('E_CLI_FAILED');
                 if (!after.folders.some(f => f.id === FOLDER_ID))
                     throw new Fail('E_INTERNAL');
+                files.writeText(statePath, serializeState(freshState()), 0o600);        // the acknowledgements, tombstones and the freeze go with the group
             });
+            if (stop) {
+                const off = await run.systemctl(['--user', 'disable', '--now', UNIT_NAME]);
+                if (off.rc !== 0)
+                    throw new Fail('E_NO_USER_SYSTEMD');
+            }
+            return {result: {event: 'result', state: 'set-up', remaining: 0}};
         }
-        if (stop) {
-            const off = await run.systemctl(['--user', 'disable', '--now', UNIT_NAME]);
-            if (off.rc !== 0)
-                throw new Fail('E_NO_USER_SYSTEMD');
-        }
-        return {result: {event: 'result', state: 'set-up'}};
+        const [id] = namedIds(ids, cfg, own);
+        if (ids.length !== 1 || cfg.devices.find(d => d.id === id)?.introducedBy !== '')
+            throw new Fail('E_BAD_ID');
+        const after = await step('share', async () => {
+            await deleteIds([id], cfg);
+            const back = await readConfig();
+            if (!absent(back, [id]))
+                throw new Fail('E_CLI_FAILED');
+            const ls = loadState();
+            saveState(withTomb({...ls.state, ack: ls.state.ack.filter(x => x !== id)}, [id]), cfg, own);       // it may come back from a computer that still lists it
+            return back;
+        });
+        const remaining = after.ids.filter(x => x !== own).length;
+        return {result: {event: 'result', state: remaining === 0 ? 'set-up' : null, remaining}};
     }
 
-    // The common start of host and join: backend, instance, daemon, invariants. Returns {own, cfg}.
+    // `revoke <X> [<ID>...]`: the computer is lost or stolen, or not known (PLAN-ADMISSION 2.4). The first ID is the one the user named; the
+    // others are rows the user marked "not mine". Order: the state file FIRST (write-ahead: an open freeze and the tombstones), then every
+    // peer's introducer flag off (X first), a read-back, only then the shares and devices (X last), a read-back, a dwell, a second
+    // read-back and one `show connections` sample for the computers that were offline. A device that came back is a result, not an error.
+    // Every step is idempotent: a run that was cut short is simply run again.
+    async function revoke({ids = []} = {}) {
+        const {own, cfg} = await prepareLight();
+        namedIds(ids, cfg, own);
+        const [x] = ids;
+        const freezeSet = [x, ...cfg.ids.filter(id => id !== own && id !== x)].slice(0, FREEZE_MAX);
+        await step('freeze', async () => {
+            const ls = loadState();
+            saveState(withFreeze(withTomb(ls.state, ids), freezeSet), cfg, own);
+            for (const id of freezeSet)
+                await setIntroducer(id, false);
+            const back = await readConfig();
+            if (back.devices.some(d => freezeSet.includes(d.id) && d.introducer))
+                throw new Fail('E_CLI_FAILED');
+        });
+        await step('remove', async () => deleteIds([...ids.slice(1), x], cfg));
+        await step('verify', async () => {
+            if (!absent(await readConfig(), ids))
+                throw new Fail('E_CLI_FAILED');
+        });
+        progress('dwell', 'start');
+        await ports.sleep(t.dwellMs);                                       // one reconnect cycle: a returning lister re-adds within about a second [M 133, 219]
+        const after = await readConfig();
+        const connections = await readConnections();
+        if (connections === null)
+            throw new Fail('E_CLI_FAILED', 'dwell');
+        progress('dwell', 'ok');
+        const returned = ids.filter(id => after.ids.includes(id));
+        const nameOf = id => displayName(after.devices.find(d => d.id === id)?.name);
+        const offline = after.ids.filter(id => id !== own && !ids.includes(id) && !connectedIn(connections, id)).slice(0, MAX_COMPUTERS).map(id => ({id, name: nameOf(id)}));
+        return {result: {
+            event: 'result', removed: ids.filter(id => !returned.includes(id)), returned, offline, remaining: after.ids.filter(id => id !== own).length, revocation_open: true,
+        }};
+    }
+
+    // `finish`: only on the user's click. The frozen peers get the flag the policy wants (a directly accepted one: on; an introduced one:
+    // off while hardening), never "exactly what it was" (PLAN-0.2.6 F6); then the freeze ends. The tombstones stay. An unreadable state file
+    // counts as a freeze over every peer. No timer anywhere.
+    async function finish() {
+        const {own, cfg} = await prepareLight();
+        const ls = loadState();
+        if (!isFrozen(ls.state))
+            return {result: {event: 'result', revocation_open: false}};
+        await step('device', async () => {
+            const frozen = ls.state.broken ? cfg.ids : ls.state.freeze.ids;
+            const wanted = d => wantedIntroducer(d, policy.hardenIntroduced);
+            const mine = devices => devices.filter(d => d.id !== own && frozen.includes(d.id));
+            for (const d of mine(cfg.devices)) {
+                if (d.introducer !== wanted(d))
+                    await setIntroducer(d.id, wanted(d));
+            }
+            if (mine((await readConfig()).devices).some(d => d.introducer !== wanted(d)))
+                throw new Fail('E_CLI_FAILED');
+            saveState(withoutFreeze(ls.state), cfg, own);
+        });
+        return {result: {event: 'result', revocation_open: false}};
+    }
+
+    // `harden`: introduced devices lose the introducer flag the daemon copied (V-A2, HARDEN_INTRODUCED, M-J5). Only lowers; never deletes.
+    // `status` stays read only, so the window calls this when `harden_pending` is not 0.
+    async function harden() {
+        if (!policy.hardenIntroduced)
+            return {result: {event: 'result', changed: 0}};
+        const {own, cfg} = await prepareLight();
+        const targets = cfg.devices.filter(d => d.id !== own && d.introducedBy !== '' && d.introducer && !wantedIntroducer(d, policy.hardenIntroduced));
+        for (const d of targets)
+            await setIntroducer(d.id, false);
+        if (targets.length > 0 && (await readConfig()).devices.some(d => targets.some(x => x.id === d.id) && d.introducer))
+            throw new Fail('E_CLI_FAILED');
+        return {result: {event: 'result', changed: targets.length}};
+    }
+
+    // `promote <ID>...`: the consent of a 0.2.5 pair (PLAN-0.2.6 F2): a directly accepted computer becomes an introducer. Refused while a removal
+    // is open or in foreign-config; only directly accepted devices of the list.
+    async function promote({ids = []} = {}) {
+        const {own, cfg} = await prepareLight();
+        if (foreignDevices(cfg.devices, own).length > 0 || folderAnomaly(cfg.folders, dirs.notes, cfg.overCap ? null : cfg.devices))
+            throw new Fail('E_FOREIGN_DEVICE');
+        refuseWhileClosed(cfg, own, {full: false});
+        namedIds(ids, cfg, own);
+        const direct = ids.map(id => cfg.devices.find(d => d.id === id));
+        if (direct.some(d => d === undefined || d.introducedBy !== ''))
+            throw new Fail('E_BAD_ID');
+        const targets = direct.filter(d => !d.introducer);
+        for (const d of targets)
+            await setIntroducer(d.id, true);
+        if (targets.length > 0 && (await readConfig()).devices.some(d => targets.some(x => x.id === d.id) && !d.introducer))
+            throw new Fail('E_CLI_FAILED');
+        return {result: {event: 'result', changed: targets.length}};
+    }
+
+    // `ack <ID>...` | `ack --all`: the user has seen these computers and they are theirs. Only the state file changes.
+    async function ack({all = false, ids = []} = {}) {
+        const {own, cfg} = await prepareLight();
+        const named = all ? cfg.ids.filter(id => id !== own) : namedIds(ids, cfg, own);
+        const ls = loadState();
+        const fresh = named.filter(id => !ls.state.ack.includes(id) && !(ls.missing && cfg.devices.find(d => d.id === id)?.introducedBy === ''));
+        saveState(withAck(ls.state, named), cfg, own);
+        return {result: {event: 'result', changed: fresh.length}};
+    }
+
+    // The common start of host and join: backend, instance, daemon, invariants, no removal open. Returns {own, cfg}.
     async function prepareConnect() {
         if (!backendInstalled())
             throw new Fail('E_NO_SYNCTHING');
@@ -481,43 +737,56 @@ export function createEngine(ports) {
         const cfg = await readConfig();
         if (foreignDevices(cfg.devices, own).length > 0)
             throw new Fail('E_FOREIGN_DEVICE');
-        if (folderAnomaly(cfg.folders, dirs.notes))
+        if (folderAnomaly(cfg.folders, dirs.notes, cfg.overCap ? null : cfg.devices))
             throw new Fail('E_CONFIG_UNSAFE');
+        refuseWhileClosed(cfg, own, {full: false});
         return {own, cfg};
     }
 
-    // The accept sequence (M-W7 (b)): two calls, then the read-back. The peer label is the fixed text, never the pending name.
-    async function addPeer(peerId, own) {
+    // The accept sequence (M-W7 (b)): the add (with the introducer role and the label), the share, then the read-back. The label is the sanitised
+    // name of the candidate (displayName: 1-32 printable ASCII) as ONE `--name=` argument, or the fixed text. A computer that was accepted is
+    // written into the acknowledged set; one the user types in again is no longer a tombstone.
+    async function addPeer(peerId, own, label) {
         await step('device', async () => {
-            await cli(['config', 'devices', 'add', '--device-id', peerId, `--name=${PEER_LABEL}`]);
+            await cli(['config', 'devices', 'add', '--device-id', peerId, '--introducer', `--name=${label}`]);
         });
         await step('share', async () => {
             await cli(['config', 'folders', FOLDER_ID, 'devices', 'add', '--device-id', peerId]);
-            const cfg = await readConfig();                                  // rc 0 is not evidence that it was added (M-W1 row 4)
-            const peer = cfg.devices.find(d => d.id === peerId);
+            let cfg = await readConfig();                                    // rc 0 is not evidence that it was added (M-W1 row 4)
+            let peer = cfg.devices.find(d => d.id === peerId);
+            if (peer && peer.introducedBy === '' && !peer.introducer) {
+                // a repeated add changes nothing (M-W1 row 4): a device that was there already (the half pair of 0.2.5) keeps its old flag
+                await setIntroducer(peerId, true);
+                cfg = await readConfig();
+                peer = cfg.devices.find(d => d.id === peerId);
+            }
             const folder = cfg.folders.find(f => f.id === FOLDER_ID);
             if (!peer || !folder?.devices.some(d => d.id === peerId))
                 throw new Fail('E_CLI_FAILED');
-            if (foreignDevices(cfg.devices, own).length > 0 || folderAnomaly(cfg.folders, dirs.notes))
+            if (foreignDevices(cfg.devices, own).length > 0 || folderAnomaly(cfg.folders, dirs.notes, cfg.devices))
                 throw new Fail('E_FOREIGN_DEVICE');
+            if (!peer.introducer || peer.introducedBy !== '')
+                throw new Fail('E_CLI_FAILED');                              // the role was not set, or the device came in by introduction first
+            const ls = loadState();
+            saveState(withoutTomb(withAck(ls.state, [peerId]), [peerId]), cfg, own);
         });
     }
 
     const connectedResult = (peer, own, link) => ({event: 'result', peer, ...(own ? {own_id: own} : {}), connected: true, link: 'stable', connected_s: link.connectedS, up_to_date: null, notes: countNotes()});
 
-    // `host`: wait for ONE computer, show it, accept exactly the ID the window names (0H.1, 0H.2).
+    // `host`: wait for ONE computer, show it, accept exactly the ID the window names (0H.1, 0H.2). Any member can host, up to MAX_PEERS.
     async function host() {
         const {own, cfg} = await prepareConnect();
-        if (cfg.devices.some(d => d.id !== own))
-            throw new Fail('E_ALREADY_PAIRED');
+        if (cfg.overCap || peersOf(cfg, own).peers.length >= MAX_PEERS)
+            throw new Fail('E_GROUP_FULL');                                  // before it listens
         const input = ports.input;
         const openedSecond = Math.floor(ports.now() / 1000) * 1000;
         const t0 = ports.monotonic();
         let lastPoll = -Infinity;
         let candidate = null;
         let accepted = false;
-        const known = new Set(cfg.devices.map(d => d.id));
-        // the pending entries newer than the moment the window opened, and the one candidate among them (or null)
+        // the pending entries newer than the moment the window opened, and the one candidate among them (or null). A device that is in the list
+        // NOW (an introduction arrives while the window is open, F4) and a tombstoned one are neither offered nor counted.
         async function pending() {
             const r = await run.syncthing('cli', ['show', 'pending', 'devices'], {maxBytes: PENDING_MAX_BYTES});
             if (r.tooLarge)
@@ -527,15 +796,17 @@ export function createEngine(ports) {
             const all = json(r.out);
             if (!isObj(all))
                 throw new Fail('E_CLI_FAILED');
+            const listed = new Set(lines(await cli(['config', 'devices', 'list'])));
+            const tomb = loadState().state.tomb;
             // `time` has a one second resolution and is refreshed on every attempt (M-W10 d): an entry is fresh when its second is not older than
             // the second the window opened in.
-            const fresh = Object.entries(all).filter(([, e]) => isObj(e) && typeof e.time === 'string' && Date.parse(e.time) >= openedSecond);
+            const fresh = Object.entries(all).filter(([id, e]) => isObj(e) && typeof e.time === 'string' && Date.parse(e.time) >= openedSecond && !listed.has(id) && !tomb.includes(id));
             if (fresh.length >= 2)
                 throw new Fail('E_PENDING_AMBIGUOUS');
             if (fresh.length === 0)
                 return null;
             const [id, e] = fresh[0];
-            if (!isCanonicalId(id) || id === own || known.has(id))
+            if (!isCanonicalId(id))
                 return null;                                                 // an entry that fails the ID check is not a candidate
             return {id, name: displayName(e.name)};
         }
@@ -555,7 +826,7 @@ export function createEngine(ports) {
                 const now = await pending();                                  // fresh: the ID must STILL be the one candidate
                 if (now === null || now.id !== wanted[0])
                     throw new Fail('E_PENDING_AMBIGUOUS');
-                await addPeer(now.id, own);
+                await addPeer(now.id, own, now.name ?? PEER_LABEL);
                 emit({event: 'peer', id: now.id, name: now.name});
                 const link = await awaitStable(now.id, {stop: () => input.eof()});
                 return {result: connectedResult({id: now.id, name: now.name}, null, link)};
@@ -572,7 +843,9 @@ export function createEngine(ports) {
         }
     }
 
-    // `join`: the typed ID is added directly (no pending read). The line is canonicalised HERE, never by the window.
+    // `join`: the typed ID is added directly (no pending read). The line is canonicalised HERE, never by the window. Only a computer without
+    // peers joins another one (a computer with peers that typed an ID could merge two groups and get round the count, T-N10); the same peer
+    // again repairs a missing share (row 12).
     async function join(typed) {
         const {own, cfg} = await prepareConnect();
         const parsed = parseTypedId(typed, own);
@@ -583,7 +856,7 @@ export function createEngine(ports) {
         if (others.length > 0 && !others.some(d => d.id === peerId))
             throw new Fail(others.some(d => peersOf(cfg, own).shared(d)) ? 'E_ALREADY_PAIRED' : 'E_HALF_STATE_OTHER');
         if (!others.some(d => d.id === peerId) || !peersOf(cfg, own).shared({id: peerId}))
-            await addPeer(peerId, own);                                      // a new peer, or the same one with the share missing (row 12)
+            await addPeer(peerId, own, PEER_LABEL);                          // a new peer, or the same one with the share missing (row 12)
         emit({event: 'peer', id: peerId, name: null});
         const link = await awaitStable(peerId);
         return {result: connectedResult({id: peerId, name: null}, own, link)};
@@ -598,6 +871,11 @@ export function createEngine(ports) {
             case 'setup': return await setup();
             case 'own-id': return await ownIdVerb();
             case 'forget': return await forget(arg ?? {});
+            case 'revoke': return await revoke(arg ?? {});
+            case 'finish': return await finish();
+            case 'harden': return await harden();
+            case 'promote': return await promote(arg ?? {});
+            case 'ack': return await ack(arg ?? {});
             case 'host': return await host();
             case 'join': return await join(arg);
             default: return {error: {code: 'E_INTERNAL'}};
@@ -612,5 +890,5 @@ export function createEngine(ports) {
         }
     }
 
-    return {perform, status, setup, forget, host, join, foreignDevices};
+    return {perform, status, setup, forget, host, join, revoke, finish, harden, promote, ack, foreignDevices};
 }

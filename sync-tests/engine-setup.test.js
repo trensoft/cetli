@@ -153,7 +153,7 @@ test('setup: a config it does not understand, a home with the wrong mode, a link
 test('setup: a foreign device already in the instance: E_FOREIGN_DEVICE, and the engine does not remove it', async () => {
     const w = createWorld();
     await perform(w, 'setup');
-    w.devices.set(OTHER, {name: 'x', introducer: true, autoAcceptFolders: false, introducedBy: ''});
+    w.devices.set(OTHER, {name: 'x', introducer: false, autoAcceptFolders: true, introducedBy: ''});
     const r = await perform(w, 'setup');
     assert.deepEqual(r, {error: {code: 'E_FOREIGN_DEVICE', step: 'folder'}});
     assert.equal(w.devices.has(OTHER), true, 'the entry stays');
@@ -192,19 +192,19 @@ test('status: one result per situation, every state is one the protocol knows', 
     await perform(fresh, 'setup');
     r = (await perform(fresh, 'status')).result;
     seen.add(r.state);
-    assert.deepEqual([r.state, r.own_id, r.peer, r.link, r.waiting], ['set-up', OWN, null, null, false]);
+    assert.deepEqual([r.state, r.own_id, r.peers, r.computers, r.max_computers, r.listener, r.waiting], ['set-up', OWN, [], 1, 10, null, false]);
     fresh.pair(PEER, {shared: false});
     r = (await perform(fresh, 'status')).result;
     seen.add(r.state);
-    assert.deepEqual([r.state, r.shared, r.peer.id, r.link], ['half', false, PEER, 'none']);
+    assert.deepEqual([r.state, r.peers[0].shared, r.peers[0].id, r.peers[0].link], ['half', false, PEER, 'none']);
     fresh.folders.get('cetli-notes').devices.push({id: PEER, introducedBy: ''});
     r = (await perform(fresh, 'status')).result;
     seen.add(r.state);
-    assert.deepEqual([r.state, r.shared], ['paired', true]);
-    fresh.devices.get(PEER).introducer = true;
+    assert.deepEqual([r.state, r.peers[0].shared], ['paired', true]);
+    fresh.devices.get(PEER).autoAcceptFolders = true;
     r = (await perform(fresh, 'status')).result;
     seen.add(r.state);
-    assert.deepEqual([r.state, r.link, r.up_to_date, r.shared, r.peer], ['foreign-config', null, null, null, null]);
+    assert.deepEqual([r.state, r.listener, r.up_to_date, r.peers.map(p => [p.id, p.link, p.connected, p.connected_s])], ['foreign-config', null, null, [[PEER, null, null, null]]]);
     for (const s of seen)
         assert.ok(STATUS_STATES.includes(s), s);
     assert.deepEqual([...seen].sort(), [...STATUS_STATES].sort());
@@ -223,7 +223,7 @@ test('status: set up but the daemon does not answer: E_SERVICE_TIMEOUT; before t
     assert.deepEqual([r.result.state, r.result.own_id], ['not-set-up', OWN], 'an interrupted set-up is resumed by setup');
 });
 
-test('T14: a second folder, a relative path, another type, or an introduced device makes status foreign-config', async () => {
+test('T14 (0.2.6): a second folder, a relative path, another type, a device that auto-accepts, keeps removals, or names a wrong introducer makes status foreign-config', async () => {
     const mk = async mutate => {
         const w = createWorld();
         await perform(w, 'setup');
@@ -233,25 +233,48 @@ test('T14: a second folder, a relative path, another type, or an introduced devi
     assert.equal(await mk(w => w.folders.set('other', {path: '/tmp/x', type: 'sendreceive', devices: [{id: OWN, introducedBy: ''}]})), 'foreign-config');
     assert.equal(await mk(w => { w.folders.get('cetli-notes').path = 'notes'; }), 'foreign-config');
     assert.equal(await mk(w => { w.folders.get('cetli-notes').type = 'sendonly'; }), 'foreign-config');
-    assert.equal(await mk(w => { w.pair(PEER); w.devices.get(PEER).introducedBy = OTHER; }), 'foreign-config');
     assert.equal(await mk(w => { w.pair(PEER); w.devices.get(PEER).autoAcceptFolders = true; }), 'foreign-config');
-    assert.equal(await mk(w => { w.pair(PEER); w.pair(OTHER); }), 'foreign-config', 'two peers: the one-peer rule (Nicole\'s N-peer rule replaces this)');
+    assert.equal(await mk(w => { w.pair(PEER); w.devices.get(PEER).skipIntroductionRemovals = true; }), 'foreign-config');
+    assert.equal(await mk(w => { w.pair(PEER); w.devices.get(PEER).introducedBy = 'nonsense'; }), 'foreign-config');
+    assert.equal(await mk(w => { w.pair(PEER); w.devices.get(PEER).introducedBy = OWN; }), 'foreign-config');
+    assert.equal(await mk(w => { w.pair(PEER); w.devices.get(PEER).introducedBy = PEER; }), 'foreign-config');
+    assert.equal(await mk(w => { w.devices.get(OWN).introducer = true; }), 'foreign-config');
+    assert.equal(await mk(w => { w.pair(PEER); w.folders.get('cetli-notes').devices.push({id: OTHER, introducedBy: ''}); }), 'foreign-config', 'a folder device that is no listed device');
+    assert.equal(await mk(w => { w.pair(PEER); w.folders.get('cetli-notes').devices.find(d => d.id === PEER).introducedBy = 'nonsense'; }), 'foreign-config');
+    assert.equal(await mk(w => { w.pair(PEER, {introducer: true}); w.pair(OTHER, {introducer: true}); }), 'paired', 'two peers are a group');
+    assert.equal(await mk(w => { w.pair(PEER, {introducer: true}); w.introduce(OTHER, PEER); }), 'paired', 'an introduced computer, with the flag copied, is fine');
     assert.equal(await mk(() => {}), 'set-up');
 });
 
-test('foreignDevices and folderAnomaly are one predicate each', () => {
-    const d = (id, o = {}) => ({id, introducer: false, autoAcceptFolders: false, introducedBy: '', ...o});
+test('foreignDevices and folderAnomaly are one predicate each (T-N1, T-N14)', () => {
+    const d = (id, o = {}) => ({id, introducer: false, autoAcceptFolders: false, skipIntroductionRemovals: false, introducedBy: '', ...o});
     assert.deepEqual(foreignDevices([d(OWN)], OWN), []);
     assert.deepEqual(foreignDevices([d(OWN), d(PEER)], OWN), []);
-    assert.equal(foreignDevices([d(OWN), d(PEER), d(OTHER)], OWN).length, 2);
-    assert.equal(foreignDevices([d(OWN), d(PEER, {introducer: true})], OWN).length, 1);
+    assert.deepEqual(foreignDevices([d(OWN), d(PEER), d(OTHER)], OWN), [], 'the count is not part of it (overLimit)');
+    assert.equal(foreignDevices([d(OWN), d(PEER, {introducer: true})], OWN).length, 0, 'the flag is free for the others: the daemon copies it');
+    assert.equal(foreignDevices([d(OWN), d(PEER, {introducer: true, introducedBy: OTHER})], OWN).length, 0);
+    assert.equal(foreignDevices([d(OWN), d(PEER, {introducedBy: OTHER})], OWN).length, 0, 'introduced, flag off');
+    assert.equal(foreignDevices([d(OWN, {introducer: true})], OWN).length, 1, 'the own device is no introducer');
     assert.equal(foreignDevices([d(OWN, {autoAcceptFolders: true})], OWN).length, 1);
-    assert.equal(foreignDevices([d(OWN), d(PEER), d(OTHER)], OWN, 2).length, 0);
+    assert.equal(foreignDevices([d(OWN), d(PEER, {autoAcceptFolders: true})], OWN).length, 1);
+    assert.equal(foreignDevices([d(OWN), d(PEER, {skipIntroductionRemovals: true})], OWN).length, 1);
+    assert.equal(foreignDevices([d(OWN, {skipIntroductionRemovals: true}), d(PEER)], OWN).length, 0, 'the own device has no one to skip');
+    for (const bad of [OWN, PEER, 'invalid', 'x', OTHER.toLowerCase()])
+        assert.equal(foreignDevices([d(OWN), d(PEER, {introducedBy: bad})], OWN).length, 1, `introducedBy ${bad.slice(0, 8)}`);
     const f = (o = {}) => ({id: 'cetli-notes', path: '/n', type: 'sendreceive', devices: [{id: OWN, introducedBy: ''}], ...o});
     assert.equal(folderAnomaly([f()], '/n'), false);
     assert.equal(folderAnomaly([f(), f({id: 'x'})], '/n'), true);
     assert.equal(folderAnomaly([f({path: '/other'})], '/n'), true);
     assert.equal(folderAnomaly([], '/n'), true);
+    const withPeer = (introducedBy, id = PEER) => f({devices: [{id: OWN, introducedBy: ''}, {id, introducedBy}]});
+    assert.equal(folderAnomaly([withPeer('')], '/n'), false);
+    assert.equal(folderAnomaly([withPeer(OTHER)], '/n'), false, 'a canonical introducedBy on a folder device is an introduced computer, not an anomaly');
+    assert.equal(folderAnomaly([withPeer('invalid')], '/n'), true);
+    assert.equal(folderAnomaly([withPeer('nonsense')], '/n'), true);
+    assert.equal(folderAnomaly([withPeer('', 'nonsense')], '/n'), true, 'a folder device with no valid ID');
+    const devs = [d(OWN), d(PEER)];
+    assert.equal(folderAnomaly([withPeer('')], '/n', devs), false);
+    assert.equal(folderAnomaly([withPeer('', OTHER)], '/n', devs), true, 'a folder device that is no listed device');
 });
 
 test('own-id: the canonical ID of the instance; no instance, no ID', async () => {
@@ -268,8 +291,8 @@ test('forget: the share and the device go, the folder, the notes, the instance a
     w.note(3);
     w.pair(PEER);
     const before = [...w.fsMap.keys()].filter(k => k.startsWith(w.notes)).sort();
-    const r = await perform(w, 'forget');
-    assert.deepEqual(r, {result: {event: 'result', state: 'set-up'}});
+    const r = await perform(w, 'forget', {all: true});
+    assert.deepEqual(r, {result: {event: 'result', state: 'set-up', remaining: 0}});
     assert.equal(w.devices.has(PEER), false);
     assert.equal(w.folders.get('cetli-notes').devices.some(d => d.id === PEER), false);
     assert.equal(w.folders.has('cetli-notes'), true, 'the folder stays');
@@ -280,23 +303,26 @@ test('forget: the share and the device go, the folder, the notes, the instance a
     assert.deepEqual(del[0].slice(-4), ['folders', 'cetli-notes', 'devices', PEER].slice(0, 0).concat(del[0].slice(-4)));
     assert.equal(del.every(a => !a.includes('cetli-notes') || a.includes('devices')), true, 'no call deletes the folder itself');
     w.calls.length = 0;
-    assert.deepEqual(await perform(w, 'forget'), r);
+    assert.deepEqual(await perform(w, 'forget', {all: true}), r);
     assert.equal(w.calls.some(c => c.argv.includes('delete')), false);
     assert.equal((await perform(w, 'status')).result.state, 'set-up');
 });
 
-test('forget --stop also disables the unit; the engine refuses a foreign entry and removes nothing', async () => {
+test('forget --all --stop also disables the unit; forget --all runs in foreign-config too, it is the way out (PLAN-0.2.6 F7)', async () => {
     const w = createWorld();
     await perform(w, 'setup');
-    await perform(w, 'forget', {stop: true});
+    await perform(w, 'forget', {all: true, stop: true});
     assert.equal(w.daemon, false);
     const f = createWorld();
     await perform(f, 'setup');
-    f.pair(PEER);
-    f.devices.get(PEER).introducedBy = OTHER;
-    assert.deepEqual(await perform(f, 'forget'), {error: {code: 'E_FOREIGN_DEVICE', step: 'device'}});
-    assert.equal(f.devices.has(PEER), true);
-    assert.equal(f.calls.some(c => c.argv.includes('delete')), false);
+    f.pair(PEER, {introducer: true});
+    f.devices.get(PEER).autoAcceptFolders = true;
+    assert.equal((await perform(f, 'status')).result.state, 'foreign-config');
+    const r = await perform(f, 'forget', {all: true});
+    assert.deepEqual(r, {result: {event: 'result', state: 'set-up', remaining: 0}});
+    assert.equal(f.devices.has(PEER), false);
+    const order = f.calls.map(c => c.argv).filter(a => a.includes('introducer') || a.includes('delete')).map(a => a.includes('introducer') ? 'flag' : 'delete');
+    assert.deepEqual(order, ['flag', 'delete', 'delete'], 'the flag comes down before anything is deleted');
 });
 
 test('forget reads back: a delete that did not hold is an error, not a success', async () => {
@@ -304,7 +330,7 @@ test('forget reads back: a delete that did not hold is an error, not a success',
     await perform(w, 'setup');
     w.pair(PEER);
     w.failCli.add('devices ' + PEER + ' delete');
-    assert.equal((await perform(w, 'forget')).error.code, 'E_CLI_FAILED');
+    assert.equal((await perform(w, 'forget', {all: true})).error.code, 'E_CLI_FAILED');
 });
 
 test('a failing step carries its step name; an unexpected exception is E_INTERNAL and its text is not logged', async () => {

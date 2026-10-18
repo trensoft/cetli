@@ -37,6 +37,8 @@ export function createWorld(opts = {}) {
         system: null,                              // (world) -> {rc, out}: a different answer of `show system`
         failConnections: null,                     // (nowMs) -> boolean: `show connections` fails (rc 1) when true
         afterAdd: null,                            // (id) -> void: a hook that changes a device right after it was added (a foreign edit)
+        remoteLists: [],                           // [{by, id, name}]: a computer `by` that still lists `id`: while `by` is a device here with introducer=true,
+                                                   // `id` is added again (as an introduced device) after a delete and whenever a second or more passes (PLAN-0.2.6 5)
         failCli: new Set(),                        // exact `config devices add`-style prefixes that fail (rc 1)
         ownId: opts.ownId ?? OWN,
     };
@@ -99,7 +101,7 @@ export function createWorld(opts = {}) {
     const lines = a => `${a.join('\n')}\n`;
     const devJson = id => {
         const d = w.devices.get(id);
-        return JSON.stringify({deviceID: id, name: d.name, addresses: ['dynamic'], compression: 'metadata', certName: '', introducer: d.introducer, skipIntroductionRemovals: false,
+        return JSON.stringify({deviceID: id, name: d.name, addresses: ['dynamic'], compression: 'metadata', certName: '', introducer: d.introducer, skipIntroductionRemovals: d.skipIntroductionRemovals === true,
             introducedBy: d.introducedBy, paused: false, allowedNetworks: [], autoAcceptFolders: d.autoAcceptFolders, maxSendKbps: 0, maxRecvKbps: 0, ignoredFolders: [], maxRequestKiB: 0,
             untrusted: false, remoteGUIPort: 0, numConnections: 0, group: ''}, null, 2);
     };
@@ -110,6 +112,20 @@ export function createWorld(opts = {}) {
     };
     const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
     const eq = (args, prefix) => args.find(a => a.startsWith(prefix))?.slice(prefix.length);
+
+    // A computer that still lists a device brings it back while we take introductions from it (the introducer flag is on for it): the
+    // device and its share come back as introduced by that computer [M 133, 219]. Called after every delete and after every sleep of a
+    // second or more, so a removal in the WRONG order (delete before the flags are off) is undone visibly.
+    function reintroduce() {
+        for (const {by, id, name} of w.remoteLists) {
+            if (!w.devices.get(by)?.introducer || w.devices.has(id))
+                continue;
+            w.devices.set(id, {name: name ?? 'introduced', introducer: true, autoAcceptFolders: false, introducedBy: by});
+            const f = w.folders.get('cetli-notes');
+            if (f && !f.devices.some(x => x.id === id))
+                f.devices.push({id, introducedBy: by});
+        }
+    }
 
     function cli(args) {
         if (!daemonUp())
@@ -149,7 +165,7 @@ export function createWorld(opts = {}) {
             if (!isCanonicalId(id))
                 return {rc: 1, out: `syncthing: error: "${id}": check digit incorrect\n`};
             if (!w.devices.has(id)) {
-                w.devices.set(id, {name: eq(args, '--name=') ?? flag(args, '--name') ?? '', introducer: false, autoAcceptFolders: false, introducedBy: ''});
+                w.devices.set(id, {name: eq(args, '--name=') ?? flag(args, '--name') ?? '', introducer: args.includes('--introducer'), autoAcceptFolders: false, introducedBy: ''});
                 delete w.pending[id];
                 w.afterAdd?.(id);
             }
@@ -159,6 +175,19 @@ export function createWorld(opts = {}) {
             return w.devices.has(c) ? {rc: 0, out: devJson(c)} : {rc: 3, out: `No help topic for '${c}'\n`};
         if (b === 'devices' && isCanonicalId(c) && d === 'delete') {
             w.devices.delete(c);
+            reintroduce();
+            return {rc: 0, out: ''};
+        }
+        if (b === 'devices' && isCanonicalId(c) && d === 'introducer' && e === 'set') {
+            if (!w.devices.has(c))
+                return {rc: 3, out: `No help topic for '${c}'\n`};
+            w.devices.get(c).introducer = args[5] === 'true';
+            return {rc: 0, out: ''};
+        }
+        if (b === 'devices' && isCanonicalId(c) && d === 'skip-introduction-removals' && e === 'set') {
+            if (!w.devices.has(c))
+                return {rc: 3, out: `No help topic for '${c}'\n`};
+            w.devices.get(c).skipIntroductionRemovals = args[5] === 'true';
             return {rc: 0, out: ''};
         }
         if (b === 'folders' && c === 'list')
@@ -182,6 +211,7 @@ export function createWorld(opts = {}) {
         if (b === 'folders' && w.folders.has(c) && d === 'devices' && isCanonicalId(e) && args[5] === 'delete') {
             const f = w.folders.get(c);
             f.devices = f.devices.filter(x => x.id !== e);
+            reintroduce();
             return {rc: 0, out: ''};
         }
         return {rc: 1, out: 'syncthing: error: unsupported by the stub\n'};
@@ -251,11 +281,12 @@ export function createWorld(opts = {}) {
 
     w.ports = () => ({
         run, files, dirs: {homeDir, notes, home}, now: () => w.clock, monotonic: () => w.mono,
-        sleep: async ms => { w.sleeps++; tickTo(w.mono + ms); },
+        sleep: async ms => { w.sleeps++; tickTo(w.mono + ms); if (ms >= 1000) reintroduce(); },
         input: {lines: () => stdin.queue.splice(0), eof: () => stdin.eofFlag},
         emit: ev => w.events.push(ev),
         log: m => w.journal.push(m),
         timing: opts.timing,
+        policy: opts.policy,
     });
     w.engine = () => createEngine(w.ports());
     // convenience for the states a test starts from
@@ -268,10 +299,23 @@ export function createWorld(opts = {}) {
         w.journal.length = 0;
         return r;
     };
-    w.pair = (id = PEER, {shared = true, name = 'other computer'} = {}) => {
-        w.devices.set(id, {name, introducer: false, autoAcceptFolders: false, introducedBy: ''});
+    // A directly accepted computer. `introducer`: false is the 0.2.5 pair; the 0.2.6 pair has the flag on.
+    w.pair = (id = PEER, {shared = true, name = 'other computer', introducer = false} = {}) => {
+        w.devices.set(id, {name, introducer, autoAcceptFolders: false, introducedBy: ''});
         if (shared)
             w.folders.get('cetli-notes').devices.push({id, introducedBy: ''});
+    };
+    // A computer the daemon added by introduction: the introducer's name, the introducer's flag copied, `introducedBy` set on the device
+    // and on its share (PLAN-ADMISSION 1.2, measured in 211).
+    w.introduce = (id, by, {name = 'introduced', introducer = true, shared = true} = {}) => {
+        w.devices.set(id, {name, introducer, autoAcceptFolders: false, introducedBy: by});
+        if (shared)
+            w.folders.get('cetli-notes').devices.push({id, introducedBy: by});
+    };
+    // N more computers in the group: the first `direct` accepted here, the rest introduced by the first. Returns the IDs.
+    w.group = (ids, {direct = 1, introducer = true, shared = true} = {}) => {
+        ids.forEach((id, i) => (i < direct ? w.pair(id, {introducer, shared, name: `pc-${i}`}) : w.introduce(id, ids[0], {name: `pc-${i}`, introducer, shared})));
+        return ids;
     };
     w.configXml = configXml;
     return w;

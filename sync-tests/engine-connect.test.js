@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {createWorld, isoOf, OWN, PEER, OTHER, THIRD} from './support/world.js';
 import {checkRun, emit} from '../sync/protocol.js';
 import {createEngine, TIMING} from '../sync/engine.js';
+import {makeId} from './support/ids.js';
 
 async function ready(opts) {
     const w = createWorld(opts);
@@ -33,7 +34,7 @@ test('host: one computer knocks, the window accepts that ID, the link becomes st
     assert.ok(w.devices.has(PEER) && w.folders.get('cetli-notes').devices.some(d => d.id === PEER));
     const adds = addCalls(w);
     assert.deepEqual(adds.map(a => a.slice(3)), [
-        ['config', 'devices', 'add', '--device-id', PEER, '--name=other computer'],
+        ['config', 'devices', 'add', '--device-id', PEER, '--introducer', '--name=laptop-b'],
         ['config', 'folders', 'cetli-notes', 'devices', 'add', '--device-id', PEER],
     ]);
     // the whole run is a valid transcript of the protocol, line by line
@@ -98,7 +99,7 @@ test('T7: an entry older than the moment the window opened is not offered; the w
     assert.equal(kinds(live).includes('candidate'), true);
 });
 
-test('T8: the name is display text only: 5000 characters, control characters and markup; the argv never carries it', async () => {
+test('T8 (0.2.6): the name is display text only: 5000 characters, control characters and markup; the argv carries only the sanitised label, as ONE argument', async () => {
     const cases = [
         ['x'.repeat(5000), null], ['a\nb', null], ['café', null], ['<b>bold</b>', '<b>bold</b>'], ['y'.repeat(33), 'y'.repeat(32)],
         ['z'.repeat(96), 'z'.repeat(32)], ['z'.repeat(97), null], ['', null], [5, null],
@@ -111,8 +112,12 @@ test('T8: the name is display text only: 5000 characters, control characters and
         const r = await perform(w, 'host');
         assert.equal(w.events.find(e => e.event === 'candidate').name, shown, String(raw).slice(0, 20));
         assert.equal(r.result.peer.name, shown);
-        for (const a of addCalls(w))
-            assert.equal(a.some(x => typeof raw === 'string' && raw.length > 3 && x.includes(raw)), false, 'the pending name is not in any argument');
+        const add = addCalls(w).find(a => a.includes('devices') && a.includes('add') && a.includes('--device-id') && !a.includes('folders'));
+        const names = add.filter(x => x.includes('name'));
+        assert.deepEqual(names, [`--name=${shown ?? 'other computer'}`], 'one --name= argument, the sanitised label or the fixed text');
+        assert.equal(add.indexOf(names[0]), add.length - 1);
+        for (const a of addCalls(w).flat())
+            assert.equal(typeof raw === 'string' && raw !== shown && raw.length > 3 && a.includes(raw), false, 'the raw pending name is in no argument');
         assert.equal(JSON.stringify(w.journal).includes('bold'), false);
     }
 });
@@ -145,12 +150,13 @@ test('host: EOF on stdin stops it at once and accepts nothing; so does an EOF du
     assert.ok(v.mono < 60_000, 'it stopped within seconds of the EOF');
 });
 
-test('host: refuses to start with a peer present (neutral), with a foreign device, with a runaway pending list', async () => {
-    const paired = await ready();
-    paired.pair(PEER);
-    assert.deepEqual((await perform(paired, 'host')).error, {code: 'E_ALREADY_PAIRED'});
+test('host: refuses to start with a full group (neutral), with a foreign device, with a runaway pending list', async () => {
+    const full = await ready();
+    full.group(Array.from({length: 9}, (_, i) => makeId(i + 1)));
+    assert.deepEqual((await perform(full, 'host')).error, {code: 'E_GROUP_FULL'});
+    assert.equal(ranPending(full), false, 'a full group does not listen');
     const foreign = await ready();
-    foreign.devices.set(OTHER, {name: 'x', introducer: true, autoAcceptFolders: false, introducedBy: ''});
+    foreign.devices.set(OTHER, {name: 'x', introducer: false, autoAcceptFolders: true, introducedBy: ''});
     assert.deepEqual((await perform(foreign, 'host')).error, {code: 'E_FOREIGN_DEVICE'});
     assert.equal(ranPending(foreign), false);
     const odd = await ready();
@@ -186,7 +192,7 @@ test('host: an entry whose key is no valid ID is not a candidate but counts for 
 
 test('host: a device that came in foreign after the add makes the accept step fail with E_FOREIGN_DEVICE', async () => {
     const w = await ready();
-    w.afterAdd = id => { w.devices.get(id).introducer = true; };
+    w.afterAdd = id => { w.devices.get(id).autoAcceptFolders = true; };
     knock(w, 3000);
     accept(w, 7000);
     const r = await perform(w, 'host');
@@ -358,7 +364,7 @@ test('join: the typed ID is canonicalised by the engine, added, shared, and the 
     assert.deepEqual(r.result.peer, {id: PEER, name: null});
     assert.equal(r.result.own_id, OWN);
     assert.deepEqual(addCalls(w).map(a => a.slice(3)), [
-        ['config', 'devices', 'add', '--device-id', PEER, '--name=other computer'],
+        ['config', 'devices', 'add', '--device-id', PEER, '--introducer', '--name=other computer'],
         ['config', 'folders', 'cetli-notes', 'devices', 'add', '--device-id', PEER],
     ]);
     assert.equal(ranPending(w), false, 'join reads no pending list');
@@ -430,16 +436,16 @@ test('status link rule: paired + ten unbroken connected samples = stable with co
         return (await perform(w, 'status')).result;
     };
     let r = await mk(true);
-    assert.deepEqual([r.state, r.link, r.connected_s, r.up_to_date, r.connected], ['paired', 'stable', 9, null, true]);
+    assert.deepEqual([r.state, r.peers[0].link, r.peers[0].connected_s, r.up_to_date, r.peers[0].connected], ['paired', 'stable', 9, null, true]);
     r = await mk(false);
-    assert.deepEqual([r.link, r.connected_s, r.up_to_date, r.connected], ['none', null, null, false]);
+    assert.deepEqual([r.peers[0].link, r.peers[0].connected_s, r.up_to_date, r.peers[0].connected], ['none', null, null, false]);
     r = await mk(ms => ms < 4800);
-    assert.deepEqual([r.link, r.connected_s, r.up_to_date], ['flapping', null, null]);
+    assert.deepEqual([r.peers[0].link, r.peers[0].connected_s, r.up_to_date], ['flapping', null, null]);
     const half = await ready();
     half.pair(PEER, {shared: false});
     half.connections.set(PEER, true);
     const h = (await perform(half, 'status')).result;
-    assert.deepEqual([h.state, h.link, h.connected_s], ['half', 'stable', 9]);
+    assert.deepEqual([h.state, h.peers[0].link, h.peers[0].connected_s], ['half', 'stable', 9]);
     const quick = await ready();
     quick.pair(PEER);
     const s0 = quick.sleeps;
@@ -484,5 +490,5 @@ test('the wrong-ID shape of M-W6b (a 4.8 s burst, then 0.9 s bursts every 20 s) 
     st.pair(PEER);
     st.connections.set(PEER, ms => ms < 4800);
     const s = (await perform(st, 'status')).result;
-    assert.deepEqual([s.link, s.connected_s, s.up_to_date], ['flapping', null, null]);
+    assert.deepEqual([s.peers[0].link, s.peers[0].connected_s, s.up_to_date], ['flapping', null, null]);
 });
