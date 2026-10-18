@@ -208,8 +208,11 @@ async function scenario() {
         ['E_HALF_STATE_OTHER', {neutral: false, button: S.syncStopShort()}],
         ['E_BRAND_NEW', {neutral: false, button: S.syncTryAgain()}],
     ]) {
-        w = await open({status: () => fail(code)});
+        // a sync program that does not answer is started again once by the window itself; that restart does not help here
+        w = await open({status: () => fail(code), restart: () => fail('E_SERVICE_TIMEOUT', 'service')});
         await pageIs(w, 'error');
+        await tick(150);
+        check(fake.count('restart') === (code === 'E_SERVICE_TIMEOUT' ? 1 : 0), `${code}: ${code === 'E_SERVICE_TIMEOUT' ? 'one automatic restart' : 'no restart'}`);
         const hasRed = w.w.errText.has_css_class('cetli-error');
         const btn = w.w.errAction.get_visible() ? labelText(w.w.errAction) : null;
         check(hasRed === !expect.neutral && btn === expect.button, `${code}: ${expect.neutral ? 'neutral' : 'red'}, button ${btn}`);
@@ -220,23 +223,49 @@ async function scenario() {
         await closeWin(w);
     }
 
-    // ---- the sync program does not answer: Try again restarts it (no data touched), and if that does not help there is Reset sync after a confirmation
+    // ---- the sync program does not answer: the window starts it again ONCE by itself (no click, no data touched); only if that does not help
+    // the buttons come: Try again (restart) and Reset sync (after a confirmation)
+    // (1) the restart helps: the window ends on the ID page without a click
     let statusAnswer = fail('E_SERVICE_TIMEOUT');
+    w = await open({
+        status: () => statusAnswer,
+        restart: () => {
+            statusAnswer = status('set-up');
+            return {ok: true, result: {event: 'result', state: 'restarted'}};
+        },
+        setup: () => ({ok: true, result: {event: 'result', own_id: A, state: 'set-up'}}),
+    });
+    check(await pageIs(w, 'ids'), 'the sync program does not answer: after the automatic restart the window shows the ID page, no click');
+    check(fake.calls.map(c => c.verb).slice(0, 3).join() === 'status,restart,status', `the order: status, restart, status (${fake.calls.map(c => c.verb).join()})`);
+    check(fake.count('setup') === 0 && fake.count('reset') === 0 && fake.count('forget') === 0, 'and nothing else');
+    await closeWin(w);
+    // a window opened later has its own automatic try
+    statusAnswer = fail('E_SERVICE_TIMEOUT');
+    w = await open({status: () => statusAnswer, restart: () => ({ok: true, result: {event: 'result', state: 'restarted'}})});
+    check(await waitFor(() => fake.count('restart') === 1 && fake.count('status') === 2), 'a new window opened later tries once again by itself');
+    await closeWin(w);
+    // (2) the restart is done but the program is still silent: the error page with both buttons, and NO second automatic try (no loop)
+    statusAnswer = fail('E_SERVICE_TIMEOUT');
     w = await open({
         status: () => statusAnswer,
         restart: () => ({ok: true, result: {event: 'result', state: 'restarted'}}),
         reset: () => ({ok: true, result: {event: 'result', state: 'not-set-up'}}),
         setup: () => ({ok: true, result: {event: 'result', own_id: A, state: 'set-up'}}),
     });
-    await pageIs(w, 'error');
+    check(await waitFor(() => fake.count('restart') === 1 && fake.count('status') === 2) && await pageIs(w, 'error'), 'still silent after the automatic restart: the error page');
+    check(w.w.errAction.get_visible() && labelText(w.w.errAction) === S.syncTryAgain() && w.w.errSecondary.get_visible(), 'with both buttons: Try again and Reset sync');
+    await tick(400);
+    check(fake.count('restart') === 1 && fake.count('status') === 2 && w.page === 'error', 'no loop: one automatic try per window');
     w.w.errAction.emit('clicked');
-    check(await waitFor(() => fake.count('restart') === 1 && fake.count('status') === 2), 'Try again on E_SERVICE_TIMEOUT runs restart, then asks the status');
-    check(fake.count('setup') === 0 && fake.count('reset') === 0 && fake.count('forget') === 0, 'and nothing else');
+    check(await waitFor(() => fake.count('restart') === 2 && fake.count('status') === 3), 'the button Try again runs restart, then asks the status');
+    await tick(300);
+    check(fake.count('restart') === 2 && fake.count('status') === 3 && fake.count('setup') === 0 && fake.count('reset') === 0 && fake.count('forget') === 0, 'a click makes no second restart behind it, and nothing else runs');
     check(await pageIs(w, 'error') && w.w.errSecondary.get_visible(), 'the daemon still silent: the error page again, the way out still there');
     statusAnswer = status('set-up');
     w.w.errAction.emit('clicked');
-    check(await pageIs(w, 'ids') && fake.count('restart') === 2, 'a restart that helps ends on the ID page');
+    check(await pageIs(w, 'ids') && fake.count('restart') === 3, 'a restart that helps ends on the ID page');
     await closeWin(w);
+    // (3) the automatic restart fails itself: the buttons, no second try
     statusAnswer = fail('E_SERVICE_TIMEOUT');
     w = await open({
         status: () => statusAnswer,
@@ -244,14 +273,17 @@ async function scenario() {
         reset: () => ({ok: true, result: {event: 'result', state: 'not-set-up'}}),
         setup: () => ({ok: true, result: {event: 'result', own_id: B, state: 'set-up'}}),
     });
-    await pageIs(w, 'error');
+    check(await waitFor(() => fake.count('restart') === 1) && await pageIs(w, 'error') && w.w.errSecondary.get_visible(), 'an automatic restart that fails with the same code: both buttons');
+    await tick(300);
+    check(fake.count('restart') === 1 && fake.count('status') === 1, 'and no second try');
     w.w.errAction.emit('clicked');
-    check(await waitFor(() => fake.count('restart') === 1) && await pageIs(w, 'error') && w.w.errSecondary.get_visible(), 'a restart that fails with the same code: both buttons stay');
+    check(await waitFor(() => fake.count('restart') === 2) && await pageIs(w, 'error') && w.w.errSecondary.get_visible(), 'the button restarts again; the same code: both buttons stay');
     w.w.errSecondary.emit('clicked');
     check(w.confirmDialog !== undefined && fake.count('reset') === 0, 'Reset sync asks first; nothing ran yet');
     const body = w.confirmDialog.get_body();
     check(w.confirmDialog.get_heading() === S.syncResetConfirmTitle() && body === S.syncResetConfirmBody(), 'the confirmation carries its own title and text');
-    check(body.includes('new ID') && body.includes('Stop syncing') && body.includes('notes stay'), 'it says: a new ID, Stop syncing on the other computer, the notes stay');
+    check(body.includes('last resort') && body.includes('new ID') && body.includes('Stop syncing') && body.includes('notes stay'), 'it says: the last resort, a new ID, Stop syncing on the other computer, the notes stay');
+    check(!/journalctl|systemctl|run:/.test(body), 'and asks for no command');
     w.confirmDialog.emit('response', 'cancel');
     await tick(150);
     check(fake.count('reset') === 0 && w.page === 'error', 'Cancel runs nothing');
@@ -260,11 +292,12 @@ async function scenario() {
     check(await waitFor(() => fake.count('reset') === 1), 'confirming runs reset');
     check(await pageIs(w, 'ids') && fake.count('setup') === 1, 'then setup and the ID page (a new ID, the entry of the other ID), not another status question');
     check(rowsText(w.w.ownId) === B && fake.count('host') === 1, 'the new ID of this computer is shown and a waiting run started');
-    check(fake.calls.map(c => c.verb).join() === 'status,restart,reset,setup,host', `the order of the calls (${fake.calls.map(c => c.verb).join()})`);
+    check(fake.calls.map(c => c.verb).join() === 'status,restart,restart,reset,setup,host', `the order of the calls (${fake.calls.map(c => c.verb).join()})`);
     await closeWin(w);
     // a reset that fails shows its error and goes on from the status
-    w = await open({status: () => fail('E_SERVICE_TIMEOUT'), reset: () => fail('E_NO_USER_SYSTEMD', 'service')});
+    w = await open({status: () => fail('E_SERVICE_TIMEOUT'), restart: () => fail('E_SERVICE_TIMEOUT', 'service'), reset: () => fail('E_NO_USER_SYSTEMD', 'service')});
     await pageIs(w, 'error');
+    await waitFor(() => fake.count('restart') === 1);
     w.w.errSecondary.emit('clicked');
     w.confirmDialog.emit('response', 'reset');
     check(await waitFor(() => fake.count('reset') === 1) && await waitFor(() => labelText(w.w.errText) === S.syncErrorText('E_NO_USER_SYSTEMD')), 'a failed reset shows its own error');

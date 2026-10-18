@@ -254,6 +254,12 @@ export class SyncWizard {
         if (this.closed)
             return;
         if (!out.ok) {
+            // A computer that was set up reconnects by itself: the first time the sync program does not answer in this window, it is started
+            // again once, without a click (no data is touched). If that does not help, the buttons follow. Never a loop (see _restart).
+            if (out.error.code === 'E_SERVICE_TIMEOUT' && !this.restartTried) {
+                this._restart();
+                return;
+            }
             this._showError(out.error.code, () => this.refresh());
             return;
         }
@@ -497,8 +503,10 @@ export class SyncWizard {
         this.refresh();
     }
 
-    // The sync program does not answer: start it again (no data is touched), then ask the status.
+    // The sync program does not answer: start it again (no data is touched), then ask the status. One automatic try per window (restartTried):
+    // a click on the button counts as that try too, so a click never makes a second restart behind it.
     async _restart() {
+        this.restartTried = true;
         this._show('checking');
         const out = await this.bridge.run('restart');
         if (this.closed)

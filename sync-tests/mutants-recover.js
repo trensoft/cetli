@@ -15,8 +15,8 @@ const gtkenv = process.env.CETLI_GTKENV ?? '';
 const MUTANTS = [
     {id: 'R1', rule: '(a) the way out is gone from the flow: a sync program that does not answer has no second action', file: 'app/sync-flow.js',
         find: "const SECONDARY = Object.freeze({\n    E_SERVICE_TIMEOUT: 'reset',\n});", repl: 'const SECONDARY = Object.freeze({});'},
-    {id: 'R2', rule: '(a) the way out is gone from the window: the second button is never shown', file: 'app/sync-wizard.js', gjs: true,
-        find: "w.errSecondary.set_visible(this.errSecondary === 'reset');", repl: 'w.errSecondary.set_visible(false);'},
+    {id: 'R2', rule: '(f) the automatic restart is skipped: a set-up computer whose sync program does not answer waits for a click', file: 'app/sync-wizard.js', gjs: true,
+        find: "if (out.error.code === 'E_SERVICE_TIMEOUT' && !this.restartTried) {", repl: 'if (false) {'},
     {id: 'R3', rule: '(b) reset deletes the instance directory instead of moving it', file: 'sync/engine.js',
         find: 'files.rename(dirs.home, target);', repl: 'files.removeDir(dirs.home);'},
     {id: 'R4', rule: '(b) reset writes a file into the notes folder', file: 'sync/engine.js',

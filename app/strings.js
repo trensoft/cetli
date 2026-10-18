@@ -204,7 +204,7 @@ export const syncStopConfirmBody = () => _('Your notes stay on both computers. T
 export const syncResetButton = () => _('Reset sync');
 export const syncResetConfirmTitle = () => _('Reset sync on this computer?');
 // Translators: Stop syncing is the name of a button in this window, keep it the same as its translation.
-export const syncResetConfirmBody = () => _('This computer gets a new ID. On the other computer, press Stop syncing too: it allows only one partner and would not accept the new ID. Your notes stay on both computers. Afterwards you enter the ID of the other computer again.');
+export const syncResetConfirmBody = () => _('This is the last resort: this computer gets a new ID. On the other computer, press Stop syncing too: it allows only one partner and would not accept the new ID. Your notes stay on both computers. Afterwards you enter the ID of the other computer again.');
 export const syncHalfTitle = () => _('Not finished');
 export const syncHalfText = () => _('This computer was set up to connect to another computer, but the connection was never completed. Stop syncing, then start again.');
 
