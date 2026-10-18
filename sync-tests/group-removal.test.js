@@ -189,13 +189,14 @@ test('revoke runs in foreign-config and over the limit: it is the way out', asyn
     const ro = await perform(o, 'revoke', {ids: [list[11], list[10]]});
     assert.deepEqual(ro.result.removed, [list[11], list[10]]);
     assert.equal(ro.result.remaining, 10);
-    const cap = await ready();
-    const many = ids(30);
-    cap.group(many);
-    const rc = await perform(cap, 'revoke', {ids: [many[29]]});
-    assert.deepEqual(rc.result.removed, [many[29]]);
     assert.equal(FREEZE_MAX, 16, 'the cap of the frozen IDs is the read cap, not 10');
-    assert.equal(stateOf(cap).freeze.ids.length, FREEZE_MAX, 'a list over the cap is frozen up to the cap of the state file, and every touched peer is recorded');
+    // exactly the cap: every peer is recorded in the freeze, nothing is cut
+    const cap = await ready();
+    const many = ids(FREEZE_MAX);
+    cap.group(many);
+    const rc = await perform(cap, 'revoke', {ids: [many[FREEZE_MAX - 1]]});
+    assert.deepEqual(rc.result.removed, [many[FREEZE_MAX - 1]]);
+    assert.equal(stateOf(cap).freeze.ids.length, FREEZE_MAX, 'at the cap every touched peer is recorded');
     assert.equal(parseState(cap.fsMap.get(STATE(cap)).text).ok, true, 'the file with a full freeze list is a valid file');
 });
 
@@ -488,13 +489,17 @@ test('an unreadable state file stays a freeze over every peer when ack rewrites 
     assert.equal(w.devices.get(d).introducer, true);
 });
 
-test('counts above 99 still fit the contract: remaining of a big list (a hostile introducer can inflate it)', async () => {
+test('counts above 99 still fit the contract (a hostile introducer can inflate them); revoke over the freeze cap is a visible error, not a success', async () => {
     const w = await ready();
     const many = ids(150);
     many.forEach(id => w.introduce(id, makeId(1000), {introducer: false}));
-    const r = await perform(w, 'revoke', {ids: [many[0]]});
-    assert.equal(r.result.remaining, 149);
-    valid('revoke', r.result);
+    w.calls.length = 0;
+    const before = snapshot(w);
+    assert.deepEqual(await perform(w, 'revoke', {ids: [many[0]]}), {error: {code: 'E_GROUP_FULL', step: 'freeze'}});
+    assert.equal(argvs(w).filter(isWrite).length, 0, 'refused before anything is written');
+    assert.equal(snapshot(w), before);
+    assert.equal(w.fsMap.has(STATE(w)), false, 'not even the state file');
+    valid('revoke', {event: 'result', removed: [many[0]], returned: [], offline: [], remaining: 149, revocation_open: true});
 });
 
 // ---- PLAN-ADMISSION-0.2.6 section 10: the conditions the gate checks -----------------------------------------------------------
@@ -515,7 +520,7 @@ const onlyFlagsAndNamed = (w, listed, named) => {
 test('section 10 point 1: revoke and forget <ID> in foreign-config and over-limit write only introducer flags (down) and the named deletions; an ID that was not read in that run is E_BAD_ID', async () => {
     for (const label of ['foreign-config', 'over-limit', 'over the read cap']) {
         const w = await ready({policy: {shortcutRemove: true}});
-        const list = ids(label === 'over the read cap' ? 20 : 12);
+        const list = ids(label === 'over the read cap' ? FREEZE_MAX + 4 : 12);
         w.group(list);
         if (label === 'foreign-config')
             w.devices.get(list[0]).autoAcceptFolders = true;
@@ -530,6 +535,12 @@ test('section 10 point 1: revoke and forget <ID> in foreign-config and over-limi
         assert.equal(snapshot(w), before);
         assert.equal(w.fsMap.has(STATE(w)), false, `${label}: not even the state file`);
         const named = [list[list.length - 1], list[1]];
+        if (label === 'over the read cap') {                                  // more peers than the freeze can record: refused, nothing written
+            assert.deepEqual(await perform(w, 'revoke', {ids: named}), {error: {code: 'E_GROUP_FULL', step: 'freeze'}});
+            assert.equal(argvs(w).filter(isWrite).length, 0);
+            assert.equal(snapshot(w), before);
+            continue;
+        }
         const r = await perform(w, 'revoke', {ids: named});
         assert.deepEqual(r.result.removed, named, label);
         onlyFlagsAndNamed(w, list, named);

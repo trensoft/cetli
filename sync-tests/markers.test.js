@@ -2,6 +2,7 @@
 // sync/markers.js and app/sync-start.js: T9b (a marker in each parent up to $HOME, none above), T14-T17 (the first-start window).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {markerPaths} from '../sync/markers.js';
 import {DISMISSED_TEXT, shouldShowFirstStart, syncMarked} from '../app/sync-start.js';
 
@@ -69,4 +70,16 @@ test('0.2.5.1: a marker anywhere on the chain means synchronised (no note at the
     assert.equal(syncMarked({markerExists: only('/home/u/.stfolder'), notesDir: NOTES, homeDir: HOME}), true);
     assert.equal(syncMarked({markerExists: only('/home/.stfolder'), notesDir: NOTES, homeDir: HOME}), false);    // above $HOME: not asked
     assert.equal(syncMarked({markerExists: () => false, notesDir: 'notes', homeDir: HOME}), true);
+});
+
+// app/application.js needs GTK, so the behaviour is in app-tests/synced-start-smoke.js (gjs, headless). Here only the wiring is pinned in node:
+// both starts (showStartWindows, showAll) ask the one `synced()`, which asks notesSynced, and neither makes a note on a synchronised folder.
+test('0.2.5.1: both starts of application.js go through synced() and open the list, not a new note', () => {
+    const src = readFileSync(new URL('../app/application.js', import.meta.url), 'utf8');
+    assert.match(src, /const synced = \(\) => notesSynced\(\{dirs, homeDir\}\);/);
+    for (const fn of ['showStartWindows', 'showAll']) {
+        const body = src.slice(src.indexOf(`async function ${fn}()`));
+        const gate = body.slice(0, body.indexOf('\n    }\n'));
+        assert.match(gate, /if \(synced\(\)\)\s+showAllNotes\(\);[^\n]*\n\s+else\s+await newNote\(null\);/, fn);
+    }
 });

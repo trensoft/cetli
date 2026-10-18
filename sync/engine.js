@@ -632,7 +632,11 @@ export function createEngine(ports) {
         const {own, cfg} = await prepareLight();
         namedIds(ids, cfg, own, loadState().state.tomb);
         const [x] = ids;
-        const freezeSet = [x, ...cfg.ids.filter(id => id !== own && id !== x)].filter(id => cfg.ids.includes(id)).slice(0, FREEZE_MAX);        // X may be gone already (a rerun)
+        // More peers than the freeze can record: a removal that froze only the first FREEZE_MAX would report a success that is not one. Refused
+        // before anything is written; the way out is `forget --all` ("Stop syncing"). The order of the steps below is unchanged.
+        if (cfg.ids.filter(id => id !== own).length > FREEZE_MAX)
+            throw new Fail('E_GROUP_FULL', 'freeze');
+        const freezeSet = [x, ...cfg.ids.filter(id => id !== own && id !== x)].filter(id => cfg.ids.includes(id));                     // X may be gone already (a rerun)
         await step('freeze', async () => {
             const ls = loadState();
             saveState(withFreeze(withTomb(ls.state, ids), freezeSet), cfg, own);

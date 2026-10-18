@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The mutants of the group rule (PLAN-ADMISSION-0.2.6 5.2, X1-X10): one line of the data and sync code is changed in a COPY of the tree and the
+// The mutants of the group rule (PLAN-ADMISSION-0.2.6 5.2, X1-X11): one line of the data and sync code is changed in a COPY of the tree and the
 // tests must fail. Data and sync code only; no screens, no texts. Run it only when the gate asks: `node sync-tests/mutants.js [X3 X7 ...]`.
 // The working tree is never touched. A mutant that is not killed (the tests stay green) is a hole in the tests and exits 1.
 import {cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
@@ -29,6 +29,8 @@ const MUTANTS = [
     ['X9', 'an introduced name goes to the list unchanged', 'sync/engine.js', 'id: d.id, name: displayName(d.name),', 'id: d.id, name: d.name,'],
     ['X10', 'join is allowed on a computer that already has peers', 'sync/engine.js',
         'if (others.length > 0 && !others.some(d => d.id === peerId))', 'if (false)'],
+    ['X11', 'revoke over the freeze cap is not refused (a success that froze only part of the peers)', 'sync/engine.js',
+        'if (cfg.ids.filter(id => id !== own).length > FREEZE_MAX)', 'if (cfg.ids.filter(id => id !== own).length > FREEZE_MAX + 1000)'],
 ];
 
 function run(dir) {

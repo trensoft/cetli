@@ -481,7 +481,7 @@ async function scenario() {
 
     w = await open({status: () => ({...fixture('status-over-limit'), result: {...fixture('status-over-limit').result, peers: [], state: 'half', computers: 40}})});
     await pageIs(w, 'group');
-    check(w.w.bnOver.box.get_visible() && w.rowWidgets.length === 0 && labelText(w.w.groupCount) === S.syncGroupCount(40, 10), 'a list over the read cap: the banner and the count, no rows');
+    check(w.w.bnOver.box.get_visible() && w.rowWidgets.length === 0 && labelText(w.w.groupCount) === S.syncGroupCount(40, 10) && labelText(w.w.bnOver.label) === S.syncOverCap(40), 'a list over the read cap: the banner says only Stop syncing is left, the count, no rows');
     await closeWin(w);
 
     w = await open({status: () => fixture('status-max-size'), harden: () => ({ok: true, result: {event: 'result', changed: 9}})});

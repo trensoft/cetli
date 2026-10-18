@@ -292,9 +292,9 @@ test('emit: strict; a line that parse reads back identically; unknown event, unk
     assert.throws(() => emit({event: 'error', code: 'E_BAD_ID'}, 'host'));                   // E_BAD_ID is the verbs with a typed or listed ID
     for (const verb of ['join', 'forget', 'revoke', 'promote', 'ack'])
         assert.doesNotThrow(() => emit({event: 'error', code: 'E_BAD_ID'}, verb), verb);
-    for (const verb of ['host', 'join', 'setup', 'promote'])
+    for (const verb of ['host', 'join', 'setup', 'promote', 'revoke'])                       // revoke: more peers than the freeze can record
         assert.doesNotThrow(() => emit({event: 'error', code: 'E_GROUP_FULL'}, verb), verb);
-    for (const verb of ['status', 'revoke', 'forget', 'finish', 'ack', 'harden'])
+    for (const verb of ['status', 'forget', 'finish', 'ack', 'harden'])
         assert.throws(() => emit({event: 'error', code: 'E_GROUP_FULL'}, verb), verb);
     assert.throws(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'revoke'));         // revoke always runs
     for (const verb of ['host', 'join', 'setup', 'promote', 'finish'])

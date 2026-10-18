@@ -468,7 +468,7 @@ export class SyncWizard {
                 banner.label.set_label(text);
         };
         show(w.bnFreeze, v.revocationOpen);
-        show(w.bnOver, v.overLimit, v.overLimit ? S.syncOverLimit(v.computers, v.max) : null);
+        show(w.bnOver, v.overLimit, v.overLimit ? (v.overCap ? S.syncOverCap(v.computers) : S.syncOverLimit(v.computers, v.max)) : null);
         show(w.bnFull, v.full, v.full ? S.syncGroupFull(v.max) : null);
         show(w.bnPromote, v.promoteIds.length > 0 && !this.promoteDismissed);
         show(w.bnNew, v.newIds.length > 0, v.newIds.length > 0 ? S.syncNewBanner(v.newIds.length) : null);

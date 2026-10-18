@@ -40,9 +40,11 @@ them and allow the new rule once: a pair works under the new rule only when it i
 is not offered again when it knocks; **Add again** in **Sync…** lifts that, and you still compare its ID and accept it. **Stop syncing** removes all other computers and their shares; it never removes the folder or a
 note. Going back to 0.2.5 needs **Stop syncing** first.
 
-What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): up to four Syncthing instances on one machine
-(loopback) and two real instances. Not measured: ten computers, a real network behind a default firewall or NAT, relays, a real RHEL
-10 session; on a real network the computers may connect through the first computer only. A computer whose notes folder is already
+What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): measured on one shared local network with four
+Syncthing instances (virtual LAN): with local discovery the computers connect to each other directly within a second or two; without
+local discovery nothing connects. Two real instances were measured as well. Not measured: ten computers, another subnet, a VLAN, a guest
+or client-isolated WiFi, NAT, relays, a real RHEL 10 session. There the computers may connect through the first computer only, or not
+at all. A computer whose notes folder is already
 synchronised by a Syncthing you set up by hand is left exactly as it is.
 
 ## Authorship

@@ -56,7 +56,7 @@ export const GENERIC_CODE = 'E_INTERNAL';
 const CODE_SCOPE = Object.freeze({
     E_BAD_ID: ['join', 'forget', 'revoke', 'promote', 'ack'],
     E_OWN_ID: ['join'],
-    E_GROUP_FULL: ['host', 'join', 'setup', 'promote'],                          // the group is at (or over) the limit; `status` reports it as over_limit
+    E_GROUP_FULL: ['host', 'join', 'setup', 'promote', 'revoke'],                // the group is at (or over) the limit; `status` reports it as over_limit; `revoke` over the freeze cap
     E_REVOCATION_OPEN: ['host', 'join', 'setup', 'promote', 'finish'],  // a removal is not finished on this computer; `status` reports revocation_open
     E_PENDING_TOO_LARGE: ['host'],
     E_PENDING_AMBIGUOUS: ['host'],

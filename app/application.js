@@ -253,14 +253,9 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     }
 
     // 0.2.5.1: a synchronised notes folder gets no note of its own at the start (it may fill a moment later, and the new note would reach
-    // every computer). A failure of the query counts as synchronised. Both starts open the list instead (without a window GTK quits).
-    function synced() {
-        try {
-            return notesSynced({dirs, homeDir});
-        } catch {
-            return true;
-        }
-    }
+    // every computer). A failure of the query counts as synchronised (syncMarked catches it). Both starts open the list instead (without a
+    // window GTK quits).
+    const synced = () => notesSynced({dirs, homeDir});
 
     // Another launch of the program while it runs: bring every note back (closed ones too).
     async function showAll() {

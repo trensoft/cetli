@@ -594,6 +594,14 @@ msgstr ""
 #: app/strings.js
 #, javascript-format
 msgid ""
+"This group has %s computers. At this size cetli cannot list them or remove "
+"one at a time: only Stop syncing is left. Press it on this computer and on "
+"every other computer of the group, then set the group up again."
+msgstr ""
+
+#: app/strings.js
+#, javascript-format
+msgid ""
 "%s computers were added to your group since you last looked. Check that you "
 "know all of them."
 msgstr ""

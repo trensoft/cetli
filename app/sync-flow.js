@@ -117,6 +117,7 @@ export function groupView(status) {
         rows: peerRows(status),
         revocationOpen,
         overLimit,
+        overCap: overLimit && peers.length === 0,                        // the engine did not read the list: no rows, only "Stop syncing" is left
         full,
         promoteIds: promoteIds(status),
         newIds,

@@ -268,3 +268,11 @@ test('the product turns the first-start sync window on in main.js; the notes tes
     assert.match(app, /firstStartSync = false/);
     assert.match(app, /firstStartSync && wantsFirstStart/);
 });
+
+test('groupView: a list the engine did not read (over the cap) is over_limit with no rows: overCap, only "Stop syncing" is left', () => {
+    const capped = groupView(group([], {state: 'half', over_limit: true, computers: 40}));
+    assert.deepEqual([capped.overLimit, capped.overCap, capped.rows.length, capped.addBlocked], [true, true, 0, true]);
+    const over = groupView(group([peer(B), peer(P)], {over_limit: true, computers: 12}));
+    assert.deepEqual([over.overLimit, over.overCap], [true, false], 'a list that was read keeps its rows and the remove path');
+    assert.equal(groupView(group([peer(B)])).overCap, false);
+});

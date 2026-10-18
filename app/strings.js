@@ -214,6 +214,8 @@ export function syncListenerText(state) {
 }
 export const syncGroupFull = max => fill(_('This group already has %s computers. Remove one first.'), String(max));
 export const syncOverLimit = (n, max) => fill(_('This group has %s computers, more than the %s that cetli allows. New computers cannot be added until you remove some.'), String(n), String(max));
+// The list is not read (more computers than cetli reads one by one): no rows, nothing to remove one at a time.
+export const syncOverCap = n => fill(_('This group has %s computers. At this size cetli cannot list them or remove one at a time: only Stop syncing is left. Press it on this computer and on every other computer of the group, then set the group up again.'), String(n));
 export const syncNewBanner = n => fill(_('%s computers were added to your group since you last looked. Check that you know all of them.'), String(n));
 export const syncNewAllMine = () => _('They are all mine');
 export const syncNewNotMine = () => _('Not mine, remove');
