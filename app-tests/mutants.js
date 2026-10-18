@@ -318,6 +318,11 @@ const MUTANTS = [
         find: "new Gtk.Label({label: '', ellipsize: Pango.EllipsizeMode.END})", repl: "new Gtk.Label({label: ''})"},
     {id: 'A240', rule: '0.2.4 red: every new note is red again (only the very first one is, when no live note exists)', file: 'application.js', gjs: true, tests: ['allnotes-smoke.js', 'gtk-smoke.js'],
         find: "store.listNotes().some(n => !n.deleted) ? {text: ''} : {text: '', color: NOTE_RHEL_RED}", repl: "{text: '', color: NOTE_RHEL_RED}"},
+    // 0.2.6 _clean(): each half on its own (killed by gtk-smoke.js: CETLI_GJS_TESTS=gtk-smoke.js)
+    {id: 'A133', rule: '0.2.6: a window with text only in the window counts as clean (the dirty half of _clean is gone)', file: 'window.js', gjs: true,
+        find: "return !this._dirty() && this._saveTimer === null;", repl: "return this._saveTimer === null;"},
+    {id: 'A134', rule: '0.2.6: a window with a save waiting counts as clean (the timer half of _clean is gone)', file: 'window.js', gjs: true,
+        find: "return !this._dirty() && this._saveTimer === null;", repl: "return !this._dirty();"},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});

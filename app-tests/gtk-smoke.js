@@ -267,6 +267,31 @@ async function scenario() {
     w9.win.close();
     await until(() => !windows.has(id9), 5000);
 
+    // 0.2.6, the two halves of _clean() on their own (a tombstone arrives; the record is handed to onRemote directly, so the timing is ours).
+    // (a) NO save waiting, but text only in the window: a refused save (quarantined file) leaves the text in the buffer, the timer is null.
+    const [idA, wA] = await freshNote();
+    quarantine(idA);
+    await sleep(800);
+    wA.buffer.insert_at_cursor('only in the window', -1);
+    await until(() => wA.mark?.kind === 'refused' && wA._saveTimer === null, 5000);
+    check(wA.mark?.kind === 'refused' && wA._saveTimer === null && wA._dirty(), 'precondition: the save was refused, no timer, the text is only in the window');
+    wA.onRemote({v: 'tombstone-a', deleted: true});
+    check(windows.has(idA) && wA.win.get_visible() && wA.mark?.kind === 'deleted' && wA._bufferText() === 'only in the window', 'a tombstone does not close a window whose text is not saved (no timer waiting)');
+    wA.win.close();
+    await until(() => !windows.has(idA), 5000);
+    // (b) a save WAITING, but nothing that differs: a character typed and deleted again leaves the timer running with a buffer equal to the file.
+    const [idB, wB] = await freshNote();
+    wB.buffer.insert_at_cursor('x', -1);
+    const endB = wB.buffer.get_end_iter();
+    const startB = endB.copy();
+    startB.backward_char();
+    wB.buffer.delete(startB, endB);
+    check(!wB._dirty() && wB._saveTimer !== null, 'precondition: the buffer equals the file, a save is still waiting for its timer');
+    wB.onRemote({v: 'tombstone-b', deleted: true});
+    check(windows.has(idB) && wB.win.get_visible() && wB.mark?.kind === 'deleted', 'a tombstone does not close a window with a save waiting');
+    wB.win.close();
+    await until(() => !windows.has(idB), 5000);
+
     // 0.2.6: the other computer deletes a note and this window holds nothing unsaved: the window closes by itself. Attila's case: the note is open
     // on both computers, the other one types (the text arrives here and is applied: the window must be clean again), then deletes it.
     const [id6, w6] = await freshNote();
