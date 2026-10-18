@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Headless smoke test of the sync window (0.2.5): run it inside a headless Wayland compositor, see app-tests/run.sh. The window talks to a
-// FAKE bridge (no engine, no process, no Syncthing): the fake answers what the contract fixtures say and records every call. Every wait is a
-// poll on a condition with a generous limit, never a fixed sleep.
+// Headless smoke test of the sync window (0.2.5, 0.2.6 group): run it inside a headless Wayland compositor, see app-tests/run.sh. The window
+// talks to a FAKE bridge (no engine, no process, no Syncthing): the fake answers with the contract fixtures (sync-tests/contract) and records
+// every call. It also checks every call the way the engine would read it: the argv must be one argvFor accepts, and an ID the window passes
+// must be one the last status it showed listed. Every wait is a poll on a condition with a generous limit, never a fixed sleep.
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk?version=4.0';
@@ -11,6 +12,8 @@ import {readWizardState, wantsFirstStart, writeDismissed} from '../app/sync-hook
 import {SyncWizard} from '../app/sync-wizard.js';
 import {DISMISSED_TEXT} from '../app/sync-start.js';
 import * as S from '../app/strings.js';
+import {argvFor, parse} from '../sync/protocol.js';
+import {compareLine} from '../app/sync-flow.js';
 
 const base = GLib.dir_make_tmp('cetli-sync-XXXXXX');
 const dirs = {notes: `${base}/home/.local/share/cetli/notes`, tmp: `${base}/home/.local/share/cetli/tmp`, state: `${base}/home/.local/state/cetli`};
@@ -40,9 +43,22 @@ async function waitFor(cond, limit = 8000) {
 
 const A = 'F6HEWOE-4KSACQ5-5MAX7IC-HAP3EGW-AQYBTIX-V74MXIF-ZB3GZN6-4T3QYQZ';
 const B = 'VTTWEJK-SMIOBMH-3FIWS7V-JFC2CL4-FCR3BU6-PEPADRQ-EYVVD3Z-BIGMUQ5';
-const status = (state, extra = {}) => ({ok: true, result: {event: 'result', state, own_id: A, peer: null, connected: null, link: null, connected_s: null, listener: null, shared: null, up_to_date: null, notes: null, waiting: false, ...extra}});
-const paired = (extra = {}) => status('paired', {peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', connected_s: 9, listener: 'ok', shared: true, up_to_date: null, notes: 3, ...extra});
+const P = 'TKIBGPF-WSGKBIH-LXXRQZX-HYOCM6Y-T6IYH5B-5CNPJLR-UHMG75U-JXHXVQP';
+const O = 'IZA3FNQ-S6ZB6SZ-KJXJ4MB-KUYXPYA-MYWCRPI-TSVUXR2-CRK2SYT-YGUA6QZ';
+// A status result without any computer (the shape the contract fixes), and one built from a contract fixture.
+const status = (state, extra = {}) => ({ok: true, result: {event: 'result', state, own_id: A, peers: [], computers: null, max_computers: 10, over_limit: false, revocation_open: false,
+    harden_pending: 0, promote_pending: 0, listener: null, up_to_date: null, notes: null, waiting: false, ...extra}});
+const fixtureDir = GLib.path_get_dirname(GLib.filename_from_uri(import.meta.url)[0]);
+const fixture = (name, extra = {}) => {
+    const [, bytes] = Gio.File.new_for_path(`${fixtureDir}/../sync-tests/contract/${name}.ndjson`).load_contents(null);
+    const lines = new TextDecoder().decode(bytes).split('\n').filter(l => l !== '');
+    const result = lines.map(l => parse(l, 'status')).find(e => e !== null && e.event === 'result');
+    return {ok: true, result: {...result, ...extra}};
+};
+const peerOf = (id, o = {}) => ({id, name: 'pc', introduced_by: null, introducer: true, shared: true, connected: true, link: 'stable', connected_s: 9, new: false, returned: false, ...o});
+const groupOf = (peers, extra = {}) => status('paired', {peers, computers: peers.length + 1, listener: 'ok', notes: 3, ...extra});
 const fail = (code, step = null) => ({ok: false, error: {code, step}});
+const hostResult = {ok: true, result: {event: 'result', peer: {id: B, name: 'laptop-b'}, connected: true, link: 'stable', connected_s: 9, up_to_date: null, notes: 4}};
 
 // The fake bridge: `answers[verb]` is a function (opts) -> outcome | Promise. `host` is a controllable handle.
 class FakeBridge {
@@ -55,10 +71,19 @@ class FakeBridge {
         this.answers = {};
         this.hosts = [];
         this.stopped = 0;
+        this.listed = new Set();                       // the IDs of the last status the window was given
+        this.argv = [];                                // what the engine would be started with, per call
     }
 
     start(verb, opts = {}) {
         this.calls.push({verb, opts});
+        try {
+            this.argv.push(argvFor(verb, opts.flags ?? {}, opts.ids ?? []));
+        } catch (e) {
+            check(false, `${verb}: the window asked for an argv the contract refuses (${e.message})`);
+        }
+        for (const id of opts.ids ?? [])
+            check(this.listed.has(id), `${verb}: the ID ${id.slice(0, 7)} was listed by the status on screen`);
         if (verb === 'host') {
             let resolve;
             const done = new Promise(r => { resolve = r; });
@@ -68,7 +93,11 @@ class FakeBridge {
             return h;
         }
         const answer = this.answers[verb] ?? (() => fail('E_INTERNAL'));
-        const done = Promise.resolve().then(() => answer(opts));
+        const done = Promise.resolve().then(() => answer(opts)).then(out => {
+            if (verb === 'status' && out.ok)
+                this.listed = new Set(out.result.peers.map(p => p.id));
+            return out;
+        });
         return {done, accept: () => false, stop: () => done};
     }
 
@@ -83,6 +112,10 @@ class FakeBridge {
 
     count(verb) {
         return this.calls.filter(c => c.verb === verb).length;
+    }
+
+    verbs() {
+        return this.calls.map(c => c.verb);
     }
 }
 
@@ -132,10 +165,11 @@ async function scenario() {
         ['no program', status('no-syncthing', {own_id: null}), 'missing'],
         ['not set up', status('not-set-up', {own_id: null}), 'consent'],
         ['stfolder conflict', status('stfolder-conflict', {own_id: null}), 'info-stfolder'],
-        ['foreign config', status('foreign-config', {peer: {id: B, name: null}, connected: true}), 'info-foreign'],
+        ['foreign config', fixture('status-foreign-config'), 'info-foreign'],
         ['set up', status('set-up'), 'ids'],
-        ['half', status('half', {peer: {id: B, name: null}, connected: false, link: 'none', connected_s: null, shared: false, up_to_date: null}), 'half'],
-        ['paired', paired(), 'paired'],
+        ['half', fixture('status-half'), 'group'],
+        ['paired', fixture('status-paired'), 'group'],
+        ['group of three', fixture('status-group-3'), 'group'],
     ]) {
         const w = await open({status: () => answer});
         check(await pageIs(w, page), `status ${name}: page ${page} (${w.page})`);
@@ -226,8 +260,8 @@ async function scenario() {
     await closeWin(w);
 
     // ---- a timeout after the accept: Try again asks the status (the other computer is already added), it does not start a second opening
-    w = await open({status: () => status('half', {peer: {id: B, name: null}, connected: false, link: 'none', connected_s: null, shared: true, up_to_date: null})});
-    await pageIs(w, 'half');
+    w = await open({status: () => fixture('status-half')});
+    await pageIs(w, 'group');
     await closeWin(w);
     w = await open({status: () => status('set-up')});
     await pageIs(w, 'ids');
@@ -265,44 +299,304 @@ async function scenario() {
     check(labelText(w.w.doneText) === S.syncDoneText(S.syncNameUnreadable()), 'the guest knows no name: "(name not readable)"');
     await closeWin(w);
 
-    // ---- the paired page and Stop syncing
-    w = await open({status: () => paired(), forget: () => ({ok: true, result: {event: 'result', state: 'set-up'}})});
-    await pageIs(w, 'paired');
-    check(labelText(w.w.pairedLink) === S.syncLinkText('connected'), 'stable: "Connected" (and no count on the status page)');
-    check(rowsText(w.w.pairedPeerId) === B, 'the peer ID in full');
-    check(!w.w.pairedOwn.get_visible(), 'the own ID is hidden until asked');
-    w.w.pairedShowOwn.emit('clicked');
-    check(w.w.pairedOwn.get_visible() && rowsText(w.w.pairedOwnId) === A, 'then shown in full');
+    // ---- the ID page of a computer with no other computer: the field, the guest note, where to start; the connecting page of a guest
+    w = await open({status: () => status('set-up'), join: async () => { await tick(300); return hostResult; }});
+    await pageIs(w, 'ids');
+    check(w.w.entry !== undefined && w.w.entry.get_visible(), 'ids page (no other computer): the field for the other ID is there');
+    check(labelText(w.w.newStart) === S.syncNewStart() && labelText(w.w.guestNote) === S.syncGuestNote(), 'it says where to start and what joining means');
+    check(w.w.cand !== undefined && !w.w.cand.get_visible(), 'the candidate card exists, hidden until a computer knocks');
+    check(w.sets.add.entry === undefined, 'the add page has no field');
+    w.w.entry.set_text(B);
+    w.w.connect.emit('clicked');
+    check(await waitFor(() => fake.count('join') === 1), 'a guest joins');
+    check(w.page === 'connecting' && w.w.connGuest.get_visible() && labelText(w.w.connGuest) === S.syncGuestNote(), 'the connecting page of a guest carries the guest note');
+    check(await pageIs(w, 'done'), 'and it ends on the done page');
     await closeWin(w);
-    for (const [extra, key] of [[{link: 'flapping', connected_s: null}, 'unstable'], [{link: 'none', connected_s: null}, 'offline'], [{link: null, connected_s: null}, 'checking']]) {
-        w = await open({status: () => paired(extra)});
-        await pageIs(w, 'paired');
-        check(labelText(w.w.pairedLink) === S.syncLinkText(key) && labelText(w.w.pairedLink) !== S.syncLinkText('connected'), `link ${JSON.stringify(extra)}: ${key}, never "Connected"`);
-        await closeWin(w);
-    }
-    // the listener note: neutral (no error style), only for degraded and down, hidden for ok and null
+
+    // ---- the group page: three computers, how each came, the link of each, markup off, the footnote
+    w = await open({status: () => fixture('status-group-3')});
+    check(await pageIs(w, 'group'), 'group of three: the group page');
+    check(labelText(w.w.groupCount) === S.syncGroupCount(3, 10) && labelText(w.w.groupCount).includes('3 /'), `the count is "n / max" (${labelText(w.w.groupCount)})`);
+    check(w.rowWidgets.length === 2 && w.rowWidgets[0].id === B && w.rowWidgets[1].id === P, 'one row per other computer, in the order the engine sends');
+    check(labelText(w.rowWidgets[0].name) === 'laptop-b' && labelText(w.rowWidgets[0].compare) === compareLine(B), 'a row shows the name and the first two ID groups');
+    check(labelText(w.rowWidgets[0].how) === S.syncRowAccepted() && labelText(w.rowWidgets[1].how) === S.syncRowThrough('laptop-b', compareLine(B)), 'how each came: accepted / added through laptop-b with its ID start');
+    check(labelText(w.rowWidgets[0].link) === S.syncLinkText('connected') && labelText(w.rowWidgets[1].link) === S.syncLinkText('offline'), 'each row has its own link text: only the stable one says Connected');
+    check(!w.rowWidgets[0].limited.get_visible() && !w.rowWidgets[0].sameName.get_visible(), 'no limited or same-name mark');
+    check([w.w.bnFreeze, w.w.bnOver, w.w.bnFull, w.w.bnPromote, w.w.bnNew].every(b => !b.box.get_visible()) && w.returnedRows.length === 0, 'no banner while no flag is set');
+    check(w.w.groupAdd.get_sensitive() && labelText(w.w.groupAdd) === S.syncAddButton(), 'Add a computer is on');
+    check(labelText(w.w.groupFootnote) === S.syncTrustSentence(), 'the footnote carries the sentence about the accepted computer');
+    check(!w.w.groupOwn.get_visible(), 'the own ID is hidden until asked');
+    w.w.groupShowOwn.emit('clicked');
+    check(w.w.groupOwn.get_visible() && rowsText(w.w.groupOwnId) === A, 'then shown in full');
+    await closeWin(w);
+
+    // names are foreign input: markup off on every label that shows one, every character literal; a same-name pair is marked
+    const evil = '<b>x</b>&amp;%s$&';
+    w = await open({status: () => groupOf([peerOf(B, {name: evil}), peerOf(P, {name: evil, introduced_by: B}), peerOf(O, {name: null})])});
+    await pageIs(w, 'group');
+    const nameRows = w.rowWidgets;
+    check(labelText(nameRows[0].name) === evil && !nameRows[0].name.get_use_markup(), 'a hostile name is plain text, markup off, every character literal');
+    check(labelText(nameRows[1].how) === S.syncRowThrough(evil, compareLine(B)) && !nameRows[1].how.get_use_markup(), 'the name in "added through" is plain text too');
+    check(nameRows.every(r => !r.name.get_use_markup() && !r.how.get_use_markup() && !r.compare.get_use_markup() && !r.link.get_use_markup()), 'no row label uses markup');
+    check(nameRows[0].sameName.get_visible() && nameRows[1].sameName.get_visible() && !nameRows[2].sameName.get_visible(), 'two rows with the same name are marked, an unreadable name is not');
+    check(labelText(nameRows[2].name) === S.syncNameUnreadable(), 'a missing name reads "(name not readable)"');
+    await closeWin(w);
+
+    // the link of a flapping peer and the listener note
+    w = await open({status: () => fixture('status-flapping')});
+    await pageIs(w, 'group');
+    check(labelText(w.rowWidgets[0].link) === S.syncLinkText('unstable') && labelText(w.rowWidgets[0].link) !== S.syncLinkText('connected'), 'flapping: never "Connected"');
+    await closeWin(w);
     for (const [listener, shown] of [['degraded', true], ['down', true], ['ok', false], [null, false]]) {
-        w = await open({status: () => paired({listener})});
-        await pageIs(w, 'paired');
-        check(w.w.pairedListener.get_visible() === shown && (labelText(w.w.pairedListener) !== '') === shown, `listener ${listener}: ${shown ? 'a note' : 'no note'} on the paired page`);
-        check(!w.w.pairedListener.has_css_class('error') && !w.w.pairedStop.has_css_class('suggested-action'), `listener ${listener}: neutral, no red`);
-        check(labelText(w.w.pairedLink) === S.syncLinkText('connected'), `listener ${listener}: the link line is unchanged`);
+        w = await open({status: () => fixture('status-paired', {listener})});
+        await pageIs(w, 'group');
+        check(w.w.groupListener.get_visible() === shown && (labelText(w.w.groupListener) !== '') === shown, `listener ${listener}: ${shown ? 'a note' : 'no note'} on the group page`);
+        check(!w.w.groupListener.has_css_class('error') && labelText(w.rowWidgets[0].link) === S.syncLinkText('connected'), `listener ${listener}: neutral, the row is unchanged`);
         await closeWin(w);
     }
     w = await open({status: () => status('set-up', {listener: 'degraded'})});
     await pageIs(w, 'ids');
     check(w.w.idsListener.get_visible() && labelText(w.w.idsListener) === S.syncListenerText('degraded') && !w.w.idsListener.has_css_class('error'), 'the ID page carries the same neutral note');
     await closeWin(w);
-    w = await open({status: () => paired(), forget: () => ({ok: true, result: {event: 'result', state: 'set-up'}})});
-    await pageIs(w, 'paired');
-    w.w.pairedStop.emit('clicked');
-    check(w.confirmDialog !== undefined && fake.count('forget') === 0, 'Stop syncing asks first; nothing ran yet');
+
+    // ---- Add a computer: the add page waits, never types; the candidate card, the accept, the notes; Cancel goes back
+    w = await open({status: () => fixture('status-group-3'), host: null});
+    await pageIs(w, 'group');
+    w.w.groupAdd.emit('clicked');
+    check(w.page === 'add' && fake.hosts.length === 1, 'Add a computer: the add page, a waiting run started');
+    check(w.sets.add.entry === undefined && w.sets.add.cancel !== undefined, 'no field to type on a computer that has others; a Cancel button');
+    check(rowsText(w.sets.add.ownId) === A, 'this computer\'s ID is shown in full');
+    const addHost = fake.hosts[0];
+    addHost.emit({event: 'candidate', id: O, name: 'office'});
+    check(w.sets.add.cand.get_visible() && labelText(w.sets.add.candAccept) === S.syncAcceptButton('office', 'IZA3FNQ'), 'the candidate card and the Accept button');
+    check(labelText(w.sets.add.candNote) === S.syncAcceptNote() && labelText(w.sets.add.candTrust) === S.syncTrustSentence(), 'the accept note and the sentence about the accepted computer sit on the card');
+    w.sets.add.cancel.emit('clicked');
+    check(await waitFor(() => fake.count('status') === 2) && addHost.stopCalls === 1, 'Cancel stops the waiting run and reads the list again');
+    check(await pageIs(w, 'group'), 'and the group page is back');
+    w.w.groupAdd.emit('clicked');
+    const addHost2 = fake.hosts[1];
+    addHost2.emit({event: 'candidate', id: O, name: 'office'});
+    w.sets.add.candAccept.emit('clicked');
+    check(addHost2.accepted.length === 1 && addHost2.accepted[0] === O && w.page === 'connecting', 'the accept names the candidate\'s canonical ID');
+    check(!w.w.connGuest.get_visible(), 'the host side does not show the guest note');
+    addHost2.finish(hostResult);
+    check(await pageIs(w, 'done'), 'the add ends on the done page');
+    await closeWin(w);
+
+    // a refused opening is a neutral page with the engine's reason and no button (the number comes from the status)
+    for (const [code, text] of [['E_GROUP_FULL', S.syncGroupFull(10)], ['E_REVOCATION_OPEN', S.syncFreezeBanner()]]) {
+        w = await open({status: () => fixture('status-group-3')});
+        await pageIs(w, 'group');
+        w.w.groupAdd.emit('clicked');
+        fake.hosts[0].finish(fail(code));
+        check(await pageIs(w, 'error') && !w.w.errText.has_css_class('cetli-error') && !w.w.errAction.get_visible() && labelText(w.w.errText) === text, `${code}: a neutral page, its text, no button (${labelText(w.w.errText).slice(0, 40)})`);
+        await closeWin(w);
+    }
+
+    // ---- banners: new computers (and the harden step before), the promote consent, a returned computer, an open removal, the limit
+    const afterHarden = fixture('status-group-new', {harden_pending: 0});
+    let statusCalls = 0;
+    w = await open({status: () => (++statusCalls === 1 ? fixture('status-group-new') : afterHarden), harden: () => ({ok: true, result: {event: 'result', changed: 1}}),
+        ack: () => ({ok: true, result: {event: 'result', changed: 1}})});
+    check(await pageIs(w, 'group'), 'new computer: the group page');
+    check(fake.verbs().join() === 'status,harden,status', `harden_pending runs harden and then status once more (${fake.verbs()})`);
+    check(w.w.bnNew.box.get_visible() && labelText(w.w.bnNew.label) === S.syncNewBanner(1), 'the "added since you last looked" banner counts the new rows');
+    check(labelText(w.rowWidgets[1].remove) === S.syncNewNotMine() && labelText(w.rowWidgets[0].remove) === S.syncRemoveButton(), 'a new row offers "Not mine, remove", the other "Remove"');
+    check(w.w.groupAdd.get_sensitive(), 'a new row alone does not stop Add');
+    w.w.newAllMine.emit('clicked');
+    check(await waitFor(() => fake.count('ack') === 1), 'They are all mine runs ack');
+    check(JSON.stringify(fake.argv.find(a => a[0] === 'ack')) === JSON.stringify(['ack', P]), `ack names exactly the new row, no --all (${fake.argv.find(a => a[0] === 'ack')})`);
+    check(await waitFor(() => fake.count('status') >= 3), 'and the list is read again');
+    await closeWin(w);
+
+    statusCalls = 0;
+    w = await open({status: () => (++statusCalls === 1 ? fixture('status-group-new') : fail('E_CLI_FAILED')), harden: () => fail('E_CLI_FAILED')});
+    check(await pageIs(w, 'group') && fake.verbs().join() === 'status,harden', 'a failing harden is not a loop and not an error: the first status is shown');
+    await closeWin(w);
+
+    w = await open({status: () => fixture('status-promote-pending'), promote: () => ({ok: true, result: {event: 'result', changed: 1}})});
+    await pageIs(w, 'group');
+    check(w.w.bnPromote.box.get_visible() && labelText(w.w.bnPromote.label) === S.syncPromoteBanner() && labelText(w.w.promoteAllow) === S.syncPromoteAllow() && labelText(w.w.promoteLater) === S.syncPromoteLater(), 'the promote consent banner with Allow and Not now');
+    w.w.promoteLater.emit('clicked');
+    check(!w.w.bnPromote.box.get_visible() && fake.count('promote') === 0, 'Not now hides it and runs nothing');
+    await closeWin(w);
+    w = await open({status: () => fixture('status-promote-pending'), promote: () => ({ok: true, result: {event: 'result', changed: 1}})});
+    await pageIs(w, 'group');
+    w.w.promoteAllow.emit('clicked');
+    check(await waitFor(() => fake.count('promote') === 1) && JSON.stringify(fake.argv.find(a => a[0] === 'promote')) === JSON.stringify(['promote', B]), 'Allow runs promote for the direct peer whose flag is off');
+    check(await waitFor(() => fake.count('status') === 2), 'and reads the list again');
+    await closeWin(w);
+
+    w = await open({status: () => fixture('status-returned')});
+    await pageIs(w, 'group');
+    check(w.returnedRows.length === 1 && labelText(w.returnedRows[0].label) === S.syncReturned(compareLine(P)), 'a returned computer: its banner with the ID start');
+    check(!w.w.groupAdd.get_sensitive(), 'Add is off while a removed computer is back');
+    w.returnedRows[0].button.emit('clicked');
+    check(w.page === 'remove' && w.rm.id === P && w.rm.path === 'lost', 'Remove it again: the remove page for that row, the lost path');
+    await closeWin(w);
+
+    w = await open({status: () => fixture('status-revocation-open'), finish: () => ({ok: true, result: {event: 'result', revocation_open: false}})});
+    await pageIs(w, 'group');
+    check(w.w.bnFreeze.box.get_visible() && labelText(w.w.bnFreeze.label) === S.syncFreezeBanner() && labelText(w.w.freezeButton) === S.syncFinishButton(), 'an open removal: the neutral banner with the Finish button');
+    check(!w.w.groupAdd.get_sensitive() && w.rowWidgets.every(r => r.limited.get_visible() && labelText(r.limited) === S.syncRowLimited()), 'Add is off and every row that is no longer taken from says "Limited"');
+    check(!w.w.bnPromote.box.get_visible(), 'no promote consent while a removal is open');
+    w.w.freezeButton.emit('clicked');
+    check(w.confirmDialog !== undefined && fake.count('finish') === 0, 'Finish asks first; nothing ran yet');
+    w.confirmDialog.emit('response', 'cancel');
+    await tick(80);
+    check(fake.count('finish') === 0, 'Cancel runs nothing');
+    w.w.freezeButton.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await waitFor(() => fake.count('finish') === 1 && fake.count('status') >= 2), 'confirming runs finish and reads the list again');
+    check(JSON.stringify(fake.argv.find(a => a[0] === 'finish')) === JSON.stringify(['finish']), 'finish has no argument');
+    await closeWin(w);
+
+    // over the limit: the banner with the counts, no link text (not measured), Add off, and a choice longer than the engine takes is not sent
+    w = await open({status: () => fixture('status-over-limit'), revoke: () => fail('E_INTERNAL')});
+    await pageIs(w, 'group');
+    const over = fixture('status-over-limit').result;
+    check(w.w.bnOver.box.get_visible() && labelText(w.w.bnOver.label) === S.syncOverLimit(over.computers, over.max_computers), 'over the limit: the banner names the counts');
+    check(w.rowWidgets.length === over.peers.length && w.rowWidgets.every(r => !r.link.get_visible()) && !w.w.groupAdd.get_sensitive(), 'the cut list is shown, no link text, Add off');
+    w.rowWidgets[0].remove.emit('clicked');
+    check(w.page === 'remove' && w.removeChecks.length === over.peers.length - 1 && w.removeChecks.every(c => c.check.get_active()), 'removing the introducer marks every row it introduced');
+    check(w.w.removeTooMany.get_visible() && labelText(w.w.removeTooMany) === S.syncRemoveTooMany(over.max_computers - 1) && !w.w.removeConfirm.get_sensitive(), 'more rows than one revoke takes: a hint and no confirm');
+    w.removeChecks[0].check.set_active(false);
+    check(!w.w.removeTooMany.get_visible() && w.w.removeConfirm.get_sensitive(), 'one explicit keep brings it back in range');
+    await closeWin(w);
+
+    w = await open({status: () => ({...fixture('status-over-limit'), result: {...fixture('status-over-limit').result, peers: [], state: 'half', computers: 40}})});
+    await pageIs(w, 'group');
+    check(w.w.bnOver.box.get_visible() && w.rowWidgets.length === 0 && labelText(w.w.groupCount) === S.syncGroupCount(40, 10), 'a list over the read cap: the banner and the count, no rows');
+    await closeWin(w);
+
+    w = await open({status: () => fixture('status-max-size'), harden: () => ({ok: true, result: {event: 'result', changed: 9}})});
+    await pageIs(w, 'group');
+    check(w.w.bnFull.box.get_visible() && labelText(w.w.bnFull.label) === S.syncGroupFull(10) && !w.w.groupAdd.get_sensitive(), 'a full group: the line and Add off');
+    await closeWin(w);
+
+    // ---- the remove dialog and the revoke run
+    const revokeProgress = opts => {
+        for (const step of ['freeze', 'remove', 'verify', 'dwell']) {
+            opts.onEvent({event: 'progress', step, state: 'start'});
+            opts.onEvent({event: 'progress', step, state: 'ok'});
+        }
+    };
+    let revokeResult = {event: 'result', removed: [B], returned: [], offline: [{id: O, name: 'office'}], remaining: 2, revocation_open: true};
+    const answers = () => ({
+        status: () => fixture('status-group-new', {harden_pending: 0}),
+        revoke: async opts => { opts.onEvent({event: 'progress', step: 'freeze', state: 'start'}); await tick(60); revokeProgress(opts); return {ok: true, result: revokeResult}; },
+        finish: () => ({ok: true, result: {event: 'result', revocation_open: false}}),
+        forget: () => ({ok: true, result: {event: 'result', state: 'set-up', remaining: 0}}),
+    });
+    w = await open(answers());
+    await pageIs(w, 'group');
+    w.rowWidgets[0].remove.emit('clicked');
+    check(w.page === 'remove' && labelText(w.w.removeTarget).startsWith('laptop-b'), 'Remove on a row: the remove page for that computer');
+    check(!w.w.removeHave.get_visible() && w.w.removeLost.get_active(), 'the "I still have it" path is hidden while the policy switch is off (and lost is chosen)');
+    check(w.removeChecks.length === 1 && w.removeChecks[0].id === P && w.removeChecks[0].check.get_active(), 'the row it introduced (and a new row) is marked "not mine" by default');
+    check(w.w.removeOthers.get_visible() && labelText(w.w.removeOthersHeading) === S.syncRemoveOthers(), 'with the heading');
+    w.removeChecks[0].check.set_active(false);
+    w.w.removeConfirm.emit('clicked');
+    check(w.confirmDialog !== undefined && fake.count('revoke') === 0, 'Remove asks first');
+    w.confirmDialog.emit('response', 'cancel');
+    await tick(80);
+    check(fake.count('revoke') === 0 && w.page === 'remove', 'Cancel runs nothing');
+    w.w.removeConfirm.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await pageIs(w, 'revoking') || w.page === 'revoke-result', 'the revoking page');
+    check(JSON.stringify(fake.argv.find(a => a[0] === 'revoke')) === JSON.stringify(['revoke', B]), 'revoke gets exactly the IDs the user left marked (the chosen one only: the explicit keep held)');
+    check(await pageIs(w, 'revoke-result'), 'the result page');
+    check(labelText(w.w.resRemoved) === S.syncRevokeRemoved(`laptop-b (${compareLine(B)})`), `block 1: removed on this computer, by name and ID start (${labelText(w.w.resRemoved)})`);
+    check(w.w.resOffline.get_visible() && labelText(w.w.resOffline) === S.syncRevokeOffline(`office (${compareLine(O)})`), 'block 2: the computers that were offline');
+    check(labelText(w.w.resNext) === S.syncRevokeNext() && labelText(w.w.resFinish) === S.syncFinishButton(), 'block 3 and the Finish button');
+    const indexOf = widget => { let i = 0; for (let c = widget.get_parent().get_first_child(); c !== null; c = c.get_next_sibling(), i++) { if (c === widget) return i; } return -1; };
+    check(indexOf(w.w.resRemoved) >= 0 && indexOf(w.w.resRemoved) < indexOf(w.w.resOffline) && indexOf(w.w.resOffline) < indexOf(w.w.resNext) && indexOf(w.w.resNext) < indexOf(w.w.resFinish.get_parent()), 'the three blocks come in Nicole\'s order, Finish after them');
+    check([...Object.values(w.w.revokeSteps)].every(s => s.done.get_visible() && !s.spinner.get_visible()), 'every step ended with its check mark');
+    check(w.w.resReturned.get_first_child() === null, 'nothing came back');
+    w.w.resFinish.emit('clicked');
+    check(fake.count('finish') === 0, 'Finish asks first');
+    w.confirmDialog.emit('response', 'go');
+    check(await waitFor(() => fake.count('finish') === 1 && fake.count('status') >= 2), 'Finish runs finish and reads the list again');
+    await closeWin(w);
+
+    // the nuclear option from the result page, and Stop syncing from the group page: forget --all, nothing else
+    w = await open(answers());
+    await pageIs(w, 'group');
+    w.rowWidgets[0].remove.emit('clicked');
+    w.w.removeConfirm.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await pageIs(w, 'revoke-result'), 'again to the result page');
+    check(labelText(w.w.resStopAll) === S.syncStopAll(), 'the link "Stop syncing with all computers"');
+    w.w.resStopAll.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await waitFor(() => fake.count('forget') === 1), 'it runs forget');
+    check(JSON.stringify(fake.argv.find(a => a[0] === 'forget')) === JSON.stringify(['forget', '--all']), 'forget --all, no stop flag');
+    await closeWin(w);
+    w = await open(answers());
+    await pageIs(w, 'group');
+    w.w.groupStop.emit('clicked');
+    check(w.confirmDialog !== undefined && fake.count('forget') === 0 && w.confirmDialog.get_body() === S.syncStopConfirmBody() && S.syncStopConfirmBody().includes('all your computers'), 'Stop syncing asks first, in the plural; nothing ran yet');
     w.confirmDialog.emit('response', 'cancel');
     await tick(100);
     check(fake.count('forget') === 0, 'Cancel runs nothing');
-    w.w.pairedStop.emit('clicked');
-    w.confirmDialog.emit('response', 'stop');
-    check(await waitFor(() => fake.count('forget') === 1 && fake.count('status') >= 2), 'confirming runs forget and asks the status again');
+    w.w.groupStop.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await waitFor(() => fake.count('forget') === 1 && fake.count('status') >= 2), 'confirming runs forget --all and asks the status again');
+    check(JSON.stringify(fake.argv.find(a => a[0] === 'forget')) === JSON.stringify(['forget', '--all']), 'the bare forget of 0.2.5 is gone');
+    await closeWin(w);
+
+    // a removed computer that came back during the removal: the result page offers to remove it again from a fresh list
+    revokeResult = {event: 'result', removed: [B, P], returned: [P], offline: [], remaining: 1, revocation_open: true};
+    w = await open(answers());
+    await pageIs(w, 'group');
+    w.rowWidgets[0].remove.emit('clicked');
+    w.w.removeConfirm.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await pageIs(w, 'revoke-result'), 'a revoke where one came back');
+    check(!w.w.resOffline.get_visible() && w.resReturnedRows.length === 1 && labelText(w.resReturnedRows[0].label) === S.syncReturned(compareLine(P)), 'the returned computer is named, the offline block is hidden');
+    check(JSON.stringify(fake.argv.find(a => a[0] === 'revoke')) === JSON.stringify(['revoke', B, P]), 'revoke got the chosen one first and the marked row');
+    w.resReturnedRows[0].button.emit('clicked');
+    check(await pageIs(w, 'remove') && w.rm.id === P, 'Remove again: a fresh status, then the remove page for it');
+    await closeWin(w);
+    revokeResult = {event: 'result', removed: [B], returned: [], offline: [{id: O, name: 'office'}], remaining: 2, revocation_open: true};
+
+    // an engine error during the revoke: the error page, and Try again reads the status (it never repeats the removal by itself)
+    w = await open({...answers(), revoke: () => fail('E_CLI_FAILED', 'remove')});
+    await pageIs(w, 'group');
+    w.rowWidgets[0].remove.emit('clicked');
+    w.w.removeConfirm.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await pageIs(w, 'error') && w.w.errAction.get_visible(), 'a failed revoke: the error page');
+    const before = fake.count('revoke');
+    w.w.errAction.emit('clicked');
+    check(await waitFor(() => fake.count('status') === 2) && fake.count('revoke') === before, 'Try again reads the status and does not repeat the removal');
+    await closeWin(w);
+
+    // the shortcut path, with the policy switch given as on: "I still have this computer" for a row accepted here, forget <ID>
+    fake.reset();
+    Object.assign(fake.answers, {status: () => fixture('status-group-3'), forget: () => ({ok: true, result: {event: 'result', state: null, remaining: 2}})});
+    const sc = new SyncWizard({ctl: app.ctl, bridge: fake, shortcutRemove: true});
+    sc.present();
+    await pageIs(sc, 'group');
+    sc.rowWidgets[1].remove.emit('clicked');
+    check(sc.page === 'remove' && !sc.w.removeHave.get_visible(), 'switch on, an introduced row: only the lost path');
+    sc.w.removeBack.emit('clicked');
+    sc.rowWidgets[0].remove.emit('clicked');
+    check(sc.w.removeHave.get_visible() && sc.w.removeLost.get_active(), 'switch on, a row accepted here: both paths, lost chosen first');
+    sc.w.removeHave.set_active(true);
+    check(sc.rm.path === 'have' && !sc.w.removeOthers.get_visible() && !sc.w.removeLostDetail.get_visible() && sc.w.removeConfirm.get_sensitive(), 'the shortcut path has no checklist');
+    sc.w.removeConfirm.emit('clicked');
+    sc.confirmDialog.emit('response', 'go');
+    check(await waitFor(() => fake.count('forget') === 1), 'forget runs');
+    check(JSON.stringify(fake.argv.find(a => a[0] === 'forget')) === JSON.stringify(['forget', B]), 'forget <ID> with the one listed ID');
+    sc.win.close();
+    await tick(60);
+
+    // switch off (the default): the same row has no shortcut
+    w = await open({status: () => fixture('status-group-3')});
+    await pageIs(w, 'group');
+    w.rowWidgets[0].remove.emit('clicked');
+    check(!w.w.removeHave.get_visible() && !w.w.removeHaveDetail.get_visible(), 'switch off: no "I still have this computer"');
     await closeWin(w);
 
     // ---- the first start: the consent page and no engine call; "Later" writes exactly the dismissal, mode 0600
