@@ -17,7 +17,7 @@ import {
 import {AllNotesWindow} from './allnotes.js';
 import {setOpen, shouldOpen, sizeOf} from './layoutfile.js';
 import {SyncBridge} from './sync-bridge.js';
-import {wantsFirstStart, writeDismissed} from './sync-hook.js';
+import {notesSynced, wantsFirstStart, writeDismissed} from './sync-hook.js';
 import {SyncWizard} from './sync-wizard.js';
 import {NoteWindow} from './window.js';
 import * as S from './strings.js';
@@ -244,8 +244,18 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
             show = notes;
         for (const n of show)
             await openWindow(n, layout);
-        if (windows.size === 0)
+        if (windows.size === 0 && !synced())
             await newNote(null);
+    }
+
+    // 0.2.5.1: a synchronised notes folder gets no note of its own at the start (it may fill a moment later, and the new note would reach
+    // every computer). A failure of the query counts as synchronised. Starting the program again by hand (showAll) still makes one.
+    function synced() {
+        try {
+            return notesSynced({dirs, homeDir});
+        } catch {
+            return true;
+        }
     }
 
     // Another launch of the program while it runs: bring every note back (closed ones too).

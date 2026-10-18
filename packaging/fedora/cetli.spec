@@ -140,6 +140,10 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 - A machine whose notes folder is already synchronised by a Syncthing you set up by hand is detected and left exactly as it is; the window says so
 - Tests: the engine, the group rule (sync-tests/, mutants X1-X10 in sync-tests/mutants.js) and the window have their own tests
 
+* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5.1-1
+- Fix: on a synchronised notes folder the program no longer makes a new (red) note at the start. Before, a computer whose folder was still empty at the start made one, and it reached every paired computer. Starting the program again by hand still makes a note when there is none
+- Tests: a unit test for the check; not measured: the restart with two real computers (it is part of the 0.2.6 test)
+
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1
 - New: a sync window (main menu: Sync, and once at the first start): it sets up a Syncthing instance of its own for the notes folder after you press a button, and connects two computers by their device IDs. Both computers show their ID; on the waiting computer one button accepts the computer that knocks, and only after you have compared the ID shown there with the one on the other computer; or the ID of the other computer is typed in. cetli opens a network port and announces itself on the local network while the service runs
 - Supported and measured: two computers; cetli pairs a computer with exactly one other computer. Three or more computers cannot be set up in this version: a computer that is already paired refuses a second one. Not measured: a real network behind a default firewall or NAT, connections through relays, a real RHEL 10 with a user service manager. A firewall on either computer can stop the pairing: the ports are TCP and UDP 22100 and UDP 21127
