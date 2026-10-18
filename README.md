@@ -30,6 +30,9 @@ To connect two computers, open **Sync…** on both. Each shows its own ID. On th
 that knocks, after you have compared the ID shown there with the ID on the other computer (compare at least the first two
 groups); or type the ID of the other computer into the field. The window says *Connected* only when the program has proof from
 the other computer's side.
+If the sync program does not answer (it hangs, or its unit is not running: inactive, failed, start limit), the window starts it again by itself, once per opening, without a click. A unit that was switched off with `cetli-sync forget --all --stop` (disabled) is NOT started by itself: the error window then offers the button, which switches it on (`enable --now`). If that does not help, the error window offers **Try again** (starts the sync program again, touches no data) and **Reset sync** (after a
+confirmation: moves the own directory of the sync program aside under a time-stamped name, takes away the marker of cetli's own folder, and starts again at the
+ID page with a new ID; no note is touched; the other computers must remove this computer or stop syncing too). On the command line: `cetli-sync restart [--enable]`, `cetli-sync reset`. A restart that ends on a config that is not what cetli wrote (a dead end) offers **Reset sync** as well.
 
 Since 0.2.6 a group has up to 10 computers. To add a computer, open **Sync…** on any computer of the group, press **Add a
 computer** and accept the one that knocks; the new computer types the ID of that computer. The other computers learn the new one by

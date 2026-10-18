@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// `cetli-sync <verb> [--all] [--stop] [<ID>...]`: the engine of the sync window. One JSON object per line on stdout (sync/protocol.js), exactly one terminal line,
+// `cetli-sync <verb> [--all] [--stop] [--enable] [<ID>...]`: the engine of the sync window. One JSON object per line on stdout (sync/protocol.js), exactly one terminal line,
 // exit code 0 after a `result`, 1 after an `error`, 2 for a usage error. The code is never an argument: `join` reads the ID of the other computer
 // from stdin (one line), `host` reads `accept <ID>` lines from stdin and stops at once on EOF. The IDs of `forget`, `revoke`, `promote` and `ack` are
 // canonical positional arguments (sync/protocol.js parseArgs). Launcher: `gjs -m <datadir>/cetli/sync/main.js "$@"`.
@@ -16,7 +16,7 @@ import GLib from 'gi://GLib';
 const out = line => print(line);
 
 function usage() {
-    printerr('usage: cetli-sync status|setup|own-id|host|join|finish|harden | forget <ID>|--all [--stop] | revoke|promote <ID>... | ack <ID>...|--all');
+    printerr('usage: cetli-sync status|setup|own-id|host|join|finish|harden|reset | restart [--enable] | forget <ID>|--all [--stop] | revoke|promote <ID>... | ack <ID>...|--all');
     System.exit(2);
 }
 
@@ -47,7 +47,7 @@ async function main(args) {
         now: real.now, monotonic: real.monotonic, sleep: real.sleep,
         input, emit: emitEvent, log: real.log,
     });
-    const arg = verb === 'join' ? await input.firstLine() : ['forget', 'revoke', 'promote', 'ack'].includes(verb) ? {all: flags.all === true, stop: flags.stop === true, ids} : undefined;
+    const arg = verb === 'join' ? await input.firstLine() : verb === 'restart' ? {enable: flags.enable === true} : ['forget', 'revoke', 'promote', 'ack'].includes(verb) ? {all: flags.all === true, stop: flags.stop === true, ids} : undefined;
     const outcome = await engine.perform(verb, arg);
     if (outcome.result) {
         if (emitEvent(outcome.result))

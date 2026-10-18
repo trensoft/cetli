@@ -253,5 +253,30 @@
     "verb": "status",
     "rc": 0,
     "expect": "result"
+  },
+  "restart-ok.ndjson": {
+    "verb": "restart",
+    "rc": 0,
+    "expect": "result"
+  },
+  "restart-disabled.ndjson": {
+    "verb": "restart",
+    "rc": 0,
+    "expect": "result"
+  },
+  "restart-timeout.ndjson": {
+    "verb": "restart",
+    "rc": 1,
+    "expect": "error:E_SERVICE_TIMEOUT"
+  },
+  "reset-ok.ndjson": {
+    "verb": "reset",
+    "rc": 0,
+    "expect": "result"
+  },
+  "reset-fail-systemd.ndjson": {
+    "verb": "reset",
+    "rc": 1,
+    "expect": "error:E_NO_USER_SYSTEMD"
   }
 }

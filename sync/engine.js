@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The engine of the sync window (PLAN-WIZARD 0H, 0F, 7.2; PLAN-WIZARD-INTERFACE 2a, 3; 0.2.6: PLAN-0.2.6, PLAN-ADMISSION-0.2.6): the verbs status,
-// setup, own-id, host, join, forget, revoke, finish, harden, promote and ack, for a group of up to MAX_COMPUTERS computers.
+// setup, own-id, host, join, forget, revoke, finish, harden, promote and ack, for a group of up to MAX_COMPUTERS computers, and restart and reset
+// (0.2.5.2: the ways out when the sync program does not answer).
 // No Gio, no process, no file API of its own: everything is injected (`ports`), so a stub Syncthing and a stub file system run it in node.
 // What it never does: read or write the notes, read a foreign config, call the REST interface or touch an API key (it uses `syncthing cli` only),
 // remove a device nobody named (it removes only IDs in the list it just read, named by the window), remove the folder or a file, or put anything
 // of a peer on a command line or in a log (the one exception is the sanitised label of an accepted computer, as ONE `--name=` argument).
+// The one other exception is `reset` (0.2.5.2): it moves the instance directory aside (never deletes it) and takes away the marker of OUR folder.
 //
 // ports = {
 //   run:      createRunPort(...)        syncthing(sub, args, opts) -> {rc, out, tooLarge?}, systemctl(args, opts)
-//   files:    {exists(p), readText(p), writeText(p, text, mode), mkdirp(p, mode), modeOf(p), isDir(p), isSymlink(p), listNames(p)}
+//   files:    {exists(p), readText(p), writeText(p, text, mode), mkdirp(p, mode), modeOf(p), isDir(p), isSymlink(p), listNames(p),
+//              rename(from, to), removeFile(p), removeDir(p)}     the last three are used by `reset` ONLY (the instance directory and the marker)
 //   dirs:     {homeDir, notes, home}    the user's home, the core's notes directory, the dedicated instance's home
 //   now(), monotonic(), sleep(ms)       wall clock ms, monotonic ms, a timer
 //   input:    {lines() -> string[], eof() -> bool}       host only: what the window wrote on stdin
@@ -16,10 +19,10 @@
 //   timing?:  overrides of the constants below (tests)
 // }
 import {NAME_MAIN} from '../src/constants.js';
-import {ConfigEditError, PORTS_OWN, editConfig, readFolderIds, verifyConfig} from './confedit.js';
+import {ConfigEditError, PORTS_OWN, editConfig, readFolders, verifyConfig} from './confedit.js';
 import {canonicalId, displayName, isCanonicalId, parseTypedId} from './ids.js';
-import {markerPaths} from './markers.js';
-import {BACKEND_EXE, FOLDER_ID, UNIT_NAME, socketPath} from './paths.js';
+import {MARKER_NAME, markerPaths} from './markers.js';
+import {BACKEND_EXE, FOLDER_ID, MARKER_HINT_FILE, UNIT_NAME, dedicatedHome, socketPath} from './paths.js';
 import {DWELL_MS, HARDEN_INTRODUCED, MAX_COMPUTERS, MAX_PEERS, READ_CAP, REMOVED_MAX, SHORTCUT_REMOVE, wantedIntroducer} from './policy.js';
 import {parseAcceptLine} from './protocol.js';
 import {
@@ -37,6 +40,7 @@ export const TIMING = Object.freeze({
     servicePollMs: 500,
     statusWaitMs: 5000,
     dwellMs: DWELL_MS,                     // revoke: the wait between the first and the second read-back
+    systemctlMs: 120000,                   // restart and disable --now wait for the stop of the unit (systemd's own limit is 90 s)
 });
 export const PENDING_MAX_BYTES = 16 * 1024 * 1024;
 export {MAX_PEERS};                        // the number lives in policy.js (10 computers = 9 peers)
@@ -138,9 +142,29 @@ export function createEngine(ports) {
         if (!files.exists(configPath))
             return false;
         try {
-            return readFolderIds(files.readText(configPath)).includes(FOLDER_ID);
+            return readFolders(files.readText(configPath)).some(f => f.id === FOLDER_ID);
         } catch {
             return false;
+        }
+    }
+
+    // The marker of OUR folder in the notes directory, or null. Ours means: our own config.xml holds `cetli-notes` with exactly the notes path,
+    // the notes path and the marker are no links, and the marker is a directory that holds nothing or only Syncthing's hint file(s) as plain files.
+    // Anything else (a foreign marker, a link, a file of unknown name) is null and stays where it is. Read BEFORE the instance is moved.
+    function ownMarker() {
+        const path = `${dirs.notes}/${MARKER_NAME}`;
+        try {
+            const folder = readFolders(files.readText(configPath)).find(f => f.id === FOLDER_ID);
+            if (!folder || folder.path !== dirs.notes || files.isSymlink(dirs.notes))
+                return null;
+            if (!files.exists(path) || files.isSymlink(path) || !files.isDir(path))
+                return null;
+            const names = files.listNames(path);
+            if (!names.every(n => MARKER_HINT_FILE.test(n) && !files.isSymlink(`${path}/${n}`) && !files.isDir(`${path}/${n}`)))
+                return null;
+            return {path, names};
+        } catch {
+            return null;
         }
     }
 
@@ -740,6 +764,82 @@ export function createEngine(ports) {
         return {result: {event: 'result', changed: fresh.length + lift.length}};
     }
 
+
+    // Starts the unit again, the way out of "does not answer" that touches no data: clear a failed state (the start limit of a crash loop), restart
+    // (this also starts a unit that is not running: inactive, failed), wait for the daemon. The result is only that the daemon answers; the window
+    // asks `status` afterwards. A unit that is DISABLED was switched off by the user (`forget --all --stop`): without `enable` nothing at all is run after
+    // the read-only question and the result is state `disabled`; with `enable` (the user pressed the button) it is `enable --now` instead of `restart`.
+    async function restart({enable = false} = {}) {
+        if (!backendInstalled())
+            throw new Fail('E_NO_SYNCTHING');
+        if (!files.exists(configPath))
+            throw new Fail('E_CLI_FAILED');
+        let state = 'restarted';
+        await step('service', async () => {
+            recheckConfig();
+            const was = await run.systemctl(['--user', 'is-enabled', UNIT_NAME], {timeoutMs: t.systemctlMs});
+            const disabled = was.rc !== 0 && was.out.trim() === 'disabled';
+            if (disabled && !enable) {
+                state = 'disabled';
+                return;
+            }
+            await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});     // nothing to clear is not an error
+            const on = await run.systemctl(['--user', disabled ? 'enable' : 'restart', ...(disabled ? ['--now'] : []), UNIT_NAME], {timeoutMs: t.systemctlMs});
+            if (on.rc !== 0)
+                throw new Fail('E_NO_USER_SYSTEMD');
+            if (!(await daemonAnswers(t.serviceWaitMs)))
+                throw new Fail('E_SERVICE_TIMEOUT');
+        });
+        return {result: {event: 'result', state}};
+    }
+
+    // The way out when the daemon does not come back: back to "not set up", with NO call to the daemon. Stops and disables the unit, MOVES the
+    // instance directory to a time-stamped name beside it (identity, key and config stay there, nothing is deleted), and takes away the marker
+    // of our own folder (ownMarker) so that `setup` does not refuse. The notes directory and everything in it is never touched but that marker.
+    async function reset() {
+        if (dirs.home !== dedicatedHome(dirs.homeDir))
+            throw new Fail('E_INTERNAL');
+        const present = files.exists(dirs.home);
+        if (present && (files.isSymlink(dirs.home) || !files.isDir(dirs.home)))
+            throw new Fail('E_CONFIG_UNSAFE');
+        const marker = present ? ownMarker() : null;
+        await step('service', async () => {
+            const off = await run.systemctl(['--user', 'disable', '--now', UNIT_NAME], {timeoutMs: t.systemctlMs});
+            if (off.rc !== 0)
+                throw new Fail('E_NO_USER_SYSTEMD');                         // nothing was changed
+            await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});      // so that the next start is not refused
+        });
+        if (present) {
+            await step('instance', async () => {
+                const stamp = new Date(ports.now()).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+                let target = `${dirs.home}.bak-${stamp}`;
+                for (let n = 1; files.exists(target) && n < 100; n++)
+                    target = `${dirs.home}.bak-${stamp}-${n}`;
+                if (files.exists(target))
+                    throw new Fail('E_INTERNAL');
+                try {
+                    files.rename(dirs.home, target);
+                } catch {
+                    throw new Fail('E_CONFIG_UNSAFE');
+                }
+                log('reset: the instance directory was moved aside');
+            });
+        }
+        if (marker !== null) {
+            await step('folder', async () => {
+                try {
+                    for (const n of marker.names)
+                        files.removeFile(`${marker.path}/${n}`);
+                    files.removeDir(marker.path);                              // only an empty directory goes
+                } catch {
+                    log('reset: the marker was not removed');                  // `setup` will then say E_STFOLDER_EXISTS: informative, nothing lost
+                }
+            });
+        }
+        return {result: {event: 'result', state: 'not-set-up'}};
+    }
+
+
     // The common start of host and join: backend, instance, daemon, invariants, no removal open. Returns {own, cfg}.
     async function prepareConnect({forJoin = false} = {}) {
         if (!backendInstalled())
@@ -905,6 +1005,8 @@ export function createEngine(ports) {
             case 'harden': return await harden();
             case 'promote': return await promote(arg ?? {});
             case 'ack': return await ack(arg ?? {});
+            case 'restart': return await restart(arg ?? {});
+            case 'reset': return await reset();
             case 'host': return await host();
             case 'join': return await join(arg);
             default: return {error: {code: 'E_INTERNAL'}};
@@ -919,5 +1021,5 @@ export function createEngine(ports) {
         }
     }
 
-    return {perform, status, setup, forget, host, join, revoke, finish, harden, promote, ack, foreignDevices};
+    return {perform, status, setup, forget, restart, reset, host, join, revoke, finish, harden, promote, ack, foreignDevices};
 }

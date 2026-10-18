@@ -24,7 +24,7 @@ export const EXIT_RESULT = 0;
 export const EXIT_ERROR = 1;
 export const EXIT_USAGE = 2;
 
-export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack']);
+export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack', 'restart', 'reset']);
 // The verbs that take computer IDs as arguments (`forget` also takes `--all`, `ack` also `--all`).
 export const ID_VERBS = Object.freeze(['forget', 'revoke', 'promote', 'ack']);
 export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'device', 'share', 'connect', 'sync', 'freeze', 'remove', 'verify', 'dwell']);
@@ -113,6 +113,8 @@ const RESULT_SCHEMAS = {
     harden: r => isTotal(r.changed),
     promote: r => isTotal(r.changed),
     ack: r => isTotal(r.changed),
+    restart: r => r.state === 'restarted' || r.state === 'disabled',
+    reset: r => r.state === 'not-set-up',
 };
 const RESULT_KEYS = {
     status: ['state', 'own_id', 'peers', 'computers', 'max_computers', 'over_limit', 'revocation_open', 'harden_pending', 'promote_pending', 'removed', 'listener', 'up_to_date', 'notes', 'waiting'],
@@ -126,6 +128,8 @@ const RESULT_KEYS = {
     harden: ['changed'],
     promote: ['changed'],
     ack: ['changed'],
+    restart: ['state'],
+    reset: ['state'],
 };
 
 // `connected_s` is a count of whole seconds exactly when the link is stable, otherwise null (section 3, `link`).
@@ -260,7 +264,7 @@ export function parse(line, verb = null) {
 // {ok: true, outcome: {kind: 'result'|'error', ...}} or {ok: false, code}, where a missing terminal line or a code other than 0/1 is
 // E_ENGINE_DIED and a line that broke a rule is E_PROTOCOL.
 const VERB_EVENTS = {
-    status: [], setup: [], 'own-id': [], forget: [], revoke: [], finish: [], harden: [], promote: [], ack: [],
+    status: [], setup: [], 'own-id': [], forget: [], revoke: [], finish: [], harden: [], promote: [], ack: [], restart: [], reset: [],
     host: ['candidate', 'link', 'peer'],
     join: ['link', 'peer'],
 };
@@ -331,7 +335,7 @@ export function checkRun(verb, lines, rc) {
 export function argvFor(verb, flags = {}, ids = []) {
     if (!VERBS.includes(verb))
         throw new ProtocolError('unknown verb');
-    const known = verb === 'forget' ? ['all', 'stop'] : verb === 'ack' ? ['all'] : [];
+    const known = verb === 'forget' ? ['all', 'stop'] : verb === 'ack' ? ['all'] : verb === 'restart' ? ['enable'] : [];
     for (const k of Object.keys(flags)) {
         if (!known.includes(k) || typeof flags[k] !== 'boolean')
             throw new ProtocolError('unknown flag');
@@ -343,7 +347,7 @@ export function argvFor(verb, flags = {}, ids = []) {
     if (!ID_VERBS.includes(verb)) {
         if (ids.length > 0)
             throw new ProtocolError('this verb takes no ID');
-        return [verb];
+        return verb === 'restart' && flags.enable === true ? [verb, '--enable'] : [verb];
     }
     if (all && ids.length > 0)
         throw new ProtocolError('--all and IDs exclude each other');
@@ -369,7 +373,7 @@ export function parseArgs(args) {
     const flags = {};
     const ids = [];
     for (const a of rest) {
-        if (a === '--all' || a === '--stop') {
+        if (a === '--all' || a === '--stop' || a === '--enable') {
             const k = a.slice(2);
             if (Object.hasOwn(flags, k))
                 throw new ProtocolError('flag twice');

@@ -253,7 +253,7 @@ test('errors: only the four information codes are neutral (no button); E_FOREIGN
 
 test('every code of the closed list has an action; unknown and reserved codes read as the generic one', () => {
     for (const c of ERROR_CODES)
-        assert.ok(['retry', 'check', 'stop', 'edit', 'none'].includes(errorView(c).action), c);
+        assert.ok(['retry', 'restart', 'check', 'stop', 'edit', 'none'].includes(errorView(c).action), c);
     for (const c of [...RESERVED_CODES, 'E_NOPE', undefined, null, 5, '__proto__', 'toString'])
         assert.deepEqual(errorView(c), {code: 'E_INTERNAL', neutral: false, action: 'retry'}, String(c));
     assert.equal(errorView('E_BAD_ID').action, 'edit');
@@ -261,6 +261,21 @@ test('every code of the closed list has an action; unknown and reserved codes re
     assert.equal(errorView('E_HALF_STATE_OTHER').action, 'stop');
     assert.equal(errorView('E_NO_SYNCTHING').action, 'check');
     assert.equal(errorView('E_PEER_TIMEOUT').action, 'retry');
+});
+
+test('0.2.5.2: a sync program that does not answer has a restart and, as the way out, a reset; no other code has a second action', () => {
+    assert.deepEqual(errorView('E_SERVICE_TIMEOUT'), {code: 'E_SERVICE_TIMEOUT', neutral: false, action: 'restart', secondary: 'reset'});
+    for (const c of ERROR_CODES.filter(x => x !== 'E_SERVICE_TIMEOUT'))
+        assert.equal(Object.hasOwn(errorView(c), 'secondary'), false, c);
+    assert.equal(Object.hasOwn(errorView('E_NOPE'), 'secondary'), false);
+});
+
+test('0.2.5.2: after a restart that ends on E_CONFIG_UNSAFE (a dead end) the way out "reset" is offered; nowhere else, and not without a restart before', () => {
+    assert.deepEqual(errorView('E_CONFIG_UNSAFE', {afterRestart: true}), {code: 'E_CONFIG_UNSAFE', neutral: false, action: 'none', secondary: 'reset'});
+    assert.equal(Object.hasOwn(errorView('E_CONFIG_UNSAFE'), 'secondary'), false, 'the plain error stays as it was');
+    for (const c of ERROR_CODES.filter(x => x !== 'E_SERVICE_TIMEOUT' && x !== 'E_CONFIG_UNSAFE'))
+        assert.equal(Object.hasOwn(errorView(c, {afterRestart: true}), 'secondary'), false, c);
+    assert.equal(errorView('E_SERVICE_TIMEOUT', {afterRestart: true}).secondary, 'reset');
 });
 
 test('the ID rows and the compare line', () => {

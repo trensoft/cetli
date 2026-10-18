@@ -246,6 +246,10 @@ export const syncRevokeOffline = list => fill(_('These computers were offline ju
 export const syncRevokeNext = () => _('To be sure, open this list on each of your other computers and choose the same action there. Press Finish here only when you have done it everywhere: the permissions come back on only at the next reconnection, and if the removed computer is still listed on any computer, it brings the removed computer back. Until then this computer takes no additions from other computers.');
 export const syncFinishButton = () => _('Finish: I did this on all my computers');
 export const syncFinishShort = () => _('Finish');
+export const syncResetButton = () => _('Reset sync');
+export const syncResetConfirmTitle = () => _('Reset sync on this computer?');
+// Translators: Stop syncing is the name of a button in this window, keep it the same as its translation.
+export const syncResetConfirmBody = () => _('This is the last resort: this computer gets a new ID. The other computers still list the old ID of this computer: remove this computer there, or press Stop syncing there. Your notes stay on all your computers. Afterwards you enter the ID of another computer again.');
 
 export const syncInfoStfolderTitle = () => _('Sync is already set up here');
 export const syncInfoStfolderText = () => _('The notes of this computer are already synchronised by another Syncthing. cetli leaves it exactly as it is, and your sync keeps working as you set it up.');
@@ -259,7 +263,7 @@ export function syncErrorText(code, max = null) {
     switch (code) {
     case 'E_NO_SYNCTHING': return _('Syncthing is not installed on this computer.');
     case 'E_NO_USER_SYSTEMD': return _('The background service could not be started: this session has no user service manager.');
-    case 'E_SERVICE_TIMEOUT': return _('Sync was started but does not answer. Try again. To see the log, run: journalctl --user -u cetli-syncthing');
+    case 'E_SERVICE_TIMEOUT': return _('Sync was started but does not answer. Try again.');
     case 'E_CONFIG_UNSAFE': return _('The sync settings could not be prepared safely. Nothing was changed.');
     case 'E_CLI_FAILED': return _('The sync program refused a step. Try again.');
     case 'E_STFOLDER_EXISTS': return syncInfoStfolderText();

@@ -187,11 +187,12 @@ export class SyncWizard {
         w.errTitle = this._title('');
         w.errText = this._text('');
         w.errAction = this._button('', () => this._onErrorAction(), true);
+        w.errSecondary = this._button('', () => this._onErrorSecondary());
         w.errClose = this._button(S.syncClose(), () => this.win.close());
         w.errButtons = new Gtk.Box({spacing: 6});
         w.errButtons.append(w.errAction);
         w.errButtons.append(w.errClose);
-        this._addPage('error', [w.errTitle, w.errText, w.errButtons]);
+        this._addPage('error', [w.errTitle, w.errText, w.errButtons, w.errSecondary]);
     }
 
     // The waiting page. `typing`: the page of a computer with no other computer yet (the field for the other ID, the guest note, where to
@@ -422,6 +423,12 @@ export class SyncWizard {
             }
         }
         if (!out.ok) {
+            // A computer that was set up reconnects by itself: the first time the sync program does not answer in this window, it is started
+            // again once, without a click (no data is touched). If that does not help, the buttons follow. Never a loop (see _restart).
+            if (out.error.code === 'E_SERVICE_TIMEOUT' && !this.restartTried) {
+                this._restart(true);
+                return;
+            }
             this._showError(out.error.code, () => this.refresh());
             return;
         }
@@ -986,11 +993,61 @@ export class SyncWizard {
         this._openRemove(id);
     }
 
+    // The sync program does not answer: start it again (no data is touched), then ask the status. One automatic try per window (restartTried):
+    // a click on the button counts as that try too, so a click never makes a second restart behind it.
+    // The automatic try never switches on a unit the user switched off (`disabled`): then nothing ran, and the page is the same as for the silent
+    // program, with the button; the button (auto false) is the user's decision and asks for `enable --now` in that case.
+    async _restart(auto = false) {
+        this.restartTried = true;
+        this._show('checking');
+        const out = await this.bridge.run('restart', auto ? {} : {flags: {enable: true}});
+        if (this.closed)
+            return;
+        if (!out.ok) {
+            this._showError(out.error.code, () => this.refresh(), {afterRestart: true});
+            return;
+        }
+        if (out.result.state === 'disabled') {
+            this._showError('E_SERVICE_TIMEOUT', () => this.refresh());
+            return;
+        }
+        this.refresh();
+    }
+
+    // The last way out: this computer gets a new ID, the other computers have to remove it, the notes stay. The text says so before the click.
+    _confirmReset() {
+        const dialog = new Adw.MessageDialog({transient_for: this.win, modal: true, heading: S.syncResetConfirmTitle(), body: S.syncResetConfirmBody()});
+        dialog.add_response('cancel', S.syncCancel());
+        dialog.add_response('reset', S.syncResetButton());
+        dialog.set_response_appearance('reset', Adw.ResponseAppearance.DESTRUCTIVE);
+        dialog.set_default_response('cancel');
+        dialog.set_close_response('cancel');
+        dialog.connect('response', (_d, response) => {
+            if (response === 'reset')
+                this._reset();
+        });
+        this.confirmDialog = dialog;
+        dialog.present();
+    }
+
+    // `reset` puts the instance aside and answers without the sync program; then the window starts from the beginning: a new ID, the ID page.
+    async _reset() {
+        this._show('checking');
+        const out = await this.bridge.run('reset');
+        if (this.closed)
+            return;
+        if (!out.ok) {
+            this._showError(out.error.code, () => this.refresh());
+            return;
+        }
+        this._setup();
+    }
+
     // ---- errors ---------------------------------------------------------------------------------------------------------
 
     // `retry`: what "Try again" does. An information code is a neutral page: no red, no "Try again".
-    _showError(code, retry) {
-        const view = errorView(code);
+    _showError(code, retry, {afterRestart = false} = {}) {
+        const view = errorView(code, {afterRestart});
         const w = this.w;
         this.retry = retry;
         this.errAction = view.action;
@@ -1000,10 +1057,14 @@ export class SyncWizard {
             w.errText.remove_css_class(cls);
         if (!view.neutral)
             w.errText.add_css_class('cetli-error');
-        const label = {retry: S.syncTryAgain(), check: S.syncCheckAgain(), stop: S.syncStopShort()}[view.action];
+        const label = {retry: S.syncTryAgain(), restart: S.syncTryAgain(), check: S.syncCheckAgain(), stop: S.syncStopShort()}[view.action];
         w.errAction.set_visible(label !== undefined);
         if (label !== undefined)
             w.errAction.set_label(label);
+        this.errSecondary = view.secondary ?? null;
+        w.errSecondary.set_visible(this.errSecondary === 'reset');
+        if (this.errSecondary === 'reset')
+            w.errSecondary.set_label(S.syncResetButton());
         this._show('error');
     }
 
@@ -1012,8 +1073,15 @@ export class SyncWizard {
             this._confirmStop();
         else if (this.errAction === 'check')
             this.refresh();
+        else if (this.errAction === 'restart')
+            this._restart();
         else if (typeof this.retry === 'function')
             this.retry();
+    }
+
+    _onErrorSecondary() {
+        if (this.errSecondary === 'reset')
+            this._confirmReset();
     }
 
     // ---- closing --------------------------------------------------------------------------------------------------------

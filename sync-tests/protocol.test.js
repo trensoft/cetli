@@ -24,7 +24,7 @@ test('the fixture directory and index.json list the same files', () => {
 test('the fixtures the Interface file names exist (section 5, with the 0.2.5 names where the code form is reserved)', () => {
     const required = [
         'status-no-syncthing', 'status-not-set-up', 'status-stfolder-conflict', 'status-foreign-config', 'status-set-up', 'status-half',
-        'status-paired', 'status-flapping', 'status-listener-degraded', 'host-foreign-device', 'join-foreign-device', 'setup-foreign-device', 'setup-ok', 'setup-fail-systemd',
+        'status-paired', 'status-flapping', 'status-listener-degraded', 'restart-ok', 'restart-timeout', 'reset-ok', 'reset-fail-systemd', 'host-foreign-device', 'join-foreign-device', 'setup-foreign-device', 'setup-ok', 'setup-fail-systemd',
         'host-ok', 'host-expired', 'host-stdin-eof', 'join-ok', 'join-flapping', 'forget-ok', 'oversize', 'not-json', 'v2',
         // 0.2.6 (PLAN-0.2.6 3.2)
         'status-group-3', 'status-group-new', 'status-over-limit', 'status-revocation-open', 'status-returned', 'status-promote-pending', 'status-max-size',
@@ -348,7 +348,7 @@ test('the run checker: 64 KiB in total and a streaming feed that stops at the fi
 });
 
 test('argv and stdin: the verb list is closed, IDs are canonical positional arguments, and no typed text becomes an argument', () => {
-    assert.deepEqual([...VERBS], ['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack']);
+    assert.deepEqual([...VERBS], ['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack', 'restart', 'reset']);
     assert.deepEqual([...ID_VERBS], ['forget', 'revoke', 'promote', 'ack']);
     for (const v of VERBS.filter(v => !ID_VERBS.includes(v)))
         assert.deepEqual(argvFor(v), [v]);
@@ -360,6 +360,10 @@ test('argv and stdin: the verb list is closed, IDs are canonical positional argu
     assert.deepEqual(argvFor('promote', {}, [B]), ['promote', B]);
     assert.deepEqual(argvFor('ack', {}, [B]), ['ack', B]);
     assert.deepEqual(argvFor('ack', {all: true}), ['ack', '--all']);
+    assert.deepEqual(argvFor('restart', {enable: true}), ['restart', '--enable']);
+    assert.deepEqual(argvFor('restart', {enable: false}), ['restart']);
+    assert.throws(() => argvFor('restart', {stop: true}));
+    assert.throws(() => argvFor('forget', {enable: true}, [B]));
     assert.throws(() => argvFor('connect'));
     assert.throws(() => argvFor('host', {stop: true}));
     assert.throws(() => argvFor('forget', {name: 'x'}));

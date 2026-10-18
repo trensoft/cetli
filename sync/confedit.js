@@ -414,8 +414,15 @@ export function verifyConfig(xml, args) {
 // The ids of the folders our own instance holds, read from ITS config.xml (our own home, free to read; PLAN-WIZARD 0H.7 "Is it ours?").
 // Only the id attribute of <folder> elements directly under <configuration> is returned; nothing else of the file leaves this function.
 export function readFolderIds(xml) {
+    return readFolders(xml).map(f => f.id);
+}
+
+// The same elements with their path attribute (null when there is none): the engine's `reset` asks whether the marker in the notes folder is
+// the marker of OUR folder, which needs the path as well as the id.
+export function readFolders(xml) {
     const doc = parse(xml);
     if (doc.root.name !== 'configuration')
         throw new ConfigEditError(REASONS.NOT_UNDERSTOOD, 'configuration', doc.line(doc.root.start));
-    return doc.root.children.filter(n => n.name === 'folder' && typeof n.attrs.id === 'string' && n.attrs.id !== '').map(n => n.attrs.id);
+    return doc.root.children.filter(n => n.name === 'folder' && typeof n.attrs.id === 'string' && n.attrs.id !== '')
+        .map(n => ({id: n.attrs.id, path: typeof n.attrs.path === 'string' ? n.attrs.path : null}));
 }
