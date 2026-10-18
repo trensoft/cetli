@@ -363,7 +363,7 @@ let skipped = 0;
 try {
     const clone = to => {
         fs.mkdirSync(to);
-        for (const d of ['app', 'app-tests', 'po', 'src', 'tests'])
+        for (const d of ['app', 'app-tests', 'po', 'src', 'sync', 'tests'])
             copyTree(path.join(root, d), path.join(to, d));
         fs.copyFileSync(path.join(root, 'package.json'), path.join(to, 'package.json'));
     };
