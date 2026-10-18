@@ -214,6 +214,7 @@ async function scenario() {
     // the 2 s quiet rule: saved and clean, but a key 1 s ago: a remote version waits, then it is taken with its colour
     w3.buffer.insert_at_cursor('d', -1);
     await sleep(450);
+    await until(() => !w3._dirty() && fileRec(id3).text === 'abcd');       // a slow save (fsync under load) is waited for, not a failure of the step
     check(!w3._dirty() && fileRec(id3).text === 'abcd', 'the key was saved: the window is clean');
     const startColor3 = w3.color;
     const remoteColor = NOTE_COLOR_IDS.find(c => c !== startColor3);
