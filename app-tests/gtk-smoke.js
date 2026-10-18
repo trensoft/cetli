@@ -27,6 +27,9 @@ const check = (cond, label) => {
     }
 };
 const sleep = ms => new Promise(r => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => { r(); return GLib.SOURCE_REMOVE; }));
+// Waits for a condition instead of a fixed time: under load the save timer, the fsync and the monitor can take seconds. A condition
+// that never comes true is still a failure, after `limit` ms.
+const until = async (cond, limit = 10000) => { for (let t = 0; t < limit && !cond(); t += 50) await sleep(50); };
 const readText = p => new TextDecoder().decode(GLib.file_get_contents(p)[1]);
 const exists = p => GLib.file_test(p, GLib.FileTest.EXISTS);
 const noteFiles = () => {
@@ -130,7 +133,7 @@ async function scenario() {
     remoteWrite(id, {rev: fileRec(id).rev + 1, updated: new Date(Date.now() + 3000).toISOString(), device: 'b5b5b5b5', text: 'second remote'});
     await sleep(450);
     check(w._bufferText().endsWith('!') && w._bufferText() !== 'second remote', 'typing window keeps its text');
-    await sleep(900);
+    await until(() => fileRec(id).text.endsWith('!') && noteFiles().length === 2);
     check(fileRec(id).text.endsWith('!'), 'local text won');
     check(noteFiles().length === 2, `the other version was kept as a copy (${noteFiles().length} files)`);
 
