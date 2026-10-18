@@ -217,11 +217,13 @@ export const syncOverLimit = (n, max) => fill(_('This group has %s computers, mo
 export const syncNewBanner = n => fill(_('%s computers were added to your group since you last looked. Check that you know all of them.'), String(n));
 export const syncNewAllMine = () => _('They are all mine');
 export const syncNewNotMine = () => _('Not mine, remove');
-export const syncPromoteBanner = () => _('Since version 0.2.6, a computer you accepted can add other computers to your group without asking you again. Allow this for the computers you already accepted? Do it on each of your computers.');
+export const syncPromoteNote = () => _('Allow this for the computers you already accepted? A pair of computers needs your Allow on both of them: do it on this computer and on the other one too.');
 export const syncPromoteAllow = () => _('Allow');
 export const syncPromoteLater = () => _('Not now');
 export const syncFreezeBanner = () => _('A removal is not finished on this computer. New computers cannot be added until you press Finish.');
 export const syncReturned = idStart => fill(_('A removed computer is back (ID starts %s). Remove it again?'), idStart);
+export const syncRemovedBanner = idStart => fill(_('A computer you removed here (ID starts %s). Add it again only if you recognise it; you still compare its ID and accept it.'), idStart);
+export const syncReaddButton = () => _('Add again');
 export const syncRemoveButton = () => _('Remove');
 export const syncShowOwnId = () => _('Show the ID of this computer');
 export const syncStopShort = () => _('Stop syncing');

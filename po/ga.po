@@ -608,9 +608,8 @@ msgstr ""
 
 #: app/strings.js
 msgid ""
-"Since version 0.2.6, a computer you accepted can add other computers to your "
-"group without asking you again. Allow this for the computers you already "
-"accepted? Do it on each of your computers."
+"Allow this for the computers you already accepted? A pair of computers needs "
+"your Allow on both of them: do it on this computer and on the other one too."
 msgstr ""
 
 #: app/strings.js
@@ -630,6 +629,17 @@ msgstr ""
 #: app/strings.js
 #, javascript-format
 msgid "A removed computer is back (ID starts %s). Remove it again?"
+msgstr ""
+
+#: app/strings.js
+#, javascript-format
+msgid ""
+"A computer you removed here (ID starts %s). Add it again only if you "
+"recognise it; you still compare its ID and accept it."
+msgstr ""
+
+#: app/strings.js
+msgid "Add again"
 msgstr ""
 
 #: app/strings.js

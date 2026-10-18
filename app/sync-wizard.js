@@ -229,6 +229,8 @@ export class SyncWizard {
         if (typing) {
             u.newStart = this._text(S.syncNewStart());
             widgets.push(u.newStart);
+            u.removed = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6});         // the computers removed here (after a removal of all)
+            widgets.push(u.removed);
         }
         widgets.push(u.ownIdCaption, u.ownId.box, u.ownIdCopy, u.ownIdHint, waitBox, u.cand);
         if (typing) {
@@ -288,10 +290,11 @@ export class SyncWizard {
         w.promoteAllow = this._button(S.syncPromoteAllow(), () => this._promote(), true);
         w.promoteLater = this._button(S.syncPromoteLater(), () => this._promoteLater());
         w.bnPromote = this._banner([w.promoteAllow, w.promoteLater]);
-        w.bnPromote.label.set_label(S.syncPromoteBanner());
+        w.bnPromote.label.set_label(`${S.syncTrustSentence()} ${S.syncPromoteNote()}`);
         w.newAllMine = this._button(S.syncNewAllMine(), () => this._ackNew());
         w.bnNew = this._banner([w.newAllMine]);
         w.bnReturned = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6});
+        w.bnRemoved = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6});
         w.groupListener = this._text('');
         w.groupListener.set_visible(false);
         w.groupRows = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 8});
@@ -312,7 +315,7 @@ export class SyncWizard {
         for (const b of [w.groupAdd, w.groupShowOwn, w.groupStop, w.groupClose])
             buttons.append(b);
         this._addPage('group', [this._title(S.syncGroupTitle()), w.groupCount, w.bnFreeze.box, w.bnOver.box, w.bnFull.box, w.bnPromote.box, w.bnNew.box,
-            w.bnReturned, w.groupListener, w.groupRows, buttons, w.groupOwn, w.groupFootnote]);
+            w.bnReturned, w.bnRemoved, w.groupListener, w.groupRows, buttons, w.groupOwn, w.groupFootnote]);
     }
 
     // The remove page, the page that shows the removal running, and the result page.
@@ -436,6 +439,7 @@ export class SyncWizard {
         if (page === 'ids') {
             this.ownId = status.own_id;
             this._enterIds();
+            this.removedRows = this._fillRemoved(this.w.removed, groupView(status).removedIds);
             this._setListenerNote(this.w.idsListener, status);
         } else if (page === 'group') {
             this.ownId = status.own_id;
@@ -469,6 +473,7 @@ export class SyncWizard {
         show(w.bnPromote, v.promoteIds.length > 0 && !this.promoteDismissed);
         show(w.bnNew, v.newIds.length > 0, v.newIds.length > 0 ? S.syncNewBanner(v.newIds.length) : null);
         this._fillReturned(v);
+        this.removedRows = this._fillRemoved(w.bnRemoved, v.removedIds);
         this.rowWidgets = this._fillRows(w.groupRows, v);
         w.groupAdd.set_sensitive(!v.addBlocked);
         this._setListenerNote(w.groupListener, status);
@@ -490,6 +495,23 @@ export class SyncWizard {
             w.bnReturned.append(banner.box);
             this.returnedRows.push({id, label: banner.label, button});
         }
+    }
+
+    // One banner per computer this computer removed that is not in the list: "Add again" lifts the tombstone (`ack`), after that `host`
+    // offers the computer when it knocks and the user compares its ID and accepts as for any other. The widgets are returned (the tests read them).
+    _fillRemoved(container, ids) {
+        for (let c = container.get_first_child(); c !== null; c = container.get_first_child())
+            container.remove(c);
+        const rows = [];
+        for (const id of ids) {
+            const button = this._button(S.syncReaddButton(), () => this._runThenRefresh('ack', {ids: [id]}));
+            const banner = this._banner([button]);
+            banner.label.set_label(S.syncRemovedBanner(compareLine(id)));
+            banner.box.set_visible(true);
+            container.append(banner.box);
+            rows.push({id, label: banner.label, button});
+        }
+        return rows;
     }
 
     // One card per computer in `container`; the widgets are returned (the tests read them).

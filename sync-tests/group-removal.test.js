@@ -5,9 +5,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorld, OTHER, OWN, PEER, THIRD} from './support/world.js';
 import {makeId} from './support/ids.js';
-import {DWELL_MS, wantedIntroducer} from '../sync/policy.js';
+import {DWELL_MS, REMOVED_MAX, wantedIntroducer} from '../sync/policy.js';
+import {createEngine} from '../sync/engine.js';
 import {emit} from '../sync/protocol.js';
-import {parseState} from '../sync/state.js';
+import {FREEZE_MAX, parseState} from '../sync/state.js';
 
 const perform = (w, verb, arg) => w.engine().perform(verb, arg);
 const ids = n => Array.from({length: n}, (_, i) => makeId(i + 1));
@@ -193,8 +194,9 @@ test('revoke runs in foreign-config and over the limit: it is the way out', asyn
     cap.group(many);
     const rc = await perform(cap, 'revoke', {ids: [many[29]]});
     assert.deepEqual(rc.result.removed, [many[29]]);
-    assert.equal(stateOf(cap).freeze.ids.length, 30, 'a list over the cap is frozen too, up to the cap of the state file');
-    assert.equal([...cap.devices.values()].some(d => d.introducer), false, 'no listed peer is an introducer after the freeze');
+    assert.equal(FREEZE_MAX, 16, 'the cap of the frozen IDs is the read cap, not 10');
+    assert.equal(stateOf(cap).freeze.ids.length, FREEZE_MAX, 'a list over the cap is frozen up to the cap of the state file, and every touched peer is recorded');
+    assert.equal(parseState(cap.fsMap.get(STATE(cap)).text).ok, true, 'the file with a full freeze list is a valid file');
 });
 
 test('T-N13: the result names exactly the remaining peers that are not connected after the dwell, and no other', async () => {
@@ -493,4 +495,230 @@ test('counts above 99 still fit the contract: remaining of a big list (a hostile
     const r = await perform(w, 'revoke', {ids: [many[0]]});
     assert.equal(r.result.remaining, 149);
     valid('revoke', r.result);
+});
+
+// ---- PLAN-ADMISSION-0.2.6 section 10: the conditions the gate checks -----------------------------------------------------------
+
+// every write of a run must be one of: an introducer flag set to false on a LISTED peer, or a delete of a NAMED ID (its share or its device)
+const onlyFlagsAndNamed = (w, listed, named) => {
+    for (const a of argvs(w).filter(isWrite)) {
+        if (a.includes('introducer')) {
+            assert.deepEqual([a.at(-2), a.at(-1)], ['set', 'false'], `a flag is only lowered: ${a.join(' ')}`);
+            assert.ok(listed.includes(a[a.indexOf('introducer') - 1]), `a listed peer: ${a.join(' ')}`);
+        } else {
+            assert.equal(a.at(-1), 'delete', `only deletions besides the flags: ${a.join(' ')}`);
+            assert.ok(named.some(id => a.includes(id)), `a named ID: ${a.join(' ')}`);
+        }
+    }
+};
+
+test('section 10 point 1: revoke and forget <ID> in foreign-config and over-limit write only introducer flags (down) and the named deletions; an ID that was not read in that run is E_BAD_ID', async () => {
+    for (const label of ['foreign-config', 'over-limit', 'over the read cap']) {
+        const w = await ready({policy: {shortcutRemove: true}});
+        const list = ids(label === 'over the read cap' ? 20 : 12);
+        w.group(list);
+        if (label === 'foreign-config')
+            w.devices.get(list[0]).autoAcceptFolders = true;
+        const st = (await perform(w, 'status')).result;
+        assert.equal(label === 'foreign-config' ? st.state : st.over_limit, label === 'foreign-config' ? 'foreign-config' : true, label);
+        w.calls.length = 0;
+        const before = snapshot(w);
+        for (const bad of [{ids: [OTHER]}, {ids: [list[0], OTHER]}, {ids: [OWN]}, {ids: []}]) {
+            assert.deepEqual(await perform(w, 'revoke', bad), {error: {code: 'E_BAD_ID'}}, `${label} ${JSON.stringify(bad)}`);
+        }
+        assert.equal(argvs(w).filter(isWrite).length, 0, `${label}: nothing written for a bad list`);
+        assert.equal(snapshot(w), before);
+        assert.equal(w.fsMap.has(STATE(w)), false, `${label}: not even the state file`);
+        const named = [list[list.length - 1], list[1]];
+        const r = await perform(w, 'revoke', {ids: named});
+        assert.deepEqual(r.result.removed, named, label);
+        onlyFlagsAndNamed(w, list, named);
+        assert.ok(argvs(w).filter(isWrite).some(a => a.includes('introducer')), `${label}: the freeze lowered flags`);
+        assert.ok(stateOf(w).freeze.ids.length <= FREEZE_MAX);
+        for (const id of list.filter(i => !named.includes(i)))
+            assert.equal(w.devices.has(id), true, `${label}: the rest of the list is untouched`);
+    }
+    // the shortcut in foreign-config: one directly accepted device, nothing else
+    const f = await ready({policy: {shortcutRemove: true}});
+    const [a, b] = ids(2);
+    f.pair(a, {introducer: true});
+    f.pair(b, {introducer: true});
+    f.devices.get(b).autoAcceptFolders = true;
+    f.calls.length = 0;
+    assert.deepEqual((await perform(f, 'forget', {ids: [a]})).result.remaining, 1);
+    onlyFlagsAndNamed(f, [], [a]);
+});
+
+test('section 10 point 3: forget <ID> on an introduced row is E_BAD_ID in the ENGINE even with the switch on, zero writes; on a directly accepted row it works', async () => {
+    const {w, a, b, c} = await makeGroup({policy: {shortcutRemove: true}});
+    for (const id of [b, c]) {
+        w.calls.length = 0;
+        assert.deepEqual(await perform(w, 'forget', {ids: [id]}), {error: {code: 'E_BAD_ID'}});
+        assert.equal(argvs(w).filter(isWrite).length, 0);
+        assert.equal(w.fsMap.has(STATE(w)), false);
+    }
+    assert.equal((await perform(w, 'forget', {ids: [a]})).result.remaining, 3);
+    // with the switch off (the value of the release) even the directly accepted row is refused
+    const off = await makeGroup({policy: {shortcutRemove: false}});
+    assert.deepEqual(await perform(off.w, 'forget', {ids: [off.a]}), {error: {code: 'E_BAD_ID'}});
+});
+
+test('section 10 point 4: harden only lowers - it never raises a flag, never deletes, never touches a directly accepted device', async () => {
+    const w = await ready({policy: {hardenIntroduced: true}});
+    const [a, b, c, d] = ids(4);
+    w.pair(a, {introducer: false});                              // a 0.2.5 pair: off, and harden must not turn it on
+    w.pair(d, {introducer: true});
+    w.introduce(b, d, {introducer: true});                       // the daemon copied the flag
+    w.introduce(c, d, {introducer: false});                      // already down
+    connectAll(w);
+    const before = snapshot(w);
+    w.calls.length = 0;
+    assert.deepEqual(await perform(w, 'harden'), {result: {event: 'result', changed: 1}});
+    const writes = argvs(w).filter(isWrite);
+    assert.equal(writes.length, 1);
+    assert.deepEqual(writes[0].slice(-3), ['introducer', 'set', 'false']);
+    assert.equal(writes[0].includes(b), true);
+    assert.equal(writes.some(x => x.at(-1) === 'true' || x.includes('delete') || x.includes('add')), false);
+    assert.deepEqual([w.devices.get(a).introducer, w.devices.get(d).introducer, w.devices.get(b).introducer, w.devices.get(c).introducer], [false, true, false, false]);
+    const after = JSON.parse(snapshot(w));
+    assert.deepEqual(after[0].map(([id]) => id).sort(), JSON.parse(before)[0].map(([id]) => id).sort(), 'no device added or removed');
+    assert.deepEqual(await perform(w, 'harden'), {result: {event: 'result', changed: 0}});
+});
+
+test('section 10 point 2: promote is refused in foreign-config, over the limit and while a removal is open, with zero writes; it raises only directly accepted devices that are off', async () => {
+    const mk = async () => {
+        const w = await ready();
+        const [a, b, c] = ids(3);
+        w.pair(a, {introducer: false});
+        w.pair(b, {introducer: true});
+        w.introduce(c, b, {introducer: false});
+        connectAll(w);
+        return {w, a, b, c};
+    };
+    const fo = await mk();
+    fo.w.devices.get(fo.b).autoAcceptFolders = true;
+    const ov = await ready();
+    const list = ids(11);
+    list.forEach((id, i) => ov.pair(id, {introducer: i !== 0}));
+    const re = await mk();
+    await perform(re.w, 'revoke', {ids: [re.c]});
+    for (const [label, w, id, code] of [['foreign-config', fo.w, fo.a, 'E_FOREIGN_DEVICE'], ['over-limit', ov, list[0], 'E_GROUP_FULL'], ['revocation-open', re.w, re.a, 'E_REVOCATION_OPEN']]) {
+        w.calls.length = 0;
+        assert.deepEqual(await perform(w, 'promote', {ids: [id]}), {error: {code}}, label);
+        assert.equal(argvs(w).filter(isWrite).length, 0, label);
+    }
+    const ok = await mk();
+    ok.w.calls.length = 0;
+    assert.deepEqual(await perform(ok.w, 'promote', {ids: [ok.a, ok.b]}), {result: {event: 'result', changed: 1}}, 'b is on already');
+    const writes = argvs(ok.w).filter(isWrite);
+    assert.deepEqual(writes.map(x => [x[x.indexOf('introducer') - 1], x.at(-1)]), [[ok.a, 'true']]);
+    assert.equal(ok.w.devices.get(ok.c).introducer, false, 'an introduced device is never promoted');
+});
+
+test('section 10 point 5 (F4): host reads the device list again right before the add; a computer that is listed by then, or a tombstone, is never made a directly accepted one', async () => {
+    for (const how of ['introduced', 'tombstone']) {
+        const w = await ready();
+        const [a, b] = ids(2);
+        w.pair(a, {introducer: true});
+        w.introduce(b, a);
+        connectAll(w);
+        w.at(1000, x => { x.pending[PEER] = {time: new Date(x.clock).toISOString().replace(/\.\d+Z$/, 'Z'), name: 'new-laptop', address: ''}; });
+        w.at(4000, x => x.write(`accept ${PEER}\n`));
+        const ports = w.ports();
+        const real = w.run;
+        let prev = null;
+        ports.run = {
+            syncthing: async (sub, args, opts) => {
+                const key = sub === 'cli' ? args.join(' ') : sub;
+                // two device list calls in a row: the second is the re-read of the accept sequence (a poll is `show pending` then `list`)
+                if (key === 'config devices list' && prev === 'config devices list') {
+                    if (how === 'introduced')
+                        w.introduce(PEER, a, {name: 'pc-new'});
+                    else
+                        w.put(STATE(w), `${JSON.stringify({v: 1, ack: [], tomb: [PEER], freeze: null})}\n`, 0o600);
+                }
+                prev = key;
+                return real.syncthing(sub, args, opts);
+            },
+            systemctl: real.systemctl,
+        };
+        const r = await createEngine(ports).perform('host');
+        assert.deepEqual(r.error?.code, 'E_PENDING_AMBIGUOUS', how);
+        assert.equal(argvs(w).some(x => x.includes('add') && x.includes(PEER)), false, `${how}: the add never ran`);
+        if (how === 'introduced')
+            assert.equal(w.devices.get(PEER).introducedBy, a, 'an introduced device stays introduced');
+        else
+            assert.equal(w.devices.has(PEER), false);
+    }
+});
+
+test('section 10 point 6: finish refuses while a tombstoned ID is in the device list, and works from an unreadable state file; the freeze ends only after the flags hold', async () => {
+    const {w, a, b} = await makeGroup();
+    await perform(w, 'revoke', {ids: [b]});
+    w.introduce(b, a);                                           // it is back
+    w.calls.length = 0;
+    assert.deepEqual(await perform(w, 'finish'), {error: {code: 'E_REVOCATION_OPEN'}});
+    assert.equal(argvs(w).filter(isWrite).length, 0);
+    assert.equal(stateOf(w).freeze !== null, true, 'still frozen');
+    // order of finish: the flags first and the read-back, then the state file that closes the freeze (a crash leaves a freeze that is simply finished again)
+    const x = await makeGroup();
+    await perform(x.w, 'revoke', {ids: [x.b]});
+    const order = [];
+    const real = x.w.run;
+    const realWrite = x.w.files.writeText;
+    x.w.files.writeText = (p, text, mode) => { if (p === STATE(x.w)) order.push('state'); return realWrite(p, text, mode); };
+    const ports = x.w.ports();
+    ports.run = {syncthing: async (sub, args, opts) => { if (sub === 'cli' && args.includes('introducer')) order.push('flag'); return real.syncthing(sub, args, opts); }, systemctl: real.systemctl};
+    await createEngine(ports).perform('finish');
+    assert.deepEqual(order.filter((v, i) => v !== order[i - 1]), ['flag', 'state'], 'flags, then the state file');
+    assert.equal(stateOf(x.w).freeze, null);
+    assert.equal(x.w.devices.get(x.d).introducer, true);
+});
+
+test('section 10 point 7 (F7): a tombstone is lifted by the user (ack <ID>, "add again"), status names the removed computers, and host offers the computer again', async () => {
+    const {w, a, b} = await makeGroup();
+    const r = await perform(w, 'revoke', {ids: [b]});
+    assert.deepEqual(r.result.removed, [b]);
+    const s0 = (await perform(w, 'status')).result;
+    assert.deepEqual(s0.removed, [b], 'the removed computer is named so the window can offer "add again"');
+    valid('status', s0);
+    assert.equal(s0.peers.some(p => p.id === b), false);
+    await perform(w, 'finish');
+    // lift: only an ID that is a tombstone here (or in the list); anything else is E_BAD_ID with zero writes
+    w.calls.length = 0;
+    assert.deepEqual(await perform(w, 'ack', {ids: [OTHER]}), {error: {code: 'E_BAD_ID'}});
+    assert.deepEqual(await perform(w, 'ack', {ids: [b, OTHER]}), {error: {code: 'E_BAD_ID'}});
+    assert.equal(stateOf(w).tomb.includes(b), true, 'a bad list lifts nothing');
+    const lifted = await perform(w, 'ack', {ids: [b]});
+    assert.deepEqual(lifted, {result: {event: 'result', changed: 1}});
+    valid('ack', lifted.result);
+    assert.equal(argvs(w).filter(isWrite).length, 0, 'only the state file changes');
+    assert.equal(stateOf(w).tomb.includes(b), false);
+    assert.deepEqual((await perform(w, 'status')).result.removed, []);
+    assert.deepEqual(await perform(w, 'ack', {ids: [b]}), {error: {code: 'E_BAD_ID'}}, 'a second time it is not a tombstone any more');
+    // the lifted computer is now a candidate of host, which still needs the click
+    w.at(w.mono + 3000, x => { x.pending[b] = {time: new Date(x.clock).toISOString().replace(/\.\d+Z$/, 'Z'), name: 'pc-b', address: ''}; });
+    w.at(w.mono + 7000, x => x.write(`accept ${b}\n`));
+    w.connections.set(b, true);
+    const h = await perform(w, 'host');
+    assert.equal(h.result?.peer?.id, b, JSON.stringify(h));
+    assert.equal(w.devices.get(b).introducedBy, '');
+    assert.equal(w.devices.get(a).introducedBy, '');
+});
+
+test('status.removed: the newest REMOVED_MAX tombstones that are not in the list, newest first; a tombstone that is in the list is a returned row, not a removed one', async () => {
+    const w = await ready();
+    const list = ids(6);
+    const [a, ...gone] = list;
+    w.pair(a, {introducer: true});
+    putState(w, {ack: [a], tomb: gone});
+    const s = (await perform(w, 'status')).result;
+    assert.deepEqual(s.removed, gone.slice(-REMOVED_MAX).reverse());
+    valid('status', s);
+    const back = await ready();
+    back.pair(a, {introducer: true});
+    putState(back, {ack: [a], tomb: [a, gone[0]]});
+    const sb = (await perform(back, 'status')).result;
+    assert.deepEqual(sb.removed, [gone[0]]);
+    assert.equal(sb.peers[0].returned, true);
 });

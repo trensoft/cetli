@@ -95,7 +95,7 @@ class FakeBridge {
         const answer = this.answers[verb] ?? (() => fail('E_INTERNAL'));
         const done = Promise.resolve().then(() => answer(opts)).then(out => {
             if (verb === 'status' && out.ok)
-                this.listed = new Set(out.result.peers.map(p => p.id));
+                this.listed = new Set([...out.result.peers.map(p => p.id), ...(out.result.removed ?? [])]);   // a removed computer is named by the status too ("Add again")
             return out;
         });
         return {done, accept: () => false, stop: () => done};
@@ -416,7 +416,7 @@ async function scenario() {
 
     w = await open({status: () => fixture('status-promote-pending'), promote: () => ({ok: true, result: {event: 'result', changed: 1}})});
     await pageIs(w, 'group');
-    check(w.w.bnPromote.box.get_visible() && labelText(w.w.bnPromote.label) === S.syncPromoteBanner() && labelText(w.w.promoteAllow) === S.syncPromoteAllow() && labelText(w.w.promoteLater) === S.syncPromoteLater(), 'the promote consent banner with Allow and Not now');
+    check(w.w.bnPromote.box.get_visible() && labelText(w.w.bnPromote.label) === `${S.syncTrustSentence()} ${S.syncPromoteNote()}` && labelText(w.w.promoteAllow) === S.syncPromoteAllow() && labelText(w.w.promoteLater) === S.syncPromoteLater(), 'the promote consent banner with Allow and Not now');
     w.w.promoteLater.emit('clicked');
     check(!w.w.bnPromote.box.get_visible() && fake.count('promote') === 0, 'Not now hides it and runs nothing');
     await closeWin(w);
@@ -433,6 +433,21 @@ async function scenario() {
     check(!w.w.groupAdd.get_sensitive(), 'Add is off while a removed computer is back');
     w.returnedRows[0].button.emit('clicked');
     check(w.page === 'remove' && w.rm.id === P && w.rm.path === 'lost', 'Remove it again: the remove page for that row, the lost path');
+    await closeWin(w);
+
+    // a removed computer that is not in the list: "Add again" runs ack for exactly that ID (the tombstone is lifted), on the group page and on the ID page
+    const removedId = fixture('status-removed').result.removed[0];
+    w = await open({status: () => fixture('status-removed'), ack: () => ({ok: true, result: {event: 'result', changed: 1}})});
+    await pageIs(w, 'group');
+    check(w.removedRows.length === 1 && labelText(w.removedRows[0].label) === S.syncRemovedBanner(compareLine(removedId)) && labelText(w.removedRows[0].button) === S.syncReaddButton(), 'a removed computer: its banner with the ID start and Add again');
+    check(w.w.groupAdd.get_sensitive(), 'a removed computer does not stop Add');
+    w.removedRows[0].button.emit('clicked');
+    check(await waitFor(() => fake.count('ack') === 1) && JSON.stringify(fake.argv.find(a => a[0] === 'ack')) === JSON.stringify(['ack', removedId]), 'Add again runs ack for that one ID');
+    check(await waitFor(() => fake.count('status') >= 2), 'and the list is read again');
+    await closeWin(w);
+    w = await open({status: () => fixture('status-set-up', {removed: [removedId]})});
+    await pageIs(w, 'ids');
+    check(w.removedRows.length === 1 && w.w.removed.get_first_child() !== null, 'a computer with no other computer shows the removed ones on the ID page too');
     await closeWin(w);
 
     w = await open({status: () => fixture('status-revocation-open'), finish: () => ({ok: true, result: {event: 'result', revocation_open: false}})});

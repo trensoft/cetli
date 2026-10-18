@@ -8,6 +8,9 @@ export const MAX_COMPUTERS = 10;
 export const MAX_PEERS = MAX_COMPUTERS - 1;
 // Device-list lines read before `over-limit` is answered without one `dump-json` per device (Nicole 3.5: "16").
 export const READ_CAP = MAX_COMPUTERS + 6;
+// Removed computers `status` names (tombstoned IDs that are not in the device list), newest first: the window offers "add again" for them.
+// Three keep the largest status line under the 3500 byte rule (T-N25).
+export const REMOVED_MAX = 3;
 
 // V-A2: introduced devices get `introducer=false` (the delegation depth stays 1). Needs M-J5; the value is `false` until it is measured.
 export const HARDEN_INTRODUCED = false;

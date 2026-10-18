@@ -36,7 +36,8 @@ computer** and accept the one that knocks; the new computer types the ID of that
 themselves. A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all
 your computers. **Sync…** shows how each computer came into the group and guides you through the removal, and it never claims that a
 computer is removed from the whole group, only from the one it runs on. If you paired computers with 0.2.5, open **Sync…** on each of
-them and allow the new rule once. **Stop syncing** removes all other computers and their shares; it never removes the folder or a
+them and allow the new rule once: a pair works under the new rule only when it is allowed on both of its computers. A computer you removed
+is not offered again when it knocks; **Add again** in **Sync…** lifts that, and you still compare its ID and accept it. **Stop syncing** removes all other computers and their shares; it never removes the folder or a
 note. Going back to 0.2.5 needs **Stop syncing** first.
 
 What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): up to four Syncthing instances on one machine

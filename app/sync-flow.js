@@ -98,6 +98,9 @@ export function promoteIds(status) {
     return peersOf(status).filter(p => (p.introduced_by === null || p.introduced_by === undefined) && p.introducer === false).map(p => p.id);
 }
 
+// The computers this computer removed and that are not in the list now (tombstones, newest first): the page offers "add again" for them.
+export const removedIds = status => Array.isArray(status?.removed) ? status.removed : [];
+
 // What the group page shows besides the rows. Every banner is hidden when its flag is false.
 export function groupView(status) {
     const peers = peersOf(status);
@@ -118,6 +121,7 @@ export function groupView(status) {
         promoteIds: promoteIds(status),
         newIds,
         returnedIds,
+        removedIds: removedIds(status),
         // the cases in which the engine refuses `host` (full, over the limit, a removal open or a removed computer back); the button says so
         // up front, the engine stays the one that decides
         addBlocked: full || overLimit || revocationOpen || returnedIds.length > 0,

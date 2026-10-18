@@ -248,5 +248,10 @@
     "verb": "finish",
     "rc": 1,
     "expect": "error:E_REVOCATION_OPEN"
+  },
+  "status-removed.ndjson": {
+    "verb": "status",
+    "rc": 0,
+    "expect": "result"
   }
 }

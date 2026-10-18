@@ -10,11 +10,12 @@
 // A missing file is a fresh state. A file that does not parse, has the wrong shape or an ID that is not canonical is NOT fresh: it reads as
 // an open freeze with empty sets (fail closed: host, join and setup are refused), and `finish` repairs it (PLAN-0.2.6 F6).
 import {isCanonicalId} from './ids.js';
+import {READ_CAP} from './policy.js';
 
 export const STATE_FILE = 'cetli-sync-state.json';
 export const ACK_MAX = 64;
 export const TOMB_MAX = 64;
-export const FREEZE_MAX = 64;                       // every peer of a group that is over the limit, and a list over the cap up to this many
+export const FREEZE_MAX = READ_CAP;                 // the read cap, not 10: every peer a revoke can touch is recorded (PLAN-ADMISSION 2.4, 10)
 
 export const freshState = () => ({v: 1, ack: [], tomb: [], freeze: null});
 // What an unreadable file means: the freeze is open and nothing is known.

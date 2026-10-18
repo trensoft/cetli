@@ -14,7 +14,7 @@
 // harden, promote and ack are new; `forget` takes one ID or `--all`; two new information codes. All of it is additive in v 1.
 
 import {displayName, isCanonicalId, ID_RAW_MAX} from './ids.js';
-import {MAX_COMPUTERS, MAX_PEERS} from './policy.js';
+import {MAX_COMPUTERS, MAX_PEERS, REMOVED_MAX} from './policy.js';
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_LINE_BYTES = 4 * 1024;
@@ -99,7 +99,7 @@ const isGroupPeer = p => isObj(p) && isCanonicalId(p.id) && isName(p.name) && id
 const RESULT_SCHEMAS = {
     status: r => STATUS_STATES.includes(r.state) && idOrNull(r.own_id) && Array.isArray(r.peers) && r.peers.length <= MAX_COMPUTERS && r.peers.every(isGroupPeer) &&
         (r.computers === null || (Number.isInteger(r.computers) && r.computers >= 1 && r.computers <= 1e6)) && isSmall(r.max_computers) && r.max_computers >= 2 &&
-        isBool(r.over_limit) && isBool(r.revocation_open) && isSmall(r.harden_pending) && isSmall(r.promote_pending) &&
+        isBool(r.over_limit) && isBool(r.revocation_open) && isSmall(r.harden_pending) && isSmall(r.promote_pending) && isIdList(r.removed, REMOVED_MAX) &&
         (r.listener === null || LISTENER_STATES.includes(r.listener)) && r.up_to_date === null &&
         (r.notes === null || isCount(r.notes)) && isBool(r.waiting) && statusRules(r),
     setup: r => isCanonicalId(r.own_id) && r.state === 'set-up',
@@ -115,7 +115,7 @@ const RESULT_SCHEMAS = {
     ack: r => isTotal(r.changed),
 };
 const RESULT_KEYS = {
-    status: ['state', 'own_id', 'peers', 'computers', 'max_computers', 'over_limit', 'revocation_open', 'harden_pending', 'promote_pending', 'listener', 'up_to_date', 'notes', 'waiting'],
+    status: ['state', 'own_id', 'peers', 'computers', 'max_computers', 'over_limit', 'revocation_open', 'harden_pending', 'promote_pending', 'removed', 'listener', 'up_to_date', 'notes', 'waiting'],
     setup: ['own_id', 'state'],
     'own-id': ['own_id'],
     host: ['peer', 'connected', 'link', 'connected_s', 'up_to_date', 'notes'],
@@ -150,7 +150,7 @@ function statusRules(r) {
         const anyShared = r.peers.some(p => p.shared);
         return r.peers.length > 0 && (r.state === 'paired') === anyShared;
     }
-    return r.peers.length === 0 && r.listener === null && !r.over_limit && !r.revocation_open && r.harden_pending === 0 && r.promote_pending === 0;
+    return r.peers.length === 0 && r.listener === null && !r.over_limit && !r.revocation_open && r.harden_pending === 0 && r.promote_pending === 0 && r.removed.length === 0;
 }
 
 const has = (o, keys) => keys.every(k => Object.hasOwn(o, k));

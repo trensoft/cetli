@@ -437,13 +437,19 @@ msgstr ""
 msgid ""
 "To add this computer to a group, open cetli on a computer that is already in "
 "the group and press Add a computer there. Then enter that computer's ID here."
-msgstr "Ha ezt a számítógépet egy csoporthoz akarod adni, nyisd meg a cetlit egy olyan számítógépen, amely már a csoportban van, és nyomd meg ott a Számítógép hozzáadása gombot. Utána ide írd be annak a számítógépnek az azonosítóját."
+msgstr ""
+"Ha ezt a számítógépet egy csoporthoz akarod adni, nyisd meg a cetlit egy "
+"olyan számítógépen, amely már a csoportban van, és nyomd meg ott a "
+"Számítógép hozzáadása gombot. Utána ide írd be annak a számítógépnek az "
+"azonosítóját."
 
 #: app/strings.js
 msgid ""
 "This computer will join the group of the other computer. The other computers "
 "of that group will appear here without asking you."
-msgstr "Ez a számítógép a másik számítógép csoportjához csatlakozik. A csoport többi számítógépe is megjelenik itt, anélkül, hogy megkérdezne."
+msgstr ""
+"Ez a számítógép a másik számítógép csoportjához csatlakozik. A csoport többi "
+"számítógépe is megjelenik itt, anélkül, hogy megkérdezne."
 
 #: app/strings.js
 msgid "Copy the ID"
@@ -509,13 +515,18 @@ msgstr "%s elfogadása (az azonosító eleje: %s)"
 msgid ""
 "Once accepted, this computer can also add other computers to your group, "
 "without asking you again."
-msgstr "Elfogadás után ez a számítógép újabb számítógépeket is felvehet a csoportodba, anélkül, hogy újra megkérdezne."
+msgstr ""
+"Elfogadás után ez a számítógép újabb számítógépeket is felvehet a "
+"csoportodba, anélkül, hogy újra megkérdezne."
 
 #: app/strings.js
 msgid ""
 "A computer you accept can add other computers to your group without asking "
 "you again. Remove a lost computer on all your computers."
-msgstr "Egy elfogadott számítógép újabb számítógépeket vehet fel a csoportodba anélkül, hogy újra megkérdezne. Az elveszett számítógépet az összes számítógépeden távolítsd el."
+msgstr ""
+"Egy elfogadott számítógép újabb számítógépeket vehet fel a csoportodba "
+"anélkül, hogy újra megkérdezne. Az elveszett számítógépet az összes "
+"számítógépeden távolítsd el."
 
 #: app/strings.js
 msgid "Connecting…"
@@ -593,7 +604,9 @@ msgstr "Korlátozott: nem veszek át tőle semmit"
 
 #: app/strings.js
 msgid "Another computer in the list has the same name. Compare the ID."
-msgstr "A lista egy másik számítógépének ugyanez a neve. Hasonlítsd össze az azonosítót."
+msgstr ""
+"A lista egy másik számítógépének ugyanez a neve. Hasonlítsd össze az "
+"azonosítót."
 
 #: app/strings.js
 msgid "The connection is not confirmed yet"
@@ -625,14 +638,18 @@ msgstr "Ebben a csoportban már %s számítógép van. Előbb távolíts el egye
 msgid ""
 "This group has %s computers, more than the %s that cetli allows. New "
 "computers cannot be added until you remove some."
-msgstr "Ebben a csoportban %s számítógép van, több, mint a cetli által megengedett %s. Új számítógépet addig nem adhatsz hozzá, amíg nem távolítasz el néhányat."
+msgstr ""
+"Ebben a csoportban %s számítógép van, több, mint a cetli által megengedett "
+"%s. Új számítógépet addig nem adhatsz hozzá, amíg nem távolítasz el néhányat."
 
 #: app/strings.js
 #, javascript-format
 msgid ""
 "%s computers were added to your group since you last looked. Check that you "
 "know all of them."
-msgstr "%s számítógép került a csoportba, mióta utoljára megnézted. Ellenőrizd, hogy mindegyiket ismered."
+msgstr ""
+"%s számítógép került a csoportba, mióta utoljára megnézted. Ellenőrizd, hogy "
+"mindegyiket ismered."
 
 #: app/strings.js
 msgid "They are all mine"
@@ -644,10 +661,12 @@ msgstr "Nem az enyém, eltávolítás"
 
 #: app/strings.js
 msgid ""
-"Since version 0.2.6, a computer you accepted can add other computers to your "
-"group without asking you again. Allow this for the computers you already "
-"accepted? Do it on each of your computers."
-msgstr "A 0.2.6 verziótól az általad elfogadott számítógép újabb számítógépeket vehet fel a csoportodba, anélkül, hogy újra megkérdezne. Engedélyezed ezt a már elfogadott számítógépeknél? Minden számítógépeden el kell végezned."
+"Allow this for the computers you already accepted? A pair of computers needs "
+"your Allow on both of them: do it on this computer and on the other one too."
+msgstr ""
+"Engedélyezed ezt a már elfogadott számítógépeknél? Egy párnál mindkét "
+"számítógépen engedélyezned kell: tedd meg ezen a számítógépen és a másikon "
+"is."
 
 #: app/strings.js
 msgid "Allow"
@@ -661,12 +680,30 @@ msgstr "Most nem"
 msgid ""
 "A removal is not finished on this computer. New computers cannot be added "
 "until you press Finish."
-msgstr "Az eltávolítás ezen a számítógépen még nincs befejezve. Új számítógépet addig nem adhatsz hozzá, amíg meg nem nyomod a Kész gombot."
+msgstr ""
+"Az eltávolítás ezen a számítógépen még nincs befejezve. Új számítógépet "
+"addig nem adhatsz hozzá, amíg meg nem nyomod a Kész gombot."
 
 #: app/strings.js
 #, javascript-format
 msgid "A removed computer is back (ID starts %s). Remove it again?"
-msgstr "Egy eltávolított számítógép visszatért (az azonosító eleje: %s). Eltávolítod újra?"
+msgstr ""
+"Egy eltávolított számítógép visszatért (az azonosító eleje: %s). Eltávolítod "
+"újra?"
+
+#: app/strings.js
+#, javascript-format
+msgid ""
+"A computer you removed here (ID starts %s). Add it again only if you "
+"recognise it; you still compare its ID and accept it."
+msgstr ""
+"Itt eltávolított számítógép (az azonosító eleje: %s). Csak akkor add hozzá "
+"újra, ha felismered; az azonosítót ilyenkor is össze kell hasonlítanod, és "
+"el kell fogadnod."
+
+#: app/strings.js
+msgid "Add again"
+msgstr "Hozzáadás újra"
 
 #: app/strings.js
 msgid "Remove"
@@ -687,7 +724,8 @@ msgstr "A szinkron leállítása az összes számítógéppel"
 #: app/strings.js
 msgid ""
 "Your notes stay on all your computers. They will not be exchanged any more."
-msgstr "A jegyzeteid minden számítógépen megmaradnak. A továbbiakban nem cserélődnek."
+msgstr ""
+"A jegyzeteid minden számítógépen megmaradnak. A továbbiakban nem cserélődnek."
 
 #: app/strings.js
 msgid "Remove a computer"
@@ -701,7 +739,9 @@ msgstr "Megvan még ez a számítógép"
 msgid ""
 "Syncing with it stops on this computer. Its notes stay on it. Computers that "
 "got it through this one drop it too."
-msgstr "Ezen a számítógépen leáll vele a szinkron. A jegyzetei megmaradnak rajta. Azok is eltávolítják, amelyek ezen keresztül kapták."
+msgstr ""
+"Ezen a számítógépen leáll vele a szinkron. A jegyzetei megmaradnak rajta. "
+"Azok is eltávolítják, amelyek ezen keresztül kapták."
 
 #: app/strings.js
 msgid "It is lost or stolen, or I do not know it"
@@ -712,7 +752,10 @@ msgid ""
 "cetli first stops this computer from taking anything over from the others, "
 "then removes the computer. After that you must do the same on each of your "
 "other computers."
-msgstr "A cetli először megakadályozza, hogy ez a számítógép bármit átvegyen a többitől, majd eltávolítja a számítógépet. Utána ugyanezt meg kell csinálnod a többi számítógépeden is."
+msgstr ""
+"A cetli először megakadályozza, hogy ez a számítógép bármit átvegyen a "
+"többitől, majd eltávolítja a számítógépet. Utána ugyanezt meg kell csinálnod "
+"a többi számítógépeden is."
 
 #: app/strings.js
 msgid "Also remove these, if they are not yours:"
@@ -732,7 +775,9 @@ msgstr "Eltávolítás…"
 msgid ""
 "Removed on this computer: %s. Your notes can still reach it through other "
 "computers that have not removed it yet."
-msgstr "Ezen a számítógépen eltávolítva: %s. A jegyzeteid még elérhetik, amíg van olyan számítógép, amelyen még nem távolítottad el."
+msgstr ""
+"Ezen a számítógépen eltávolítva: %s. A jegyzeteid még elérhetik, amíg van "
+"olyan számítógép, amelyen még nem távolítottad el."
 
 #: app/strings.js
 #, javascript-format
@@ -741,14 +786,22 @@ msgid ""
 "removed computer, it can bring it back to every computer that has not done "
 "this removal yet. It cannot bring it back here while this computer is "
 "limited. Open cetli on it and do the same there."
-msgstr "Ezek a számítógépek az előbb nem voltak elérhetők: %s. Ha valamelyik még ismeri az eltávolított számítógépet, visszahozhatja minden olyan számítógépre, amelyen még nem végezted el az eltávolítást. Erre a számítógépre nem tudja visszahozni, amíg ez korlátozott. Nyisd meg rajta a cetlit, és csináld meg ott is ugyanezt."
+msgstr ""
+"Ezek a számítógépek az előbb nem voltak elérhetők: %s. Ha valamelyik még "
+"ismeri az eltávolított számítógépet, visszahozhatja minden olyan "
+"számítógépre, amelyen még nem végezted el az eltávolítást. Erre a "
+"számítógépre nem tudja visszahozni, amíg ez korlátozott. Nyisd meg rajta a "
+"cetlit, és csináld meg ott is ugyanezt."
 
 #: app/strings.js
 msgid ""
 "To be sure, open this list on each of your other computers and choose the "
 "same action there. Press Finish here only when you have done it everywhere. "
 "Until then this computer takes no additions from other computers."
-msgstr "A biztonság kedvéért nyisd meg ezt a listát a többi számítógépeden is, és válaszd ott ugyanezt. A Kész gombot itt csak akkor nyomd meg, ha mindenhol elvégezted. Addig ez a számítógép nem vesz át újabb számítógépeket másoktól."
+msgstr ""
+"A biztonság kedvéért nyisd meg ezt a listát a többi számítógépeden is, és "
+"válaszd ott ugyanezt. A Kész gombot itt csak akkor nyomd meg, ha mindenhol "
+"elvégezted. Addig ez a számítógép nem vesz át újabb számítógépeket másoktól."
 
 #: app/strings.js
 msgid "Finish: I did this on all my computers"
@@ -860,7 +913,9 @@ msgstr ""
 #: app/strings.js
 msgid ""
 "If the other computer says its group is full, remove a computer there first."
-msgstr "Ha a másik számítógép azt írja, hogy betelt a csoportja, ott előbb távolíts el egy számítógépet."
+msgstr ""
+"Ha a másik számítógép azt írja, hogy betelt a csoportja, ott előbb távolíts "
+"el egy számítógépet."
 
 #: app/strings.js
 msgid "Stopped waiting after 15 minutes."

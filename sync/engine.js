@@ -20,7 +20,7 @@ import {ConfigEditError, PORTS_OWN, editConfig, readFolderIds, verifyConfig} fro
 import {canonicalId, displayName, isCanonicalId, parseTypedId} from './ids.js';
 import {markerPaths} from './markers.js';
 import {BACKEND_EXE, FOLDER_ID, UNIT_NAME, socketPath} from './paths.js';
-import {DWELL_MS, HARDEN_INTRODUCED, MAX_COMPUTERS, MAX_PEERS, READ_CAP, SHORTCUT_REMOVE, wantedIntroducer} from './policy.js';
+import {DWELL_MS, HARDEN_INTRODUCED, MAX_COMPUTERS, MAX_PEERS, READ_CAP, REMOVED_MAX, SHORTCUT_REMOVE, wantedIntroducer} from './policy.js';
 import {parseAcceptLine} from './protocol.js';
 import {
     FREEZE_MAX, STATE_FILE, brokenState, freshState, isFrozen, parseState, serializeState, withAck, withFreeze, withTomb, withoutFreeze, withoutTomb,
@@ -433,7 +433,7 @@ export function createEngine(ports) {
     async function status() {
         const base = {
             event: 'result', state: 'not-set-up', own_id: null, peers: [], computers: null, max_computers: MAX_COMPUTERS, over_limit: false, revocation_open: false,
-            harden_pending: 0, promote_pending: 0, listener: null, up_to_date: null, notes: null, waiting: false,
+            harden_pending: 0, promote_pending: 0, removed: [], listener: null, up_to_date: null, notes: null, waiting: false,
         };
         if (!backendInstalled())
             return {result: {...base, state: 'no-syncthing'}};
@@ -454,7 +454,8 @@ export function createEngine(ports) {
             return {result: {...base, own_id: own}};
         const ls = loadState();
         const open = isFrozen(ls.state);
-        const known = {...base, own_id: own, computers: cfg.computers, revocation_open: open};
+        const removed = ls.state.tomb.filter(id => !cfg.ids.includes(id)).slice(-REMOVED_MAX).reverse();
+        const known = {...base, own_id: own, computers: cfg.computers, revocation_open: open, removed};
         if (cfg.overCap)                                          // the list is not read: no peers, nothing is known about the share
             return {result: {...known, state: 'half', over_limit: true}};
         const foreign = foreignDevices(cfg.devices, own).length > 0 || folderAnomaly(cfg.folders, dirs.notes, cfg.devices);
@@ -584,7 +585,7 @@ export function createEngine(ports) {
             const targets = cfg.ids.filter(id => id !== own);
             await step('device', async () => {
                 // lower every flag first: a peer that stays flagged could hand a removed computer back
-                const flagged = cfg.overCap ? targets.slice(0, FREEZE_MAX) : cfg.devices.filter(d => d.id !== own && d.introducer).map(d => d.id);
+                const flagged = cfg.overCap ? targets : cfg.devices.filter(d => d.id !== own && d.introducer).map(d => d.id);
                 for (const id of flagged)
                     await setIntroducer(id, false);
             });
@@ -719,14 +720,18 @@ export function createEngine(ports) {
         return {result: {event: 'result', changed: targets.length}};
     }
 
-    // `ack <ID>...` | `ack --all`: the user has seen these computers and they are theirs. Only the state file changes.
+    // `ack <ID>...` | `ack --all`: the user has seen these computers and they are theirs. Only the state file changes. An ID that is not in the
+    // list but is a tombstone of this computer is "add again" (PLAN-ADMISSION 2.4, Robert F7): the tombstone is lifted, so the computer is
+    // offered by `host` when it knocks. Nothing else is touched, and a tombstoned computer that IS in the list stays a tombstone.
     async function ack({all = false, ids = []} = {}) {
         const {own, cfg} = await prepareLight();
-        const named = all ? cfg.ids.filter(id => id !== own) : namedIds(ids, cfg, own);
         const ls = loadState();
-        const fresh = named.filter(id => !ls.state.ack.includes(id) && !(ls.missing && cfg.devices.find(d => d.id === id)?.introducedBy === ''));
-        saveState(withAck(ls.state, named), cfg, own);
-        return {result: {event: 'result', changed: fresh.length}};
+        const lift = all ? [] : ids.filter(id => !cfg.ids.includes(id) && ls.state.tomb.includes(id));
+        const named = all ? cfg.ids.filter(id => id !== own) : namedIds(ids, cfg, own, lift);
+        const listed = named.filter(id => cfg.ids.includes(id));
+        const fresh = listed.filter(id => !ls.state.ack.includes(id) && !(ls.missing && cfg.devices.find(d => d.id === id)?.introducedBy === ''));
+        saveState(withoutTomb(withAck(ls.state, listed), lift), cfg, own);
+        return {result: {event: 'result', changed: fresh.length + lift.length}};
     }
 
     // The common start of host and join: backend, instance, daemon, invariants, no removal open. Returns {own, cfg}.
@@ -751,8 +756,17 @@ export function createEngine(ports) {
     // The accept sequence (M-W7 (b)): the add (with the introducer role and the label), the share, then the read-back. The label is the sanitised
     // name of the candidate (displayName: 1-32 printable ASCII) as ONE `--name=` argument, or the fixed text. A computer that was accepted is
     // written into the acknowledged set; one the user types in again is no longer a tombstone.
-    async function addPeer(peerId, own, label, {existing = false} = {}) {
+    async function addPeer(peerId, own, label, {existing = false, recheck = false} = {}) {
         await step('device', async () => {
+            if (recheck) {
+                // `host` only (F4): the list is read again IMMEDIATELY before the add. A computer that is in it now (an introduction arrived since
+                // the pending read) or that is a tombstone is never made a directly accepted one by a click, and the count is checked on the same read.
+                const listed = lines(await cli(['config', 'devices', 'list']));
+                if (listed.includes(peerId) || loadState().state.tomb.includes(peerId))
+                    throw new Fail('E_PENDING_AMBIGUOUS');
+                if (listed.length - 1 >= MAX_PEERS)
+                    throw new Fail('E_GROUP_FULL');
+            }
             await cli(['config', 'devices', 'add', '--device-id', peerId, '--introducer', `--name=${label}`]);
         });
         await step('share', async () => {
@@ -835,7 +849,7 @@ export function createEngine(ports) {
                     throw new Fail('E_PENDING_AMBIGUOUS');
                 if (listedCount - 1 >= MAX_PEERS)
                     throw new Fail('E_GROUP_FULL');                              // an introduction filled the group while the window was open
-                await addPeer(now.id, own, now.name ?? PEER_LABEL);
+                await addPeer(now.id, own, now.name ?? PEER_LABEL, {recheck: true});
                 emit({event: 'peer', id: now.id, name: now.name});
                 const link = await awaitStable(now.id, {stop: () => input.eof()});
                 return {result: connectedResult({id: now.id, name: now.name}, null, link)};

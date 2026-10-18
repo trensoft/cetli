@@ -28,7 +28,7 @@ test('the fixtures the Interface file names exist (section 5, with the 0.2.5 nam
         'host-ok', 'host-expired', 'host-stdin-eof', 'join-ok', 'join-flapping', 'forget-ok', 'oversize', 'not-json', 'v2',
         // 0.2.6 (PLAN-0.2.6 3.2)
         'status-group-3', 'status-group-new', 'status-over-limit', 'status-revocation-open', 'status-returned', 'status-promote-pending', 'status-max-size',
-        'host-group-full', 'host-revocation-open', 'finish-returned', 'revoke-ok', 'revoke-returned', 'finish-ok', 'harden-ok', 'promote-ok', 'forget-all-ok', 'forget-one-ok', 'ack-ok',
+        'status-removed', 'host-group-full', 'host-revocation-open', 'finish-returned', 'revoke-ok', 'revoke-returned', 'finish-ok', 'harden-ok', 'promote-ok', 'forget-all-ok', 'forget-one-ok', 'ack-ok',
     ];
     for (const r of required)
         assert.ok(INDEX[`${r}.ndjson`], r);
@@ -163,7 +163,7 @@ test('result of host and join is the proof: link stable with connected_s, up_to_
 
 const groupPeer = (id, o = {}) => ({id, name: 'b', introduced_by: null, introducer: true, shared: true, connected: true, link: 'stable', connected_s: 9, new: false, returned: false, ...o});
 const statusOf = (o = {}) => ({v: 1, event: 'result', state: 'paired', own_id: A, peers: [groupPeer(B)], computers: 2, max_computers: MAX_COMPUTERS, over_limit: false, revocation_open: false,
-    harden_pending: 0, promote_pending: 0, listener: 'ok', up_to_date: null, notes: 1, waiting: false, ...o});
+    harden_pending: 0, promote_pending: 0, removed: [], listener: 'ok', up_to_date: null, notes: 1, waiting: false, ...o});
 
 test('result of status: the closed states, the list of peers, links null where they are not measured (PLAN-0.2.6 3.2)', () => {
     const st = (o = {}) => JSON.stringify(statusOf(o));
@@ -197,6 +197,15 @@ test('result of status: the closed states, the list of peers, links null where t
         assert.equal(parse(st({state, peers: [], listener: null, over_limit: true}), 'status'), null, state);
     }
     assert.equal(parse(st({waiting: null}), 'status'), null);
+    // `removed`: tombstoned IDs that are not in the list, at most REMOVED_MAX, canonical, no duplicates
+    const gone = [1, 2, 3, 4].map(i => makeId(40 + i));
+    assert.ok(parse(st({removed: gone.slice(0, 3)}), 'status'));
+    assert.equal(parse(st({removed: gone}), 'status'), null, 'more than REMOVED_MAX');
+    assert.equal(parse(st({removed: [gone[0], gone[0]]}), 'status'), null);
+    assert.equal(parse(st({removed: ['nope']}), 'status'), null);
+    assert.equal(parse(st({removed: undefined}), 'status'), null, 'the key is required');
+    assert.ok(parse(st({state: 'set-up', peers: [], computers: 1, removed: [gone[0]]}), 'status'), 'a set-up computer can have removed ones');
+    assert.equal(parse(st({state: 'not-set-up', peers: [], computers: null, listener: null, own_id: null, notes: null, removed: [gone[0]]}), 'status'), null);
     assert.equal(parse(st({own_id: 'nope'}), 'status'), null);
     for (const k of ['state', 'own_id', 'peers', 'computers', 'max_computers', 'over_limit', 'revocation_open', 'harden_pending', 'promote_pending', 'listener', 'up_to_date', 'notes', 'waiting']) {
         const o = statusOf();
