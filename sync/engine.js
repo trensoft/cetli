@@ -228,7 +228,7 @@ export function createEngine(ports) {
         let next = state;
         if (missing && cfg) {
             const direct = cfg.devices.filter(d => d.id !== own && d.introducedBy === '').map(d => d.id);
-            next = withAck(next, direct.filter(id => !next.ack.includes(id)));
+            next = withAck(next, direct.filter(id => !next.ack.includes(id) && !next.tomb.includes(id)));
         }
         files.writeText(statePath, serializeState(next), 0o600);
         return next;
