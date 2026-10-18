@@ -6,7 +6,9 @@
 //     `ST*` variable is dropped, and so is everything else, whatever its name. M-W3 measured that the GUI address and GUI key variables redirect
 //     `syncthing cli --home=X` AND its writes to another instance. No call site builds its own environment.
 //   - the executable is an absolute literal, the arguments are an array (no shell), and `--home=<dedicated home>` is put in by the port;
-//     a caller cannot pass a home, a GUI address or an API key flag (flags are not a defence, 0E row 8; there is no key, S-2).
+//     a caller cannot pass a home, a GUI address or an API key flag, in any spelling: the long forms, the one-dash forms and every short
+//     flag are refused (flags are not a defence, 0E row 8; there is no key, S-2). So the last-wins rule of the flag parser has no
+//     second `--home` to prefer.
 //   - systemctl is reachable only for the closed list of calls on our own unit.
 import {BACKEND_EXE, SYSTEMCTL_EXE, UNIT_NAME} from './paths.js';
 
@@ -16,7 +18,8 @@ const ENV_PREFIXES = Object.freeze(['XDG_']);
 export const SYNCTHING_SUBCOMMANDS = Object.freeze(['cli', 'generate', 'device-id']);
 export const DEFAULT_MAX_BYTES = 1024 * 1024;
 export const DEFAULT_TIMEOUT_MS = 30000;
-export const FORBIDDEN_FLAGS = /^--(home|gui-address|gui-apikey|config|data|conf|db-dir)(=|$)/;
+// `-1` (the value of --max-conflicts) is not refused: a short flag starts with a letter.
+export const FORBIDDEN_FLAGS = /^(--(home|config|data|conf|db-dir|gui-address|gui-apikey)(=|$)|-[A-Za-z])/;
 
 // The environment of a child: the allowlisted variables of `hostEnv` (a plain object), values as they are (a value with a NUL is dropped).
 export function scrubEnv(hostEnv) {
@@ -47,12 +50,15 @@ export function createRunPort({spawn, hostEnv, home}) {
     const start = async (argv, {stdin = null, maxBytes = DEFAULT_MAX_BYTES, timeoutMs = DEFAULT_TIMEOUT_MS} = {}) => {
         const r = await spawn(argv, {...env}, {stdin, maxBytes, timeoutMs});
         const out = typeof r?.out === 'string' ? r.out : '';
-        if (!Number.isInteger(r?.rc) || new TextEncoder().encode(out).length > maxBytes || r.tooLarge === true)
-            return {rc: Number.isInteger(r?.rc) ? r.rc : -1, out: '', tooLarge: true};
+        if (!Number.isInteger(r?.rc))
+            return {rc: -1, out: '', failed: true};                  // no exit code (timeout, no result): not a size problem
+        if (new TextEncoder().encode(out).length > maxBytes || r.tooLarge === true)
+            return {rc: r.rc, out: '', tooLarge: true};
         return {rc: r.rc, out};
     };
     return Object.freeze({
-        // run('cli', ['config', 'devices', 'list']) -> {rc, out}. Never throws for a failing child: the engine reads rc and shows a code.
+        // run('cli', ['config', 'devices', 'list']) -> {rc, out}. Does not throw for a failing child (rc, `failed`, `tooLarge`): the engine reads
+        // them and shows a code. A refused call (TypeError) and a spawn that cannot start the executable (the injected spawn rejects) do throw.
         syncthing(sub, args = [], opts = {}) {
             if (!SYNCTHING_SUBCOMMANDS.includes(sub) || !Array.isArray(args) || !args.every(okArg))
                 throw new TypeError('syncthing: subcommand or arguments not allowed');
@@ -61,7 +67,7 @@ export function createRunPort({spawn, hostEnv, home}) {
             return start([BACKEND_EXE, sub, `--home=${home}`, ...args], opts);
         },
         systemctl(args, opts = {}) {
-            if (!Array.isArray(args) || !SYSTEMCTL_CALLS.includes(JSON.stringify(args)))
+            if (!Array.isArray(args) || !args.every(a => typeof a === 'string') || !SYSTEMCTL_CALLS.includes(JSON.stringify(args)))
                 throw new TypeError('systemctl: call not allowed');
             return start([SYSTEMCTL_EXE, ...args], opts);
         },

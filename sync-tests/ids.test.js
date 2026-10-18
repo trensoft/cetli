@@ -92,6 +92,8 @@ test('parseTypedId: E_BAD_ID for a malformed ID, E_OWN_ID for this computer\'s o
     assert.deepEqual(parseTypedId(compact(A).slice(1), B), {ok: false, code: E_BAD_ID});
     assert.deepEqual(parseTypedId(A, A), {ok: false, code: E_OWN_ID});
     assert.deepEqual(parseTypedId(compact(A).toLowerCase(), A), {ok: false, code: E_OWN_ID});
+    assert.deepEqual(parseTypedId(A, compact(A).toLowerCase()), {ok: false, code: E_OWN_ID});     // an own ID that is not in canonical form still matches
+    assert.deepEqual(parseTypedId(A, 'garbage'), {ok: true, id: A});
     assert.deepEqual(parseTypedId(A, B), {ok: true, id: A});
     assert.deepEqual(parseTypedId(A, null), {ok: true, id: A});
     assert.deepEqual(parseTypedId('nonsense', A), {ok: false, code: E_BAD_ID});      // bad wins over own (nothing to compare)
@@ -135,4 +137,10 @@ test('E_BAD_CODE and E_OWN_CODE are not produced by ids.js', async () => {
     const {readFileSync} = await import('node:fs');
     const text = readFileSync(new URL('../sync/ids.js', import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
     assert.equal(/E_BAD_CODE|E_OWN_CODE/.test(text), false);
+});
+
+test('isCanonicalId is anchored: a prefix, a suffix, or a trailing newline makes it false', () => {
+    for (const bad of [`x${A}`, `${A}x`, `${A}\n`, `\n${A}`, ` ${A}`, A.toLowerCase()])
+        assert.equal(isCanonicalId(bad), false, JSON.stringify(bad));
+    assert.equal(isCanonicalId(A), true);
 });

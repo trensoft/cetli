@@ -10,7 +10,7 @@
 // Today's variant is the ID exchange with one button (2a). The code form (events `code` and `attempts`, errors E_BAD_CODE / E_OWN_CODE)
 // is 0.2.6: its shapes are RESERVED here and neither emitted nor accepted.
 
-import {displayName, isCanonicalId} from './ids.js';
+import {displayName, isCanonicalId, ID_RAW_MAX} from './ids.js';
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_LINE_BYTES = 4 * 1024;
@@ -134,19 +134,22 @@ function fieldsOk(event, verb) {
 
 export const EVENT_NAMES = Object.freeze(['progress', 'candidate', 'link', 'peer', 'result', 'error']);
 
+// The keys an event may carry besides `event` (and `v` on the wire). A result without a known verb carries none.
+const EVENT_KEYS = {
+    progress: ['step', 'state'], candidate: ['id', 'name'], link: ['state', 'up_to_date'], peer: ['id', 'name'], error: ['code', 'step'],
+};
+const eventKeys = (name, verb) => name === 'result' ? (verb === null ? [] : RESULT_KEYS[verb] ?? []) : EVENT_KEYS[name];
+
 // ---- emit (engine side) -----------------------------------------------------------------------------------------------------------
 
 // The line for an event, without the newline. Strict: an unknown event or field, a reserved or bridge-only code, a value out of shape
-// is a bug of the engine and throws. `verb` is needed for a `result` and for the per-verb rules of an `error`.
+// is a bug of the engine and throws. `verb` is needed for a `result` and for an `error` (its per-verb code rules).
 export function emit(event, verb = null) {
     if (!isObj(event) || !EVENT_NAMES.includes(event.event))
         throw new ProtocolError('unknown event');
-    if (event.event === 'result' && (verb === null || !VERBS.includes(verb)))
-        throw new ProtocolError('a result needs its verb');
-    const allowed = {
-        progress: ['step', 'state'], candidate: ['id', 'name'], link: ['state', 'up_to_date'], peer: ['id', 'name'], error: ['code', 'step'],
-        result: verb === null ? [] : RESULT_KEYS[verb] ?? [],
-    }[event.event];
+    if ((event.event === 'result' || event.event === 'error') && (verb === null || !VERBS.includes(verb)))
+        throw new ProtocolError(`${event.event === 'result' ? 'a result' : 'an error'} needs its verb`);
+    const allowed = eventKeys(event.event, verb);
     for (const k of Object.keys(event)) {
         if (k !== 'event' && !allowed.includes(k))
             throw new ProtocolError(`field ${k} is not part of ${event.event}`);
@@ -187,7 +190,11 @@ export function parse(line, verb = null) {
         return null;
     if (!fieldsOk(obj, verb))
         return null;
-    const {v, ...event} = obj;
+    // only the keys of the contract go on (fieldsOk does not look at the others); an unknown step is null
+    const event = {event: obj.event};
+    for (const k of eventKeys(obj.event, verb))
+        if (Object.hasOwn(obj, k))
+            event[k] = k === 'step' && !isKnownStep(obj[k]) ? null : obj[k];
     if (event.event === 'error') {
         if (BRIDGE_ONLY_CODES.includes(event.code))
             return null;
@@ -282,9 +289,13 @@ export function argvFor(verb, flags = {}) {
 
 // `join` reads ONE line: the typed ID, as typed. The window does not canonicalise; it only refuses what cannot be one line.
 export function joinStdin(typed) {
-    if (typeof typed !== 'string' || /[\r\n\0]/.test(typed.replace(/[\r\n]+$/, '')))
+    if (typeof typed !== 'string' || typed.length > ID_RAW_MAX + 2)          // the field is capped before any work; two for the line end
         return null;
-    return `${typed.replace(/[\r\n]+$/, '')}\n`;
+    let end = typed.length;
+    while (end > 0 && (typed[end - 1] === '\r' || typed[end - 1] === '\n'))
+        end--;
+    const line = typed.slice(0, end);
+    return /[\r\n\0]/.test(line) ? null : `${line}\n`;
 }
 
 // `host` may be sent ONE line `accept <ID>`.

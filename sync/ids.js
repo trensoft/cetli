@@ -70,7 +70,7 @@ export function parseTypedId(raw, ownId = null) {
     const id = canonicalId(raw);
     if (id === null)
         return {ok: false, code: E_BAD_ID};
-    if (ownId !== null && id === ownId)
+    if (ownId !== null && id === canonicalId(ownId))
         return {ok: false, code: E_OWN_ID};
     return {ok: true, id};
 }

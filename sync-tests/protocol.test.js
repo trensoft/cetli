@@ -70,12 +70,12 @@ test('error codes: the closed list, the pinned information pair, the reserved an
     assert.deepEqual([...RESERVED_CODES], ['E_BAD_CODE', 'E_OWN_CODE']);
     for (const c of RESERVED_CODES) {
         assert.equal(ERROR_CODES.includes(c), false);
-        assert.throws(() => emit({event: 'error', code: c}));                    // never emitted today
+        assert.throws(() => emit({event: 'error', code: c}, 'join'), /may raise/);       // never emitted today
     }
     for (const c of ['E_PENDING_AMBIGUOUS', 'E_BAD_ID', 'E_OWN_ID', 'E_FOREIGN_DEVICE'])
         assert.ok(ERROR_CODES.includes(c), c);
     for (const c of BRIDGE_ONLY_CODES) {
-        assert.throws(() => emit({event: 'error', code: c}), /may raise/);
+        assert.throws(() => emit({event: 'error', code: c}, 'host'), /may raise/);
         assert.equal(parse(JSON.stringify({v: 1, event: 'error', code: c})), null);
     }
     assert.equal(new Set(ERROR_CODES).size, ERROR_CODES.length);
@@ -101,13 +101,14 @@ test('parse: not JSON, not an object, v other than 1, unknown event, a line over
     assert.equal(parse(JSON.stringify({...ok, pad: 'é'.repeat(2100)})), null);           // 4 KiB in bytes, not in characters
 });
 
-test('parse: unknown fields are ignored, an unknown step is returned (the window ignores it), an unknown error code reads as E_INTERNAL', () => {
-    assert.deepEqual(parse(JSON.stringify({v: 1, event: 'progress', step: 'instance', state: 'ok', future: [1]})), {event: 'progress', step: 'instance', state: 'ok', future: [1]});
+test('parse: unknown fields are dropped, an unknown step reads as null (the window ignores it), an unknown error code reads as E_INTERNAL', () => {
+    assert.deepEqual(parse(JSON.stringify({v: 1, event: 'progress', step: 'instance', state: 'ok', future: [1]})), {event: 'progress', step: 'instance', state: 'ok'});
     const e = parse(JSON.stringify({v: 1, event: 'progress', step: 'brand-new', state: 'start'}));
-    assert.equal(e.step, 'brand-new');
+    assert.equal(e.step, null);
     assert.equal(isKnownStep(e.step), false);
     assert.equal(isKnownStep('share'), true);
-    assert.deepEqual(parse(JSON.stringify({v: 1, event: 'error', code: 'E_FROM_THE_FUTURE', step: 'x'})), {event: 'error', code: 'E_INTERNAL', step: 'x'});
+    assert.deepEqual(parse(JSON.stringify({v: 1, event: 'error', code: 'E_FROM_THE_FUTURE', step: 'x'})), {event: 'error', code: 'E_INTERNAL', step: null});
+    assert.deepEqual(parse(JSON.stringify({v: 1, event: 'error', code: 'E_EXPIRED', step: 'share', extra: {}}), 'host'), {event: 'error', code: 'E_EXPIRED', step: 'share'});
     assert.deepEqual(parse(JSON.stringify({v: 1, event: 'error', code: 'E_BAD_CODE'})), {event: 'error', code: 'E_INTERNAL'});      // reserved: generic
 });
 
@@ -241,9 +242,49 @@ test('argv and stdin: the verb list is closed, the only flag is forget --stop, a
     assert.equal(joinStdin(`${A}\r\n`), `${A}\n`);
     assert.equal(joinStdin(`${A}\nrest`), null);
     assert.equal(joinStdin(5), null);
+    assert.equal(joinStdin('x'.repeat(103)), null);                              // over ID_RAW_MAX (+ a line end): not one line of ours
+    assert.equal(joinStdin(`${'x'.repeat(100)}\r\n`), `${'x'.repeat(100)}\n`);
+    assert.equal(joinStdin(`${A}\n\n\r`), `${A}\n`);
+    assert.equal(joinStdin('a\0b'), null);
+    const t0 = Date.now();
+    assert.equal(joinStdin('\r'.repeat(80000) + 'x'), null);                    // no quadratic trim
+    assert.ok(Date.now() - t0 < 500);
+    assert.throws(() => emit({event: 'error', code: 'E_BAD_ID'}), /needs its verb/);       // a null verb would skip the per-verb code rules
+    assert.throws(() => emit({event: 'error', code: 'E_BAD_ID'}, 'host'), /not raised by host/);
     assert.equal(acceptLine(B), `accept ${B}\n`);
     assert.throws(() => acceptLine(B.toLowerCase()));
     assert.equal(parseAcceptLine(`accept ${B}\n`), B);
     for (const bad of [`accept ${B.toLowerCase()}`, `accept  ${B}`, `ACCEPT ${B}`, `accept ${B} x`, B, 'accept', '', `accept ${B.slice(0, 20)}`, null])
         assert.equal(parseAcceptLine(bad), null, String(bad));
+});
+
+test('every fixture line that the engine could have written is what emit() writes for parse() of it (the fixtures come from emit)', () => {
+    let compared = 0;
+    for (const [file, meta] of Object.entries(INDEX)) {
+        for (const line of linesOf(file)) {
+            const ev = parse(line, meta.verb);
+            if (ev === null || (ev.event === 'error' && !ERROR_CODES.includes(ev.code)))
+                continue;
+            let out;
+            try {
+                out = emit(ev, meta.verb);
+            } catch (e) {
+                continue;                                  // a line the engine could not have written (a bridge-only code, a future field)
+            }
+            assert.deepEqual(JSON.parse(out), JSON.parse(line), `${file}: ${line}`);
+            compared++;
+        }
+    }
+    assert.ok(compared >= 40, `only ${compared} lines compared`);
+});
+
+test('a result with an invalid peer ID or a null where the state demands one is not read', () => {
+    const base = JSON.parse(linesOf('status-paired.ndjson').at(-1));
+    const read = o => parse(JSON.stringify(o), 'status');
+    assert.notEqual(read(base), null);
+    assert.equal(read({...base, peer: {id: A.slice(1), name: 'x'}}), null);
+    assert.equal(read({...base, peer: {id: `x${B}`, name: 'x'}}), null);        // garbage in front of an otherwise valid ID
+    assert.equal(read({...base, state: 'not-set-up'}), null);                   // link/shared/up_to_date must be null outside half and paired
+    assert.equal(read({...base, state: 'half', peer: null}), null);
+    assert.equal(read({...base, notes: -1}), null);
 });

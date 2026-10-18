@@ -66,12 +66,27 @@ test('a caller cannot choose another home, a GUI address, an API key, or a subco
     assert.equal(FORBIDDEN_FLAGS.test('--homedir'), false);          // only the exact flags
 });
 
+test('short and one-dash spellings of the forbidden flags are refused too; a negative number is not a flag (-1 of --max-conflicts)', async () => {
+    const s = stub();
+    const port = createRunPort({spawn: s.spawn, hostEnv: CALLER, home: HOME});
+    for (const flag of ['-H', '-Hx', '-H/x', '-C', '-D', '-hH', '-h', '-home=/evil', '-gui-address=x', '-config=/x', '--conf', '--conf=/x', '--home=a', '-a'])
+        assert.throws(() => port.syncthing('generate', [flag]), /set by the port only/, flag);
+    assert.throws(() => port.syncthing('cli', ['config', 'x', '-H', 'b']), /set by the port only/);
+    await port.syncthing('cli', ['config', 'folders', 'f', 'add', '--max-conflicts', '-1']);
+    assert.deepEqual(s.calls[0].argv.slice(-2), ['--max-conflicts', '-1']);
+    // the one --home the child gets is the port's, whatever the caller passed
+    for (const c of s.calls)
+        assert.equal(c.argv.filter(a => /^-/.test(a) && /home/.test(a)).length, 1);
+});
+
 test('systemctl: only the closed calls on our own unit', async () => {
     const s = stub();
     const port = createRunPort({spawn: s.spawn, hostEnv: CALLER, home: HOME});
     for (const ok of [['--user', 'enable', '--now', UNIT_NAME], ['--user', 'disable', '--now', UNIT_NAME], ['--user', 'disable', UNIT_NAME], ['--user', 'stop', UNIT_NAME], ['--user', 'is-active', UNIT_NAME]])
         await port.systemctl(ok);
     assert.equal(s.calls[0].argv[0], SYSTEMCTL_EXE);
+    const sneaky = {toJSON: () => '--user'};                     // an object that serialises like an allowed argument
+    assert.throws(() => port.systemctl([sneaky, 'stop', UNIT_NAME]), /not allowed/);
     for (const bad of [[], ['--user', 'enable', '--now', 'syncthing.service'], ['enable', '--now', UNIT_NAME], ['--user', 'enable', '--now', UNIT_NAME, 'other.service'],
         ['--system', 'enable', '--now', UNIT_NAME], ['--user', 'mask', UNIT_NAME], ['--user', 'daemon-reload'], ['--user', 'start', 'x;y'], 'enable'])
         assert.throws(() => port.systemctl(bad), /not allowed/, JSON.stringify(bad));
@@ -84,7 +99,10 @@ test('the output cap: an output over maxBytes (or flagged tooLarge) is dropped a
     assert.deepEqual(await createRunPort({spawn: async () => ({rc: 0, out: 'é'.repeat(600)}), hostEnv: {}, home: HOME}).syncthing('cli', [], {maxBytes: 1000}), {rc: 0, out: '', tooLarge: true});
     assert.deepEqual(await createRunPort({spawn: async () => ({rc: 0, out: 'a', tooLarge: true}), hostEnv: {}, home: HOME}).syncthing('cli', []), {rc: 0, out: '', tooLarge: true});
     assert.deepEqual(await createRunPort({spawn: async () => ({rc: 3, out: 'err'}), hostEnv: {}, home: HOME}).syncthing('cli', []), {rc: 3, out: 'err'});
-    assert.deepEqual(await createRunPort({spawn: async () => null, hostEnv: {}, home: HOME}).syncthing('cli', []), {rc: -1, out: '', tooLarge: true});
+    // no exit code (a timeout, no result) is a failure, not a size problem
+    assert.deepEqual(await createRunPort({spawn: async () => null, hostEnv: {}, home: HOME}).syncthing('cli', []), {rc: -1, out: '', failed: true});
+    assert.deepEqual(await createRunPort({spawn: async () => ({rc: -1, out: 'x'}), hostEnv: {}, home: HOME}).syncthing('cli', []), {rc: -1, out: 'x'});
+    assert.deepEqual(await createRunPort({spawn: async () => ({rc: 0.5, out: 'x'}), hostEnv: {}, home: HOME}).syncthing('cli', []), {rc: -1, out: '', failed: true});
 });
 
 test('the opts reach the spawn: stdin, maxBytes, timeout; the env object handed over is a copy', async () => {
