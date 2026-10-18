@@ -166,6 +166,11 @@ export function buildCss() {
         'window.cetli-note textview.cetli-text, window.cetli-note textview.cetli-text text { background: transparent; color: inherit; }',
         // the title of the red note ("Important", shown by the window, not stored): bold and larger than the text, in the colour of the strip
         'window.cetli-note headerbar.cetli-header label.cetli-title { font-weight: 700; font-size: larger; }',
+        // libadwaita dims the whole bar of a window that is not active (`headerbar:backdrop > windowhandle { filter: opacity(0.5) }`, a filter on
+        // the parent: nothing set on the label can undo it). In a bar with a title the filter moves from the bar to its buttons and the small
+        // label: the same 50% for them, and the title stays as readable as in the active window
+        'window.cetli-note headerbar.cetli-header.cetli-titled:backdrop > windowhandle { filter: none; }',
+        'window.cetli-note headerbar.cetli-header.cetli-titled:backdrop .cetli-hbutton, window.cetli-note headerbar.cetli-header.cetli-titled:backdrop label.cetli-unresolved { filter: opacity(0.5); }',
         'window.cetli-note label.cetli-mark { font-size: smaller; padding: 2px 8px; }',
         'window.cetli-note label.cetli-unresolved { font-size: smaller; }',
         // the "All notes" list: a row is the note in miniature (same fills and texts as the windows)

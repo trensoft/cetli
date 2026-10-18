@@ -165,6 +165,7 @@ export class NoteWindow {
     _buildHeader() {
         const header = new Gtk.HeaderBar();
         header.add_css_class('cetli-header');
+        this.header = header;
         // The window title is the contract name, not for the eye; this label is the title of the red note (_applyColorClass).
         this.titleLabel = new Gtk.Label({label: ''});
         this.titleLabel.add_css_class('cetli-title');
@@ -176,6 +177,7 @@ export class NoteWindow {
         add.set_action_name('app.new-note');
         add.set_tooltip_text(S.menuNewNote());
         add.update_property([Gtk.AccessibleProperty.LABEL], [S.menuNewNote()]);
+        add.add_css_class('cetli-hbutton');
         this.addButton = add;
         header.pack_start(add);
         header.pack_start(this.unresolved);
@@ -185,6 +187,7 @@ export class NoteWindow {
         popover.add_child(this._buildColorGrid(), 'colors');
         this.menuPopover = popover;
         this.menuButton = new Gtk.MenuButton({icon_name: 'open-menu-symbolic', popover, tooltip_text: S.menuTooltip()});
+        this.menuButton.add_css_class('cetli-hbutton');
         header.pack_end(this.menuButton);
         this.win.set_titlebar(header);
     }
@@ -343,7 +346,13 @@ export class NoteWindow {
                 this.win.remove_css_class('cetli-fixed');
         }
         // "Important" in the header of a red note only (the exact red); a look of the colour, not stored in the note
-        this.titleLabel.set_label(this.color === NOTE_RHEL_RED ? S.importantTitle() : '');
+        const titled = this.color === NOTE_RHEL_RED;
+        this.titleLabel.set_label(titled ? S.importantTitle() : '');
+        // the class that keeps the title readable in a window that is not active (data.js: buildCss)
+        if (titled)
+            this.header.add_css_class('cetli-titled');
+        else
+            this.header.remove_css_class('cetli-titled');
         this._syncPicker();
         this._syncGrid();
     }
