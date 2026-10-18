@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {markerPaths} from '../sync/markers.js';
-import {DISMISSED_TEXT, shouldShowFirstStart} from '../app/sync-start.js';
+import {DISMISSED_TEXT, shouldShowFirstStart, syncMarked} from '../app/sync-start.js';
 
 const HOME = '/home/u';
 const NOTES = '/home/u/.local/share/cetli/notes';
@@ -60,4 +60,13 @@ test('T17: what "Later" writes is exactly {"version":1,"dismissed":true}', () =>
 
 test('bad paths: fail quiet, not shown', () => {
     assert.equal(shouldShowFirstStart({stateText: null, markerExists: none, notesDir: 'x', homeDir: HOME}), false);
+});
+
+test('0.2.5.1: a marker anywhere on the chain means synchronised (no note at the start); none means not; odd paths count as synchronised', () => {
+    const only = path => p => p === path;
+    assert.equal(syncMarked({markerExists: () => false, notesDir: NOTES, homeDir: HOME}), false);
+    assert.equal(syncMarked({markerExists: only(`${NOTES}/.stfolder`), notesDir: NOTES, homeDir: HOME}), true);
+    assert.equal(syncMarked({markerExists: only('/home/u/.stfolder'), notesDir: NOTES, homeDir: HOME}), true);
+    assert.equal(syncMarked({markerExists: only('/home/.stfolder'), notesDir: NOTES, homeDir: HOME}), false);    // above $HOME: not asked
+    assert.equal(syncMarked({markerExists: () => false, notesDir: 'notes', homeDir: HOME}), true);
 });

@@ -33,3 +33,14 @@ export function shouldShowFirstStart({stateText, markerExists, notesDir, homeDir
     }
     return !paths.some(p => markerExists(p));
 }
+
+// 0.2.5.1: whether the notes folder is (or sits inside) a synchronised folder: a `.stfolder` marker anywhere on the chain. Then the start
+// must not make a note of its own: the folder may still be empty here and fill a moment later, and a new note would reach every computer.
+// A doubt (odd paths) counts as synchronised: better no new note than one more on each computer.
+export function syncMarked({markerExists, notesDir, homeDir}) {
+    try {
+        return markerPaths(notesDir, homeDir).some(p => markerExists(p));
+    } catch {
+        return true;
+    }
+}
