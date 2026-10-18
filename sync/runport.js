@@ -3,7 +3,7 @@
 // start (`spawn(argv, env, opts) -> Promise<{rc, out}>`) is injected: Gio.Subprocess in the real program (sync/main.js), a stub in the
 // tests. Everything that makes a call safe is here, so a stub test (S-T4 (a)) pins it:
 //   - the child environment is built from an ALLOWLIST (PATH, HOME, XDG_*, LANG, DBUS_SESSION_BUS_ADDRESS, XDG_RUNTIME_DIR); every
-//     `ST*` variable is dropped, and so is everything else, whatever its name. M-W3 measured that STGUIADDRESS + STGUIAPIKEY redirect
+//     `ST*` variable is dropped, and so is everything else, whatever its name. M-W3 measured that the GUI address and GUI key variables redirect
 //     `syncthing cli --home=X` AND its writes to another instance. No call site builds its own environment.
 //   - the executable is an absolute literal, the arguments are an array (no shell), and `--home=<dedicated home>` is put in by the port;
 //     a caller cannot pass a home, a GUI address or an API key flag (flags are not a defence, 0E row 8; there is no key, S-2).
