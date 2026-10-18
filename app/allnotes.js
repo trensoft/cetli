@@ -80,7 +80,7 @@ function ensureCardStyle() {
 }
 
 export class AllNotesWindow {
-    // ctl: {store, gtkApp, dark(), openNote(id) (a promise), isOpen(id), closeNote(id), deleteNote(id) (a promise; optional:
+    // ctl: {store, gtkApp, dark(), openNote(id) (a promise), isOpen(id), closeNote(id), newNote(from) (a promise), deleteNote(id) (a promise; optional:
     // without it the trash button is not shown), onAllNotesClosed(win), log}
     constructor({ctl}) {
         this.ctl = ctl;
@@ -104,7 +104,12 @@ export class AllNotesWindow {
         });
         this.stack = new Gtk.Stack({vexpand: true, hexpand: true});
         this.stack.add_named(new Gtk.ScrolledWindow({child: this.list, hexpand: true, vexpand: true}), 'list');
-        this.stack.add_named(new Adw.StatusPage({title: S.noNotesTitle(), description: S.noNotesText(), icon_name: 'document-edit-symbolic', vexpand: true}), 'none');
+        // 0.2.5.3: a synchronised folder with no live note opens this list at the start; the way to a first note is on the page itself.
+        this.newNoteButton = new Gtk.Button({label: S.menuNewNote(), halign: Gtk.Align.CENTER});
+        this.newNoteButton.add_css_class('suggested-action');
+        this.newNoteButton.add_css_class('pill');
+        this.newNoteButton.connect('clicked', () => this.ctl.newNote(null).catch(e => this.ctl.log(`All notes: ${e?.message ?? e}`)));
+        this.stack.add_named(new Adw.StatusPage({title: S.noNotesTitle(), description: S.noNotesText(), icon_name: 'document-edit-symbolic', vexpand: true, child: this.newNoteButton}), 'none');
         this.stack.add_named(new Adw.StatusPage({title: S.noResultsTitle(), description: S.noResultsText(), icon_name: 'system-search-symbolic', vexpand: true}), 'nores');
         const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
         box.append(this.search);

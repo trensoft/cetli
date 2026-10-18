@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.5.2
+Version:        0.2.5.3
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -131,6 +131,10 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5.3-1
+- Fix: on a synchronised notes folder with no live note (for example after all notes were deleted: the folder then holds only deleted records), the start opens the list of notes, and its empty page had no way to a first note. The empty page now has a "New note" button. It makes the first note the same way as the menu does, so it is red (Important), and opens its window. Nothing else changes: on a folder that is not synchronised the start still makes one red note, and the start of a synchronised folder still makes no note by itself.
+- Tests: three start-gate smokes drive the real application (app-tests/synced-start-deleted-smoke.js: marker, deleted records, no live note; app-tests/synced-start-empty-smoke.js: marker, empty folder; app-tests/unsynced-start-smoke.js: no marker, the old path). Not measured: a real synchronised pair; the Hungarian and other catalogs are unchanged (the button text is the existing "New note").
+
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5.2-1
 - Fix: when the sync program of cetli is set up but does not answer, the error window now has a way out. When the window opens and the sync program does not answer, the window starts it again by itself, once per opening and without a click; a computer that was paired reconnects after an update or a restart without anybody pressing anything, also when the unit of the sync program is not running (inactive, failed, start limit; measured with Syncthing 2.1.6: then the status answers E_SERVICE_TIMEOUT after 5-6 s). A unit that the user switched off (cetli-sync forget --stop) is left off by the automatic try; the button then runs enable --now. A restart that ends on E_CONFIG_UNSAFE offers Reset sync as well. If that does not help, "Try again" starts the sync program again (it clears the failed state of the unit, restarts it and waits for it) and touches no data. If the sync program still does not answer, "Reset sync" is the last resort (the computer gets a new ID, so the pairing has to be made again; the confirmation says so) and asks first, then stops the unit, moves the own directory of the sync program (its identity, key and settings) aside under a time-stamped name beside it, takes away the marker of the folder that cetli itself set up, and opens the ID page with a new ID of this computer. It deletes no note and nothing else; the other computer must stop syncing as well, because it accepts one partner. Both steps are also available as cetli-sync restart and cetli-sync reset.
 - Tests: the engine, the window and the two new commands have tests (sync-tests/engine-recover.test.js, app-tests/sync-wizard-smoke.js). Not measured: a real systemd user service that does not answer, the marker directory of a real Syncthing (the check accepts an empty directory or one that holds only a file named syncthing-folder-<letters and digits>.txt), two real computers. The reason why the sync program does not answer on the computer that showed the error is not known yet; this release does not change that.
