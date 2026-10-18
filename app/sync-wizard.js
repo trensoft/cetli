@@ -45,6 +45,7 @@ export class SyncWizard {
         this.mode = 'ids';                  // 'ids' (no other computer yet, may type) or 'add' (a group exists, only waits)
         this.view = null;                   // groupView of the status on the group page
         this.rowWidgets = [];
+        this.foreignRowWidgets = [];
         this.returnedRows = [];
         this.rm = null;                     // the remove page: {id, path, marked}
         this.revokeStatus = null;           // the status the last `revoke` was chosen from
@@ -178,7 +179,9 @@ export class SyncWizard {
         hint.add_css_class('caption');
         this._addPage('info-stfolder', [this._title(S.syncInfoStfolderTitle()), this._text(S.syncInfoStfolderText()), hint, w.infoStfolderClose]);
         w.infoForeignClose = this._button(S.syncClose(), () => this.win.close());
-        this._addPage('info-foreign', [this._title(S.syncInfoForeignTitle()), this._text(S.syncInfoForeignText()), w.infoForeignClose]);
+        // the computers the engine lists next to the foreign entry (no link measured): each can be removed, which the engine allows here
+        w.foreignRows = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 8});
+        this._addPage('info-foreign', [this._title(S.syncInfoForeignTitle()), this._text(S.syncInfoForeignText()), w.foreignRows, w.infoForeignClose]);
 
         // error (red) or information (neutral, from an information code)
         w.errTitle = this._title('');
@@ -339,7 +342,7 @@ export class SyncWizard {
         w.removeTooMany.set_visible(false);
         w.removeConfirm = this._button(S.syncRemoveButton(), () => this._confirmRemove());
         w.removeConfirm.add_css_class('destructive-action');
-        w.removeBack = this._button(S.syncCancel(), () => this._show('group'));
+        w.removeBack = this._button(S.syncCancel(), () => this._show(pageForStatus(this.status) === 'info-foreign' ? 'info-foreign' : 'group'));
         const removeButtons = new Gtk.Box({spacing: 6});
         removeButtons.append(w.removeConfirm);
         removeButtons.append(w.removeBack);
@@ -438,6 +441,10 @@ export class SyncWizard {
             this.ownId = status.own_id;
             this._fillGroup(status);
             this._show('group');
+        } else if (page === 'info-foreign') {
+            this.ownId = status.own_id;
+            this.foreignRowWidgets = this._fillRows(this.w.foreignRows, groupView(status));
+            this._show(page);
         } else if (page === 'error') {
             this._showError('E_INTERNAL', () => this.refresh());
         } else {
@@ -462,7 +469,7 @@ export class SyncWizard {
         show(w.bnPromote, v.promoteIds.length > 0 && !this.promoteDismissed);
         show(w.bnNew, v.newIds.length > 0, v.newIds.length > 0 ? S.syncNewBanner(v.newIds.length) : null);
         this._fillReturned(v);
-        this._fillRows(v);
+        this.rowWidgets = this._fillRows(w.groupRows, v);
         w.groupAdd.set_sensitive(!v.addBlocked);
         this._setListenerNote(w.groupListener, status);
         w.groupOwnId.set(status.own_id ?? '');
@@ -485,11 +492,11 @@ export class SyncWizard {
         }
     }
 
-    _fillRows(v) {
-        const w = this.w;
-        for (let c = w.groupRows.get_first_child(); c !== null; c = w.groupRows.get_first_child())
-            w.groupRows.remove(c);
-        this.rowWidgets = [];
+    // One card per computer in `container`; the widgets are returned (the tests read them).
+    _fillRows(container, v) {
+        for (let c = container.get_first_child(); c !== null; c = container.get_first_child())
+            container.remove(c);
+        const widgets = [];
         for (const r of v.rows) {
             const card = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 4, margin_top: 4, margin_bottom: 4, margin_start: 8, margin_end: 8});
             const row = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 0});
@@ -497,6 +504,8 @@ export class SyncWizard {
             row.append(card);
             const name = this._text(r.name ?? S.syncNameUnreadable());
             name.add_css_class('heading');
+            if (r.isNew || r.returned)
+                name.add_css_class('warning');                      // a computer to look at: new since the last look, or back after a removal
             const compare = mono(new Gtk.Label({label: r.compare, xalign: 0, selectable: true, use_markup: false}));
             const how = this._text(r.how.kind === 'accepted' ? S.syncRowAccepted() :
                 r.how.kind === 'through' ? S.syncRowThrough(r.how.name ?? S.syncNameUnreadable(), r.how.idStart) : S.syncRowGone());
@@ -510,9 +519,10 @@ export class SyncWizard {
             const remove = this._button(r.isNew ? S.syncNewNotMine() : S.syncRemoveButton(), () => this._openRemove(r.id));
             for (const c of [name, compare, how, link, limited, sameName, remove])
                 card.append(c);
-            w.groupRows.append(row);
-            this.rowWidgets.push({id: r.id, name, compare, how, link, limited, sameName, remove});
+            container.append(row);
+            widgets.push({id: r.id, name, compare, how, link, limited, sameName, remove});
         }
+        return widgets;
     }
 
     // A neutral line (no error style) for a listener that is `degraded` or `down`; empty and hidden otherwise.

@@ -592,6 +592,27 @@ async function scenario() {
     sc.win.close();
     await tick(60);
 
+    // a foreign entry next to computers: the page stays the neutral one, lists the computers (no link), and Remove works from there
+    w = await open({status: () => fixture('status-foreign-config'),
+        revoke: () => ({ok: true, result: {event: 'result', removed: [P], returned: [], offline: [], remaining: 1, revocation_open: true}})});
+    check(await pageIs(w, 'info-foreign'), 'foreign-config: the neutral page');
+    check(w.foreignRowWidgets.length === 2 && w.foreignRowWidgets.every(r => !r.link.get_visible()), 'it lists the computers the engine sends, with no link text');
+    w.foreignRowWidgets[1].remove.emit('clicked');
+    check(w.page === 'remove' && w.rm.id === P, 'Remove from the foreign page opens the remove page');
+    w.w.removeBack.emit('clicked');
+    check(w.page === 'info-foreign', 'Cancel goes back to the foreign page, not to a group page');
+    w.foreignRowWidgets[1].remove.emit('clicked');
+    w.w.removeConfirm.emit('clicked');
+    w.confirmDialog.emit('response', 'go');
+    check(await pageIs(w, 'revoke-result') && JSON.stringify(fake.argv.find(a => a[0] === 'revoke')) === JSON.stringify(['revoke', P]), 'and the removal runs with exactly that ID');
+    await closeWin(w);
+
+    // new and returned rows are marked for a look
+    w = await open({status: () => fixture('status-group-new', {harden_pending: 0})});
+    await pageIs(w, 'group');
+    check(w.rowWidgets[1].name.has_css_class('warning') && !w.rowWidgets[0].name.has_css_class('warning'), 'a new row is highlighted, the others are not');
+    await closeWin(w);
+
     // switch off (the default): the same row has no shortcut
     w = await open({status: () => fixture('status-group-3')});
     await pageIs(w, 'group');
