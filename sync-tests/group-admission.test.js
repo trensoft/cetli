@@ -54,7 +54,7 @@ test('T-N3: an introduction that crosses 9 peers: status says over_limit, host, 
     w.calls.length = 0;
     assert.deepEqual(await perform(w, 'host'), {error: {code: 'E_GROUP_FULL'}});
     assert.deepEqual((await perform(w, 'setup')).error.code, 'E_GROUP_FULL');
-    assert.equal((await perform(w, 'join', makeId(300))).error.code, 'E_ALREADY_PAIRED');
+    assert.equal((await perform(w, 'join', makeId(300))).error.code, 'E_GROUP_FULL');
     assert.equal(writes(w).length, 0, 'the engine never picks a victim');
     assert.equal(w.calls.some(c => c.argv.includes('delete')), false);
 });

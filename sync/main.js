@@ -34,8 +34,10 @@ async function main(args) {
     const emitEvent = event => {
         try {
             out(emit(event, verb));
+            return true;
         } catch {
             real.log('an event did not fit the contract');
+            return false;
         }
     };
     const engine = createEngine({
@@ -48,10 +50,13 @@ async function main(args) {
     const arg = verb === 'join' ? await input.firstLine() : ['forget', 'revoke', 'promote', 'ack'].includes(verb) ? {all: flags.all === true, stop: flags.stop === true, ids} : undefined;
     const outcome = await engine.perform(verb, arg);
     if (outcome.result) {
-        emitEvent(outcome.result);
-        return 0;
+        if (emitEvent(outcome.result))
+            return 0;
+        emitEvent({event: 'error', code: 'E_INTERNAL'});                     // never end without a terminal line: the bridge would read E_ENGINE_DIED
+        return 1;
     }
-    emitEvent({event: 'error', code: outcome.error.code, ...(outcome.error.step ? {step: outcome.error.step} : {})});
+    if (!emitEvent({event: 'error', code: outcome.error.code, ...(outcome.error.step ? {step: outcome.error.step} : {})}))
+        emitEvent({event: 'error', code: 'E_INTERNAL'});
     return 1;
 }
 

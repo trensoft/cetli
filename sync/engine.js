@@ -106,10 +106,8 @@ export function createEngine(ports) {
 
     async function cli(args, opts) {
         const r = await run.syncthing('cli', args, opts);
-        if (r.tooLarge)
-            throw new Fail('E_PENDING_TOO_LARGE');
-        if (r.rc !== 0)
-            throw new Fail('E_CLI_FAILED');
+        if (r.tooLarge || r.rc !== 0)
+            throw new Fail('E_CLI_FAILED');                                  // E_PENDING_TOO_LARGE is host's alone (the pending list, read in host())
         return r.out;
     }
 
@@ -226,6 +224,8 @@ export function createEngine(ports) {
     function saveState(state, cfg, own) {
         const {missing} = loadState();
         let next = state;
+        if (next.broken && cfg)                                              // the file was unreadable: it stays a freeze over EVERY peer when rewritten
+            next = withFreeze({...next, freeze: {ids: []}}, cfg.ids.filter(id => id !== own).slice(0, FREEZE_MAX));
         if (missing && cfg) {
             const direct = cfg.devices.filter(d => d.id !== own && d.introducedBy === '').map(d => d.id);
             next = withAck(next, direct.filter(id => !next.ack.includes(id) && !next.tomb.includes(id)));
@@ -608,12 +608,12 @@ export function createEngine(ports) {
         if (ids.length !== 1 || cfg.devices.find(d => d.id === id)?.introducedBy !== '')
             throw new Fail('E_BAD_ID');
         const after = await step('share', async () => {
+            const ls = loadState();
+            saveState(withTomb({...ls.state, ack: ls.state.ack.filter(x => x !== id)}, [id]), cfg, own);       // first: it may come back from a computer that still lists it
             await deleteIds([id], cfg);
             const back = await readConfig();
             if (!absent(back, [id]))
                 throw new Fail('E_CLI_FAILED');
-            const ls = loadState();
-            saveState(withTomb({...ls.state, ack: ls.state.ack.filter(x => x !== id)}, [id]), cfg, own);       // it may come back from a computer that still lists it
             return back;
         });
         const remaining = after.ids.filter(x => x !== own).length;
@@ -635,8 +635,10 @@ export function createEngine(ports) {
             saveState(withFreeze(withTomb(ls.state, ids), freezeSet), cfg, own);
             for (const id of freezeSet)
                 await setIntroducer(id, false);
+            // read back: no frozen peer is an introducer (a list over the cap is not in `back.devices`: ask for the frozen ones one by one)
             const back = await readConfig();
-            if (back.devices.some(d => freezeSet.includes(d.id) && d.introducer))
+            const flags = back.overCap ? await Promise.all(freezeSet.map(async id => json(await cli(['config', 'devices', id, 'dump-json'])).introducer === true)) : back.devices.filter(d => freezeSet.includes(d.id)).map(d => d.introducer);
+            if (flags.some(Boolean))
                 throw new Fail('E_CLI_FAILED');
         });
         await step('remove', async () => deleteIds([...ids.slice(1), x], cfg));
@@ -667,6 +669,8 @@ export function createEngine(ports) {
         const ls = loadState();
         if (!isFrozen(ls.state))
             return {result: {event: 'result', revocation_open: false}};
+        if (returnedIds(ls, cfg).length > 0)
+            throw new Fail('E_REVOCATION_OPEN');                              // a removed computer is back: remove it again first (PLAN-ADMISSION 2.3, 10)
         await step('device', async () => {
             const frozen = ls.state.broken ? cfg.ids : ls.state.freeze.ids;
             const wanted = d => wantedIntroducer(d, policy.hardenIntroduced);
@@ -702,7 +706,7 @@ export function createEngine(ports) {
         const {own, cfg} = await prepareLight();
         if (foreignDevices(cfg.devices, own).length > 0 || folderAnomaly(cfg.folders, dirs.notes, cfg.overCap ? null : cfg.devices))
             throw new Fail('E_FOREIGN_DEVICE');
-        refuseWhileClosed(cfg, own, {full: false});
+        refuseWhileClosed(cfg, own);
         namedIds(ids, cfg, own);
         const direct = ids.map(id => cfg.devices.find(d => d.id === id));
         if (direct.some(d => d === undefined || d.introducedBy !== ''))
@@ -726,7 +730,7 @@ export function createEngine(ports) {
     }
 
     // The common start of host and join: backend, instance, daemon, invariants, no removal open. Returns {own, cfg}.
-    async function prepareConnect() {
+    async function prepareConnect({forJoin = false} = {}) {
         if (!backendInstalled())
             throw new Fail('E_NO_SYNCTHING');
         if (!files.exists(configPath))
@@ -740,7 +744,7 @@ export function createEngine(ports) {
             throw new Fail('E_FOREIGN_DEVICE');
         if (folderAnomaly(cfg.folders, dirs.notes, cfg.overCap ? null : cfg.devices))
             throw new Fail('E_CONFIG_UNSAFE');
-        refuseWhileClosed(cfg, own, {full: false});
+        refuseWhileClosed(cfg, own, {full: forJoin});
         return {own, cfg};
     }
 
@@ -786,6 +790,7 @@ export function createEngine(ports) {
         let lastPoll = -Infinity;
         let candidate = null;
         let accepted = false;
+        let listedCount = 0;                                                  // devices in the list at the last pending read (own included)
         // the pending entries newer than the moment the window opened, and the one candidate among them (or null). A device that is in the list
         // NOW (an introduction arrives while the window is open, F4) and a tombstoned one are neither offered nor counted.
         async function pending() {
@@ -798,6 +803,7 @@ export function createEngine(ports) {
             if (!isObj(all))
                 throw new Fail('E_CLI_FAILED');
             const listed = new Set(lines(await cli(['config', 'devices', 'list'])));
+            listedCount = listed.size;
             const tomb = loadState().state.tomb;
             // `time` has a one second resolution and is refreshed on every attempt (M-W10 d): an entry is fresh when its second is not older than
             // the second the window opened in.
@@ -827,6 +833,8 @@ export function createEngine(ports) {
                 const now = await pending();                                  // fresh: the ID must STILL be the one candidate
                 if (now === null || now.id !== wanted[0])
                     throw new Fail('E_PENDING_AMBIGUOUS');
+                if (listedCount - 1 >= MAX_PEERS)
+                    throw new Fail('E_GROUP_FULL');                              // an introduction filled the group while the window was open
                 await addPeer(now.id, own, now.name ?? PEER_LABEL);
                 emit({event: 'peer', id: now.id, name: now.name});
                 const link = await awaitStable(now.id, {stop: () => input.eof()});
@@ -848,7 +856,7 @@ export function createEngine(ports) {
     // peers joins another one (a computer with peers that typed an ID could merge two groups and get round the count, T-N10); the same peer
     // again repairs a missing share (row 12).
     async function join(typed) {
-        const {own, cfg} = await prepareConnect();
+        const {own, cfg} = await prepareConnect({forJoin: true});
         const parsed = parseTypedId(typed, own);
         if (!parsed.ok)
             throw new Fail(parsed.code);

@@ -28,7 +28,7 @@ test('the fixtures the Interface file names exist (section 5, with the 0.2.5 nam
         'host-ok', 'host-expired', 'host-stdin-eof', 'join-ok', 'join-flapping', 'forget-ok', 'oversize', 'not-json', 'v2',
         // 0.2.6 (PLAN-0.2.6 3.2)
         'status-group-3', 'status-group-new', 'status-over-limit', 'status-revocation-open', 'status-returned', 'status-promote-pending', 'status-max-size',
-        'host-group-full', 'host-revocation-open', 'revoke-ok', 'revoke-returned', 'finish-ok', 'harden-ok', 'promote-ok', 'forget-all-ok', 'forget-one-ok', 'ack-ok',
+        'host-group-full', 'host-revocation-open', 'finish-returned', 'revoke-ok', 'revoke-returned', 'finish-ok', 'harden-ok', 'promote-ok', 'forget-all-ok', 'forget-one-ok', 'ack-ok',
     ];
     for (const r of required)
         assert.ok(INDEX[`${r}.ndjson`], r);
@@ -283,11 +283,13 @@ test('emit: strict; a line that parse reads back identically; unknown event, unk
     assert.throws(() => emit({event: 'error', code: 'E_BAD_ID'}, 'host'));                   // E_BAD_ID is the verbs with a typed or listed ID
     for (const verb of ['join', 'forget', 'revoke', 'promote', 'ack'])
         assert.doesNotThrow(() => emit({event: 'error', code: 'E_BAD_ID'}, verb), verb);
-    assert.throws(() => emit({event: 'error', code: 'E_GROUP_FULL'}, 'join'));
-    assert.doesNotThrow(() => emit({event: 'error', code: 'E_GROUP_FULL'}, 'host'));
-    assert.throws(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'revoke'));         // revoke and finish always run
-    assert.throws(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'finish'));
-    assert.doesNotThrow(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'promote'));
+    for (const verb of ['host', 'join', 'setup', 'promote'])
+        assert.doesNotThrow(() => emit({event: 'error', code: 'E_GROUP_FULL'}, verb), verb);
+    for (const verb of ['status', 'revoke', 'forget', 'finish', 'ack', 'harden'])
+        assert.throws(() => emit({event: 'error', code: 'E_GROUP_FULL'}, verb), verb);
+    assert.throws(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, 'revoke'));         // revoke always runs
+    for (const verb of ['host', 'join', 'setup', 'promote', 'finish'])
+        assert.doesNotThrow(() => emit({event: 'error', code: 'E_REVOCATION_OPEN'}, verb), verb);       // finish refuses while a removed computer is back
     assert.throws(() => emit({event: 'error', code: 'E_EXPIRED'}, 'join'));
     assert.throws(() => emit({event: 'error', code: 'E_PENDING_AMBIGUOUS'}, 'join'));
     assert.throws(() => emit({event: 'error', code: 'E_INTERNAL', step: 'unknown-step'}));

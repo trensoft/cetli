@@ -243,5 +243,10 @@
     "verb": "revoke",
     "rc": 1,
     "expect": "error:E_BAD_ID"
+  },
+  "finish-returned.ndjson": {
+    "verb": "finish",
+    "rc": 1,
+    "expect": "error:E_REVOCATION_OPEN"
   }
 }

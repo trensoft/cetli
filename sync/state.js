@@ -5,17 +5,16 @@
 //   { "v": 1,
 //     "ack":    [ID, ...],              computers the user has seen and accepted (max ACK_MAX)
 //     "tomb":   [ID, ...],              removed here: never offered, never counted (max TOMB_MAX, the oldest dropped)
-//     "freeze": null | { "ids": [ID, ...] }   a removal is open: the peers whose introducer flag was lowered (max FREEZE_MAX = READ_CAP) }
+//     "freeze": null | { "ids": [ID, ...] }   a removal is open: the peers whose introducer flag was lowered (max FREEZE_MAX) }
 //
 // A missing file is a fresh state. A file that does not parse, has the wrong shape or an ID that is not canonical is NOT fresh: it reads as
 // an open freeze with empty sets (fail closed: host, join and setup are refused), and `finish` repairs it (PLAN-0.2.6 F6).
 import {isCanonicalId} from './ids.js';
-import {READ_CAP} from './policy.js';
 
 export const STATE_FILE = 'cetli-sync-state.json';
 export const ACK_MAX = 64;
 export const TOMB_MAX = 64;
-export const FREEZE_MAX = READ_CAP;                 // every peer of a group that is over the limit can be frozen too
+export const FREEZE_MAX = 64;                       // every peer of a group that is over the limit, and a list over the cap up to this many
 
 export const freshState = () => ({v: 1, ack: [], tomb: [], freeze: null});
 // What an unreadable file means: the freeze is open and nothing is known.
@@ -62,5 +61,8 @@ export const withAck = (state, ids) => ({...state, ack: union(state.ack, ids, AC
 export const withTomb = (state, ids) => ({...state, tomb: union(state.tomb, ids, TOMB_MAX)});
 export const withoutTomb = (state, ids) => ({...state, tomb: state.tomb.filter(x => !ids.includes(x))});
 export const withFreeze = (state, ids) => ({...state, freeze: {ids: [...new Set([...(state.freeze?.ids ?? []), ...ids])].slice(0, FREEZE_MAX)}});
-export const withoutFreeze = state => ({...state, freeze: null});
+export const withoutFreeze = state => {
+    const {broken, ...rest} = state;                  // an unreadable file that is repaired is not broken any more
+    return {...rest, freeze: null};
+};
 export const isFrozen = state => state.freeze !== null;

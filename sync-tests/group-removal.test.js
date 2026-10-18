@@ -193,7 +193,8 @@ test('revoke runs in foreign-config and over the limit: it is the way out', asyn
     cap.group(many);
     const rc = await perform(cap, 'revoke', {ids: [many[29]]});
     assert.deepEqual(rc.result.removed, [many[29]]);
-    assert.equal(stateOf(cap).freeze.ids.length <= 16, true);
+    assert.equal(stateOf(cap).freeze.ids.length, 30, 'a list over the cap is frozen too, up to the cap of the state file');
+    assert.equal([...cap.devices.values()].some(d => d.introducer), false, 'no listed peer is an introducer after the freeze');
 });
 
 test('T-N13: the result names exactly the remaining peers that are not connected after the dwell, and no other', async () => {
@@ -221,12 +222,19 @@ test('T-N9: a removed computer that is brought back is a result (returned), then
     assert.equal(s.peers.find(p => p.id === b).returned, true);
     assert.equal(s.revocation_open, true);
     assert.deepEqual(await perform(w, 'host'), {error: {code: 'E_REVOCATION_OPEN'}});
-    // a tombstoned computer back with the freeze already finished: still refused (I8)
-    await perform(w, 'finish');
-    assert.equal((await perform(w, 'status')).result.peers.find(p => p.id === b).returned, true);
-    assert.deepEqual(await perform(w, 'host'), {error: {code: 'E_REVOCATION_OPEN'}});
+    // finish refuses while a removed computer is back (PLAN-ADMISSION 2.3, 10): nothing is raised, the freeze stays
+    w.calls.length = 0;
+    assert.deepEqual(await perform(w, 'finish'), {error: {code: 'E_REVOCATION_OPEN'}});
+    assert.equal(argvs(w).filter(isWrite).length, 0);
+    assert.equal(w.devices.get(b).introducer, true, 'the flag of the returned computer is not touched');
+    assert.equal((await perform(w, 'status')).result.revocation_open, true);
     const again = await perform(w, 'revoke', {ids: [b]});
     assert.deepEqual(again.result.removed, [b]);
+    assert.deepEqual(await perform(w, 'finish'), {result: {event: 'result', revocation_open: false}});
+    // a tombstoned computer back with the freeze already finished: still refused (I8)
+    w.introduce(b, a);
+    assert.equal((await perform(w, 'status')).result.peers.find(p => p.id === b).returned, true);
+    assert.deepEqual(await perform(w, 'host'), {error: {code: 'E_REVOCATION_OPEN'}});
     // the state file holds IDs only
     const text = w.fsMap.get(STATE(w)).text;
     assert.equal(/pc-|name|path|\/home/.test(text), false);
@@ -429,4 +437,60 @@ test('the dwell is a parameter of the engine (timing.dwellMs) and the default is
     const t0 = w.mono;
     await perform(w, 'revoke', {ids: [b]});
     assert.equal(w.mono - t0 >= DWELL_MS, true);
+});
+
+test('promote is refused over the limit (E_GROUP_FULL); join too, also over the read cap, with nothing added (review of 0.2.6)', async () => {
+    const w = await ready();
+    const list = ids(11);
+    list.forEach((id, i) => w.pair(id, {introducer: i !== 0, name: `pc-${i}`}));
+    w.calls.length = 0;
+    assert.deepEqual(await perform(w, 'promote', {ids: [list[0]]}), {error: {code: 'E_GROUP_FULL'}});
+    assert.equal(argvs(w).filter(isWrite).length, 0);
+    const cap = await ready();
+    ids(30).forEach(id => cap.introduce(id, makeId(1), {introducer: false}));
+    cap.calls.length = 0;
+    assert.deepEqual(await perform(cap, 'join', THIRD), {error: {code: 'E_GROUP_FULL'}});
+    assert.equal(argvs(cap).filter(isWrite).length, 0, 'two groups are not merged by a flood of devices');
+});
+
+test('host: the count is checked again at the click; an introduction that filled the group while the window was open ends in E_GROUP_FULL', async () => {
+    const w = await ready();
+    w.group(ids(8));
+    connectAll(w);
+    w.at(3000, x => { x.pending[PEER] = {time: new Date(x.clock).toISOString().replace(/\.\d+Z$/, 'Z'), name: 'new-laptop', address: ''}; });
+    w.at(5000, x => x.introduce(makeId(90), makeId(1)));       // the 9th arrives by introduction
+    w.at(7000, x => x.write(`accept ${PEER}\n`));
+    const r = await perform(w, 'host');
+    assert.deepEqual(r.error, {code: 'E_GROUP_FULL'});
+    assert.equal(w.devices.has(PEER), false);
+});
+
+test('forget <ID> writes the tombstone BEFORE it deletes: a lister that brings the device back before the read-back still leaves the tombstone', async () => {
+    const {w, a, d} = await makeGroup({policy: {shortcutRemove: true}});
+    w.remoteLists.push({by: a, id: d, name: 'pc-d'});
+    const r = await perform(w, 'forget', {ids: [d]});
+    assert.equal(r.error.code, 'E_CLI_FAILED');
+    assert.deepEqual(stateOf(w).tomb, [d]);
+    assert.equal((await perform(w, 'status')).result.peers.find(p => p.id === d).returned, true);
+});
+
+test('an unreadable state file stays a freeze over every peer when ack rewrites it', async () => {
+    const {w, a, d} = await makeGroup();
+    w.put(STATE(w), 'garbage', 0o600);
+    await perform(w, 'ack', {ids: [a]});
+    const st = stateOf(w);
+    assert.deepEqual(st.freeze.ids.sort(), [...w.devices.keys()].filter(id => id !== OWN).sort());
+    w.devices.get(a).introducer = false;
+    await perform(w, 'finish');
+    assert.equal(w.devices.get(a).introducer, true, 'finish still restores the flags of every peer');
+    assert.equal(w.devices.get(d).introducer, true);
+});
+
+test('counts above 99 still fit the contract: remaining of a big list (a hostile introducer can inflate it)', async () => {
+    const w = await ready();
+    const many = ids(150);
+    many.forEach(id => w.introduce(id, makeId(1000), {introducer: false}));
+    const r = await perform(w, 'revoke', {ids: [many[0]]});
+    assert.equal(r.result.remaining, 149);
+    valid('revoke', r.result);
 });

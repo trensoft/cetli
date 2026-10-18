@@ -56,8 +56,8 @@ export const GENERIC_CODE = 'E_INTERNAL';
 const CODE_SCOPE = Object.freeze({
     E_BAD_ID: ['join', 'forget', 'revoke', 'promote', 'ack'],
     E_OWN_ID: ['join'],
-    E_GROUP_FULL: ['host', 'setup'],                          // the group is at (or over) the limit; `status` reports it as over_limit
-    E_REVOCATION_OPEN: ['host', 'join', 'setup', 'promote'],  // a removal is not finished on this computer; `status` reports revocation_open
+    E_GROUP_FULL: ['host', 'join', 'setup', 'promote'],                          // the group is at (or over) the limit; `status` reports it as over_limit
+    E_REVOCATION_OPEN: ['host', 'join', 'setup', 'promote', 'finish'],  // a removal is not finished on this computer; `status` reports revocation_open
     E_PENDING_TOO_LARGE: ['host'],
     E_PENDING_AMBIGUOUS: ['host'],
     E_EXPIRED: ['host'],
@@ -87,7 +87,8 @@ const isName = v => v === null || (typeof v === 'string' && v.length > 0 && v.le
 const isPeer = v => isObj(v) && isCanonicalId(v.id) && isName(v.name);
 
 const isIdList = (v, max) => Array.isArray(v) && v.length <= max && v.every(isCanonicalId) && new Set(v).size === v.length;
-const isSmall = v => Number.isInteger(v) && v >= 0 && v <= 99;
+const isSmall = v => Number.isInteger(v) && v >= 0 && v <= 99;           // pending counters (a group has at most 10 computers)
+const isTotal = v => Number.isInteger(v) && v >= 0 && v <= 1e6;         // counts of devices that a hostile introducer can inflate
 
 // One computer of the group, as `status` lists it (PLAN-0.2.6 3.2). `connected`, `link` and `connected_s` are null together when the link
 // was not measured (foreign-config, over-limit); otherwise `link` is a state, `connected` a boolean and `connected_s` follows the link.
@@ -105,13 +106,13 @@ const RESULT_SCHEMAS = {
     'own-id': r => isCanonicalId(r.own_id),
     host: r => isPeer(r.peer) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
     join: r => isPeer(r.peer) && isCanonicalId(r.own_id) && isBool(r.connected) && connectedResult(r) && (r.notes === null || isCount(r.notes)),
-    forget: r => (r.state === 'set-up' || r.state === null) && isSmall(r.remaining) && (r.state === 'set-up') === (r.remaining === 0),
+    forget: r => (r.state === 'set-up' || r.state === null) && isTotal(r.remaining) && (r.state === 'set-up') === (r.remaining === 0),
     revoke: r => isIdList(r.removed, MAX_PEERS) && isIdList(r.returned, MAX_PEERS) && Array.isArray(r.offline) && r.offline.length <= MAX_COMPUTERS && r.offline.every(isPeer) &&
-        isSmall(r.remaining) && r.revocation_open === true,
+        isTotal(r.remaining) && r.revocation_open === true,
     finish: r => r.revocation_open === false,
-    harden: r => isSmall(r.changed),
-    promote: r => isSmall(r.changed),
-    ack: r => isSmall(r.changed),
+    harden: r => isTotal(r.changed),
+    promote: r => isTotal(r.changed),
+    ack: r => isTotal(r.changed),
 };
 const RESULT_KEYS = {
     status: ['state', 'own_id', 'peers', 'computers', 'max_computers', 'over_limit', 'revocation_open', 'harden_pending', 'promote_pending', 'listener', 'up_to_date', 'notes', 'waiting'],
