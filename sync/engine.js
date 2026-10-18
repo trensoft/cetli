@@ -629,7 +629,7 @@ export function createEngine(ports) {
         const {own, cfg} = await prepareLight();
         namedIds(ids, cfg, own, loadState().state.tomb);
         const [x] = ids;
-        const freezeSet = [x, ...cfg.ids.filter(id => id !== own && id !== x)].slice(0, FREEZE_MAX);
+        const freezeSet = [x, ...cfg.ids.filter(id => id !== own && id !== x)].filter(id => cfg.ids.includes(id)).slice(0, FREEZE_MAX);        // X may be gone already (a rerun)
         await step('freeze', async () => {
             const ls = loadState();
             saveState(withFreeze(withTomb(ls.state, ids), freezeSet), cfg, own);

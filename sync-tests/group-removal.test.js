@@ -248,6 +248,13 @@ test('T-N24: revoke is idempotent: cut short after the flag step, a second run d
     const dels = argvs(w).filter(x => x.includes('delete'));
     assert.equal(dels.every(x => x.includes(b) || x.includes(c)), true);
     assert.equal(dels.some(x => x.includes('devices') && !x.includes('folders') && x.includes(c)), false, 'c was gone already: not deleted a second time');
+    // a rerun when X itself is gone already (the run died after the last delete): nothing fails on the missing device
+    const done = await makeGroup();
+    await perform(done.w, 'revoke', {ids: [done.b]});
+    done.w.calls.length = 0;
+    const third = await perform(done.w, 'revoke', {ids: [done.b]});
+    assert.deepEqual([third.result.removed, third.result.returned], [[done.b], []]);
+    assert.equal(argvs(done.w).some(x => x.includes(done.b) && isWrite(x)), false, 'the missing device is not written to');
     // the same run from the start gives the same result
     const clean = await makeGroup();
     const ref = await perform(clean.w, 'revoke', {ids: [clean.b, clean.c]});
