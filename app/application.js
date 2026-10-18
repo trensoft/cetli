@@ -91,6 +91,13 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
             windows.delete(id);
             allNotes?.scheduleRefresh();               // the eye of its card
         },
+        // 0.2.6: a clean window is about to close because its note is gone (deleted on the other computer, or the file vanished). If it is the
+        // last window of a synchronised folder, the list of notes opens first: the program must not leave without a word (GTK quits when the
+        // last window is gone), and a start without a note window does the same.
+        beforeGoneClose: id => {
+            if (allNotes === null && synced() && [...windows.keys()].every(k => k === id))
+                showAllNotes();
+        },
         setOpen: async (id, open) => {
             try {
                 await setOpen(store, id, open);

@@ -323,6 +323,9 @@ const MUTANTS = [
         find: "return !this._dirty() && this._saveTimer === null;", repl: "return this._saveTimer === null;"},
     {id: 'A134', rule: '0.2.6: a window with a save waiting counts as clean (the timer half of _clean is gone)', file: 'window.js', gjs: true,
         find: "return !this._dirty() && this._saveTimer === null;", repl: "return !this._dirty();"},
+    // 0.2.6 last window of a gone note (killed by gone-last-window-smoke.js: CETLI_GJS_TESTS=gone-last-window-smoke.js)
+    {id: 'A135', rule: '0.2.6: the last window of a deleted note closes and the list of notes does not come up', file: 'application.js', gjs: true,
+        find: "if (allNotes === null && synced() && [...windows.keys()].every(k => k === id))\n                showAllNotes();", repl: ""},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});

@@ -537,9 +537,12 @@ export class NoteWindow {
     }
 
     // Closing keeps the usual path (_onCloseRequest): nothing differs from the file, so nothing is written back and the note is not brought back.
+    // The app is told first: the last window of a synchronised folder is replaced by the list of notes (the program does not leave without a word).
     _closeGone() {
-        if (!this.closing)
-            this.win.close();
+        if (this.closing)
+            return;
+        this.ctl.beforeGoneClose?.(this.id);
+        this.win.close();
     }
 
     _tryApplyRemote() {
