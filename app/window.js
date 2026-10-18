@@ -524,10 +524,12 @@ export class NoteWindow {
     }
 
     // The note file is gone: the same rule as for a deletion on the other computer (a clean window closes, an unsaved one stays with the mark).
-    onRemoved() {
+    // `gone`: the store saw no file at all for this note. Only then does a clean window close; a file that is still there but cannot be used now
+    // (quarantine, unknown, newer, frozen) keeps the window, with the mark.
+    onRemoved(gone) {
         if (this.deleted)
             return;
-        if (this._clean()) {
+        if (gone && this._clean()) {
             this._closeGone();
             return;
         }

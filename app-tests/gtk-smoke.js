@@ -259,6 +259,14 @@ async function scenario() {
     await sleep(500);
     check(!windows.has(id5), 'the second close closes the window');
 
+    // 0.2.6: a file that leaves the view without being gone (here: a quarantined date) is not a vanished file: a CLEAN window stays open with the mark.
+    const [id9, w9] = await freshNote();
+    quarantine(id9);
+    await until(() => w9.mark?.kind === 'deleted', 5000);
+    check(w9.mark?.kind === 'deleted' && windows.has(id9) && w9.win.get_visible() && exists(`${dirs.notes}/${id9}.json`), 'a clean window of a quarantined file stays open (the file is still there)');
+    w9.win.close();
+    await until(() => !windows.has(id9), 5000);
+
     // 0.2.6: the other computer deletes a note and this window holds nothing unsaved: the window closes by itself. Attila's case: the note is open
     // on both computers, the other one types (the text arrives here and is applied: the window must be clean again), then deletes it.
     const [id6, w6] = await freshNote();
@@ -280,7 +288,7 @@ async function scenario() {
     check(!windows.has(id7), 'the vanished file closes the clean window');
     const [id8, w8] = await freshNote();
     w8.buffer.insert_at_cursor('keep me', -1);
-    w8.onRemoved();
+    w8.onRemoved(true);
     check(windows.has(id8) && w8.mark?.kind === 'deleted' && w8.mark?.text === S.markFileGone() && w8._bufferText() === 'keep me', 'a vanished file with unsaved text: the window stays with the mark and the text');
     await until(() => exists(`${dirs.notes}/${id8}.json`) && fileRec(id8).text === 'keep me');
     check(fileRec(id8).text === 'keep me', 'and saving brings the note back');

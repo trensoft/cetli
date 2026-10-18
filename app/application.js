@@ -303,7 +303,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
             }
             break;
         case 'removed':
-            w?.onRemoved();
+            w?.onRemoved(ev.gone === true);
             break;
         case 'save-retried':
             w?.onSaveRetried(ev.result);

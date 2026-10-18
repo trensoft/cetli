@@ -554,8 +554,10 @@ export class Store {
             changes.push({type: old ? 'changed' : 'added', id, record: rec});
         }
         for (const id of this._view.keys()) {
+            // `gone`: the note has no `<id>.json` entry at all. A note that only left the view (a quarantined, unknown, newer or frozen file, over the
+            // limit) is still on disk; whoever acts on 'removed' (a window closing) must not treat that as a vanished file.
             if (!next.has(id))
-                changes.push({type: 'removed', id, record: null});
+                changes.push({type: 'removed', id, record: null, gone: !groups.get(id)?.main});
         }
         this._view = next;
         for (const ch of changes)

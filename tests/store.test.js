@@ -111,6 +111,22 @@ test('V6 quarantine: not applied now, not deleted, looked at again at the next e
     assert.equal(env.store.getNote(uuid(1)).updated, future, 'applied, without a re-read of the file');
 }));
 
+test('0.2.6: a note that leaves the view is "removed" with gone=true only when it has no file; a quarantined or unknown file is gone=false', withEnv({}, async env => {
+    const future = new Date(T0 + 30 * 3600 * 1000).toISOString();
+    for (const n of [1, 2, 3])
+        env.putRec(`${uuid(n)}.json`, rec({id: uuid(n)}));
+    await env.store.refresh();
+    assert.equal(env.store.listNotes().length, 3);
+    env.events.length = 0;
+    env.putRec(`${uuid(1)}.json`, rec({id: uuid(1), rev: 2, updated: future}));     // quarantined: still on disk
+    env.put(`${uuid(2)}.json`, '{broken');                                           // unknown: still on disk
+    fs.unlinkSync(path.join(env.dirs.notes, `${uuid(3)}.json`));                     // vanished
+    await env.store.refresh();
+    const removed = Object.fromEntries(env.events.filter(e => e.type === 'removed').map(e => [e.id, e.gone]));
+    assert.deepEqual(removed, {[uuid(1)]: false, [uuid(2)]: false, [uuid(3)]: true});
+    assert.ok(env.has(`${uuid(1)}.json`) && env.has(`${uuid(2)}.json`), 'the two files are still there');
+}));
+
 test('3: unknown files are logged once per (name, size, mtime), never deleted', withEnv({}, async env => {
     env.put(`${uuid(1)}.json`, '{broken');
     await env.store.refresh();
