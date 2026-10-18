@@ -132,7 +132,7 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 
 %changelog
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5.1-1
-- Fix: on a synchronised notes folder the program no longer makes a new (red) note at the start. Before, a computer whose folder was still empty at the start made one, and it reached every paired computer. Starting the program again by hand still makes a note when there is none
+- Fix: on a synchronised notes folder the program no longer makes a new (red) note at the start. Before, a computer whose folder was still empty at the start made one, and it reached every paired computer. When there is no note in the folder, the start opens the list of notes instead, the first time and every time after
 - Tests: a unit test for the check; not measured: the restart with two real computers (it is part of the 0.2.6 test)
 
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1
