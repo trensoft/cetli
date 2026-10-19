@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.7
+Version:        0.2.7.1
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -131,6 +131,10 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
+* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.7.1-1
+- Fix: a note could lose its newest text. When the sync program delivered a newer version of a note at the very moment cetli was settling a sync conflict of the same note, cetli wrote over that version and no copy of it was left (since 0.2.5.4). cetli now swaps the note in with one atomic step and looks afterwards at what it took out: a version that cetli had not read is kept, outside the synced folder, in the folder backup/ beside the notes folder (in ~/.local/share/cetli/backup, at most 32 files, the oldest are dropped first); nothing is put into the notes folder, so nothing spreads to the other computers. The same holds for a conflict file that changes just before cetli deletes it: it is put back. The note shows the version cetli settled on; the version in backup/ is not shown in the window and is not restored by cetli itself, it is a file you can open and copy from
+- The swap uses `mv --exchange` (coreutils 9.5 and later: CentOS Stream 10 has 9.5 and Fedora 43 has 9.7, both measured; the Fedora releases between were not looked at); where the system cannot do it (an older mv, a file system without it), cetli checks the note right before replacing it, which narrows the window but does not close it, and says so in the log. Tests: tests/late-arrival.test.js, the sweep tests/f1prime-late-injection.test.js (a new version injected before every file call of the settlement), the mutants M71-M80 in tests/mutants.js. Not measured: `mv --exchange` started by the application under gjs (there is no gjs here; the call itself was measured with the mv of CentOS Stream 10 and Fedora 43 roots, the swap in the tests through python3); a real sync program delivering at that moment. Not changed: a note that is absent from the notes folder when cetli writes it (the write into a free place is a test followed by a rename, as before), and the local save of the user over a note that changed at that moment
+
 * Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.7-1
 - New: cetli syncs up to 10 computers. You connect a new computer to any computer of the group with one ID comparison; the other computers learn the new one by themselves. A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all your computers. cetli guides you through it and never claims a computer is removed from the whole group, only from the one it runs on
 - If you paired computers with 0.2.5, open Sync on each of them and allow the new rule once; a pair works under the new rule only when it is allowed on both of its computers, until then it behaves as in 0.2.5 (a new computer is not passed on). A computer you removed is not offered again when it knocks until you press Add again in Sync (you still compare its ID and accept it). Going back to 0.2.5 needs "Stop syncing" first
