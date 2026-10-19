@@ -44,6 +44,7 @@ export function createWorld(opts = {}) {
         hung: false,                               // the unit is active but the daemon never answers (the failure of 0.2.5.2)
         enabled: true,                             // `systemctl --user is-enabled`: false = the unit was disabled by the user (`forget --all --stop`)
         orphan: false,                             // a daemon runs and answers but the unit is inactive (its parent was killed: the child holds the lock and the port)
+        orphanAt: 0,                               // an orphan child answers from this virtual time on (a slow one: the lock and the port are taken, the API is not up yet)
         activating: false,                         // the unit is on its way up (`is-active` says activating, rc 3) and the daemon does not answer yet
         unitFailed: false,                         // the unit is in the failed state (start limit): starting it is refused until `reset-failed`
         afterDisable: null,                        // (world) -> void: runs while `systemctl --user disable` is working (a path swapped during the wait)
@@ -128,7 +129,7 @@ export function createWorld(opts = {}) {
         const elems = [...w.folders.keys()].map(id => `\n    <folder id="${id}" label="cetli" path="${w.folders.get(id).path}" type="${w.folders.get(id).type}">\n    </folder>`).join('');
         f.text = base.replace(/(<configuration version="52">)/, `$1${elems}`);
     };
-    const daemonUp = () => w.orphan || w.daemon && !w.hung && (w.startedAt === null || w.mono - w.startedAt >= w.startDelayMs);
+    const daemonUp = () => w.orphan && w.mono >= w.orphanAt || w.daemon && !w.hung && (w.startedAt === null || w.mono - w.startedAt >= w.startDelayMs);
     const lines = a => `${a.join('\n')}\n`;
     const devJson = id => {
         const d = w.devices.get(id);

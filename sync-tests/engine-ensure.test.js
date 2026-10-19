@@ -65,6 +65,17 @@ test('ensure: an orphan child (the parent was killed: the daemon answers, the un
     assert.equal(w.timeline.some(e => DID_NOT_START.test(e)), false);
 });
 
+test('ensure: a slow orphan child (answers after 2.5 s, inside the 3 s patience of ensureWaitMs) is waited for and NOT started a second time', async () => {
+    const w = await paired();
+    w.daemon = false;
+    w.orphan = true;
+    w.orphanAt = w.mono + 2500;
+    assert.deepEqual(await perform(w, 'ensure'), {result: {event: 'result', state: 'running'}});
+    assert.ok(w.mono >= 2500 && w.mono < 3000 + 1000, `it waited for the child, not longer than the patience (${w.mono} ms)`);
+    assert.deepEqual(systemctl(w), ['is-enabled'], 'the real state decided before the unit state was asked');
+    assert.equal(w.timeline.some(e => DID_NOT_START.test(e)), false);
+});
+
 test('ensure: a unit that is activating (on its way up, the daemon does not answer yet) is not restarted: nothing is started here', async () => {
     const w = await paired();
     w.daemon = false;

@@ -33,6 +33,8 @@ const MUTANTS = [
         find: "        recheckConfig();\n        await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});\n        const on", repl: "        recheckConfig();\n        const on"},
     {id: 'E10', rule: 'ensure restarts every unit that is not `active` (an `activating` unit is on its way up: a restart would kill the start)', file: 'sync/engine.js',
         find: "if (word !== 'inactive' && word !== 'failed')", repl: "if (word === 'active')"},
+    {id: 'E11', rule: 'ensure gives the daemon no patience (ensureWaitMs 0): a slow orphan child counts as silent and is started a second time', file: 'sync/engine.js',
+        find: '    ensureWaitMs: 3000,', repl: '    ensureWaitMs: 0,'},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
