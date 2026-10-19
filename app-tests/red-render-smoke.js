@@ -168,16 +168,18 @@ async function backdrop(scheme) {
     const buttons1 = async w => {
         const s = await shotOf(w.win), strip = s.at(Math.floor(s.width / 2), 3);
         const a = ink(s, area(w.addButton, w.win, s.width, s.height), strip), b = ink(s, area(w.menuButton, w.win, s.width, s.height), strip);
-        return {s, strip, add: a.far, menu: b.far};
+        const t = ink(s, area(w.titleLabel, w.win, s.width, s.height), strip);
+        return {s, strip, add: a.far, menu: b.far, title: t.far, titleN: t.n};
     };
     // A window that has just become (in)active is redrawn a frame or more later, later still on a loaded machine: take pictures until two in
-    // a row agree (at most 10 s). The thresholds below are unchanged; only the moment of measuring waits for the picture to settle.
+    // a row agree (at most 10 s), the title included. The thresholds below are unchanged; only the moment of measuring waits for the picture to settle.
     const buttons = async w => {
         let prev = await buttons1(w);
         for (let i = 0; i < 50; i++) {
             await sleep(200);
             const cur = await buttons1(w);
-            if (hex(cur.add) === hex(prev.add) && hex(cur.menu) === hex(prev.menu) && hex(cur.strip) === hex(prev.strip))
+            if (hex(cur.add) === hex(prev.add) && hex(cur.menu) === hex(prev.menu) && hex(cur.strip) === hex(prev.strip)
+                && hex(cur.title) === hex(prev.title) && cur.titleN === prev.titleN)
                 return cur;
             prev = cur;
         }
