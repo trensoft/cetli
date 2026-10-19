@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// gjs test (no display) of the REAL atomic exchange of src/gio-layer.js (0.2.7.1): `mv --exchange` started through Gio.Subprocess, then the
+// gjs test (no display) of the REAL atomic exchange of src/gio-layer.js (0.2.7): `mv --exchange` started through Gio.Subprocess, then the
 // store on top of the real file layer. It answers one question: does the exchange happen on a system that has it, and does the store
 // say so (and lose nothing) on a system that has not? A silent fall-back to the checked move would pass every node test.
 //

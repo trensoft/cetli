@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// 0.2.7.1: the resolution must not destroy a version of a note that the transport brings in WHILE it runs. The slot
+// 0.2.7: the resolution must not destroy a version of a note that the transport brings in WHILE it runs. The slot
 // <X>.json is replaced by an atomic exchange; what the exchange takes out and nobody else has a copy of goes to backup/
 // (outside the synced folder, at most 32 files). Without an exchange in the layer the stat before the move is all there is.
 // The sweep over every injection point is tests/f1prime-late-injection.test.js.

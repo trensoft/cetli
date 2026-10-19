@@ -51,7 +51,7 @@ test('D3/D4/7: no Gtk/Adw/St/Clutter/Meta/Shell, no network, no Syncthing call, 
     for (const f of src) {
         let text = path.basename(f) === 'gio-layer.js' ? code(f).replace(/console\.(warn|log)\(`cetli: \$\{m\}`\)/g, '') : code(f);
         if (path.basename(f) === 'gio-layer.js') {
-            // The ONE process of the core: the atomic exchange (0.2.7.1), a fixed argv of /usr/bin/mv, no shell. Exactly this
+            // The ONE process of the core: the atomic exchange (0.2.7), a fixed argv of /usr/bin/mv, no shell. Exactly this
             // text is let through; any other use of Subprocess in the file (or the exact text in another file) still fails.
             text = text.replace("Gio._promisify(Gio.Subprocess.prototype, 'wait_check_async', 'wait_check_finish');", '')
                 .replace(/Gio\.Subprocess\.new\(\[MV, '-T', '--exchange', '--', a, b\],\s*Gio\.SubprocessFlags\.STDOUT_SILENCE \| Gio\.SubprocessFlags\.STDERR_SILENCE\);/, '')

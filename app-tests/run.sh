@@ -26,7 +26,7 @@ for smoke in $smokes; do
     printf '%s\n' "$out" | grep -E '^(ok|FAIL|info) |checks passed|RESULT' || true
     [ "$st" -eq 0 ] || rc=1
 done
-# 0.2.7.1: the real `mv --exchange` under gjs. It needs a root with coreutils >= 9.5 (the gate's gjs root has 9.1): CETLI_MV_ROOT=<root>.
+# 0.2.7: the real `mv --exchange` under gjs. It needs a root with coreutils >= 9.5 (the gate's gjs root has 9.1): CETLI_MV_ROOT=<root>.
 # The negative control (CETLI_MV_EXPECT_FALLBACK=1, the system mv without --exchange) is run by hand, see the header of exchange-smoke.js.
 if [ -n "${CETLI_MV_ROOT:-}" ]; then
     echo '== exchange-smoke.js'

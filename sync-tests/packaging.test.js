@@ -75,6 +75,23 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
     assert.match(readme, /may connect through the first computer only, or not at all/);
 });
 
+test('the changelog of this version carries the Fix point of the atomic swap: the requirement, the fall-back, what is measured and what is not covered', () => {
+    const version = read('VERSION').trim();
+    assert.equal(version, '0.2.7');
+    assert.equal(/0\.2\.7\.1/.test(specCode), false, 'there is no 0.2.7.1 entry or version: the fix is part of 0.2.7');
+    const entry = spec.slice(spec.indexOf(`- ${version}-1`), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
+    assert.match(entry, /^- Fix: a note could lose its newest text\. /m, 'the Fix point is in the 0.2.7-1 entry');
+    assert.equal(entry.indexOf('- Fix: a note could lose its newest text.') < entry.indexOf('- New: cetli syncs up to 10 computers.'), true, 'and it comes first');
+    assert.match(specCode, /^Requires:\s+coreutils >= 9\.5$/m);
+    assert.match(entry, /so the package requires coreutils 9\.5 or later/);
+    assert.match(entry, /on such a file system a conflict file is deleted after a check only \(that window stays, and it is not logged\), so "put back" above holds only where the file system can do the swap\./);
+    assert.match(entry, /Measured under gjs by the smoke app-tests\/exchange-smoke\.js: `mv --exchange` started by the real src\/gio-layer\.js, with the mv of the Fedora 43 and CentOS Stream 10 roots \(each started with its own loader\), under Debian bookworm gjs 1\.74\.2, with a positive control .* and a negative control /);
+    assert.match(entry, /Not measured: a real Fedora or EL10 session; a real sync program delivering at that moment\./);
+    assert.match(entry, /Not covered by this fix: the write of a note into a place where none is, and the local save of the user over a note that changed at that moment \(both work as in 0\.2\.6\); also, a conflict file that is put back can, in a very short window, overwrite a file that has appeared under the same name meanwhile \(the newer version stays on the computer that sent it\)/);
+    assert.doesNotMatch(entry, /not yet run by the gate|both work as in 0\.2\.7\)/);
+    assert.doesNotMatch(entry, /no version (of a note )?is lost|nothing is ever lost/i, 'the changelog does not claim that no version is ever lost');
+});
+
 test('0H.12: env -i is mandatory in ExecStart with exactly HOME and PATH; no EnvironmentFile, PassEnvironment or UnsetEnvironment', () => {
     const exec = unit.match(/^ExecStart=(.*)$/m)[1];
     assert.equal(exec.startsWith('/usr/bin/env -i HOME=%h PATH=/usr/bin /usr/bin/syncthing serve '), true);
