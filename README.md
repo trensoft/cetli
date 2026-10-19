@@ -45,8 +45,9 @@ note. Going back to 0.2.5 needs **Stop syncing** first.
 
 What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): measured with 10 computers in one group on one shared
 local network (a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine): the computers joined one by one, a
-note from each computer reached the other 9, the 11th computer was refused, and after a lost computer was removed on every computer the other 8
-kept syncing. A removal given on one computer only did not reach the others within 85 s, so it has to be given on every computer. Earlier runs
+note from each computer reached the other 9, and the 11th computer was refused. A removal given on one computer only did not reach the others
+within 85 s; after it was given on 6 of the 9 remaining computers, none of them listed it any more (on the other 3 the call answered
+E_BAD_ID). A note from one computer then reached the other 8. Earlier runs
 with up to 4 Syncthing instances and with two real instances: with local discovery the computers connect to each other directly within a second
 or two; without local discovery nothing connects. Not measured: 10 real computers, another subnet, a VLAN, a guest or client-isolated WiFi,
 NAT, relays, a real RHEL 10 session. There the computers may connect through the first computer only, or not at all. A computer whose notes folder is already
