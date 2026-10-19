@@ -348,7 +348,7 @@ test('the run checker: 64 KiB in total and a streaming feed that stops at the fi
 });
 
 test('argv and stdin: the verb list is closed, IDs are canonical positional arguments, and no typed text becomes an argument', () => {
-    assert.deepEqual([...VERBS], ['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack', 'restart', 'reset']);
+    assert.deepEqual([...VERBS], ['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack', 'restart', 'ensure', 'reset']);
     assert.deepEqual([...ID_VERBS], ['forget', 'revoke', 'promote', 'ack']);
     for (const v of VERBS.filter(v => !ID_VERBS.includes(v)))
         assert.deepEqual(argvFor(v), [v]);

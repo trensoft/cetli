@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The engine of the sync window (PLAN-WIZARD 0H, 0F, 7.2; PLAN-WIZARD-INTERFACE 2a, 3; 0.2.6: PLAN-0.2.6, PLAN-ADMISSION-0.2.6): the verbs status,
 // setup, own-id, host, join, forget, revoke, finish, harden, promote and ack, for a group of up to MAX_COMPUTERS computers, and restart and reset
-// (0.2.5.2: the ways out when the sync program does not answer).
+// (0.2.5.2: the ways out when the sync program does not answer) and ensure (0.2.7: the quiet start-up check).
 // No Gio, no process, no file API of its own: everything is injected (`ports`), so a stub Syncthing and a stub file system run it in node.
 // What it never does: read or write the notes, read a foreign config, call the REST interface or touch an API key (it uses `syncthing cli` only),
 // remove a device nobody named (it removes only IDs in the list it just read, named by the window), remove the folder or a file, or put anything
@@ -40,6 +40,7 @@ export const TIMING = Object.freeze({
     servicePollMs: 500,
     statusWaitMs: 5000,
     dwellMs: DWELL_MS,                     // revoke: the wait between the first and the second read-back
+    ensureWaitMs: 3000,                    // ensure: how long the daemon gets to answer before the unit is looked at (the start-up check is quiet and short)
     systemctlMs: 120000,                   // restart and disable --now wait for the stop of the unit (systemd's own limit is 90 s)
 });
 export const PENDING_MAX_BYTES = 16 * 1024 * 1024;
@@ -818,6 +819,39 @@ export function createEngine(ports) {
         return {result: {event: 'result', state}};
     }
 
+    // The quiet check at the start of the app on a computer that is set up (0.2.7; a `pkill -f cetli` stops the sync program with a clean exit and systemd,
+    // which restarts only after a failure, leaves it stopped). The order is the contract: nothing without the program, the config and OUR folder; nothing when
+    // systemd does not say plainly `enabled` (a unit the user switched off stays off; masked, not found, no answer: fail closed as in `restart`); the REAL state
+    // first: a daemon that answers on our home is left alone, also when the unit says inactive (a parent that was killed leaves its child running, holding the
+    // lock and the port: a second start would fail or loop); only a silent daemon with a unit that is `inactive` or `failed` is started (reset-failed, restart,
+    // wait). A silent daemon of an active unit is not touched here: the window's own restart handles it. Result state: `running` (it answers), `started`,
+    // `skipped` (nothing was done, the journal line says why).
+    async function ensure() {
+        const skipped = why => {
+            log(`ensure: ${why}`);
+            return {result: {event: 'result', state: 'skipped'}};
+        };
+        if (!backendInstalled() || !files.exists(configPath) || !holdsFolder())
+            return skipped('no program, no instance or not our folder');
+        const was = await run.systemctl(['--user', 'is-enabled', UNIT_NAME], {timeoutMs: t.systemctlMs});
+        if (was.rc !== 0)
+            return skipped(was.out.trim() === 'disabled' ? 'the unit is switched off' : 'systemd does not say enabled');
+        if (await daemonAnswers(t.ensureWaitMs))
+            return {result: {event: 'result', state: 'running'}};
+        const act = await run.systemctl(['--user', 'is-active', UNIT_NAME], {timeoutMs: t.systemctlMs});
+        const word = act.out.trim();
+        if (word !== 'inactive' && word !== 'failed')
+            return skipped('the unit is not stopped, the daemon does not answer');
+        recheckConfig();
+        await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});
+        const on = await run.systemctl(['--user', 'restart', UNIT_NAME], {timeoutMs: t.systemctlMs});
+        if (on.rc !== 0)
+            throw new Fail('E_NO_USER_SYSTEMD');
+        if (!(await daemonAnswers(t.serviceWaitMs)))
+            throw new Fail('E_SERVICE_TIMEOUT');
+        return {result: {event: 'result', state: 'started'}};
+    }
+
     // The way out when the daemon does not come back: back to "not set up", with NO call to the daemon. Stops and disables the unit, MOVES the
     // instance directory to a time-stamped name beside it (identity, key and config stay there, nothing is deleted), and takes away the marker
     // of our own folder (ownMarker) so that `setup` does not refuse. The notes directory and everything in it is never touched but that marker.
@@ -1036,6 +1070,7 @@ export function createEngine(ports) {
             case 'promote': return await promote(arg ?? {});
             case 'ack': return await ack(arg ?? {});
             case 'restart': return await restart(arg ?? {});
+            case 'ensure': return await ensure();
             case 'reset': return await reset();
             case 'host': return await host();
             case 'join': return await join(arg);
@@ -1051,5 +1086,5 @@ export function createEngine(ports) {
         }
     }
 
-    return {perform, status, setup, forget, restart, reset, host, join, revoke, finish, harden, promote, ack, foreignDevices};
+    return {perform, status, setup, forget, restart, ensure, reset, host, join, revoke, finish, harden, promote, ack, foreignDevices};
 }

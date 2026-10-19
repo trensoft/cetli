@@ -29,8 +29,9 @@ export class SyncWizard {
     // ctl: {gtkApp, log(text), onSyncClosed(win), dismissSync() (writes the "Later" state)}; bridge: SyncBridge or a fake with
     // start(verb, opts) -> {done, accept(id), stop()}, run(verb, opts), stop(). firstStart: open at the consent page without any engine
     // call (PLAN-WIZARD 0H.11 rule 1); a missing Syncthing program still shows its own page. shortcutRemove: the policy switch of the
-    // "I still have this computer" path (only the tests give another value).
-    constructor({ctl, bridge, firstStart = false, linkPollMs = LINK_POLL_MS, binaryExists = () => Gio.File.new_for_path(BACKEND_EXE).query_exists(null), shortcutRemove = SHORTCUT_REMOVE}) {
+    // "I still have this computer" path (only the tests give another value). startup: the promise of the quiet start-up check of the app (the engine's
+    // `ensure`), or null; the first status waits for it (one engine run at a time, and a daemon that is just being started must not be started again).
+    constructor({ctl, bridge, startup = null, firstStart = false, linkPollMs = LINK_POLL_MS, binaryExists = () => Gio.File.new_for_path(BACKEND_EXE).query_exists(null), shortcutRemove = SHORTCUT_REMOVE}) {
         this.ctl = ctl;
         this.bridge = {
             // a link poll that is still running is stopped before any other run starts (the runner takes one run at a time)
@@ -44,6 +45,7 @@ export class SyncWizard {
             },
         };
         this.rawBridge = bridge;
+        this.startup = startup;
         this.pollTimer = 0;
         this.pollRun = null;
         this.linkPollMs = linkPollMs;                // 0: the window does not poll (a test that counts the calls of the fake bridge)
@@ -503,6 +505,11 @@ export class SyncWizard {
         if (this.closed)
             return;
         this._show('checking');
+        if (this.startup !== null) {
+            await this.startup;
+            if (this.closed)
+                return;
+        }
         let out = await this.bridge.run('status');
         if (this.closed)
             return;

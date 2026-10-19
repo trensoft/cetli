@@ -127,6 +127,11 @@ async function scenario() {
     check(r.rc === 2, 'main.js: reset takes no flag (and a usage error starts nothing)');
     r = await run(['restart', '--stop']);
     check(r.rc === 2, 'main.js: restart takes no flag');
+    r = await run(['ensure', '--enable']);
+    check(r.rc === 2, 'main.js: ensure takes no flag');
+    r = await run(['ensure']);
+    const el = r.out.trim().split('\n').filter(l => l.startsWith('{'));
+    check(r.rc === 0 && el.length === 1 && JSON.parse(el[0]).state === 'skipped', 'main.js ensure on an empty home: one result line `skipped` (no instance of ours, nothing is run), rc 0');
     r = await run(['join'], 'not an id\n');
     const jl = r.out.trim().split('\n').filter(l => l.startsWith('{'));
     check(r.rc === 1 && jl.length === 1 && JSON.parse(jl[0]).event === 'error', 'main.js join with a line on stdin: one error line, rc 1');

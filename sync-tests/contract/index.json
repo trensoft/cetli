@@ -269,6 +269,21 @@
     "rc": 1,
     "expect": "error:E_SERVICE_TIMEOUT"
   },
+  "ensure-running.ndjson": {
+    "verb": "ensure",
+    "rc": 0,
+    "expect": "result"
+  },
+  "ensure-started.ndjson": {
+    "verb": "ensure",
+    "rc": 0,
+    "expect": "result"
+  },
+  "ensure-skipped.ndjson": {
+    "verb": "ensure",
+    "rc": 0,
+    "expect": "result"
+  },
   "reset-ok.ndjson": {
     "verb": "reset",
     "rc": 0,

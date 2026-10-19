@@ -24,7 +24,7 @@ export const EXIT_RESULT = 0;
 export const EXIT_ERROR = 1;
 export const EXIT_USAGE = 2;
 
-export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack', 'restart', 'reset']);
+export const VERBS = Object.freeze(['status', 'setup', 'own-id', 'host', 'join', 'forget', 'revoke', 'finish', 'harden', 'promote', 'ack', 'restart', 'ensure', 'reset']);
 // The verbs that take computer IDs as arguments (`forget` also takes `--all`, `ack` also `--all`).
 export const ID_VERBS = Object.freeze(['forget', 'revoke', 'promote', 'ack']);
 export const PROGRESS_STEPS = Object.freeze(['instance', 'folder', 'service', 'device', 'share', 'connect', 'sync', 'freeze', 'remove', 'verify', 'dwell']);
@@ -114,6 +114,7 @@ const RESULT_SCHEMAS = {
     promote: r => isTotal(r.changed),
     ack: r => isTotal(r.changed),
     restart: r => r.state === 'restarted' || r.state === 'disabled',
+    ensure: r => r.state === 'running' || r.state === 'started' || r.state === 'skipped',
     reset: r => r.state === 'not-set-up',
 };
 const RESULT_KEYS = {
@@ -129,6 +130,7 @@ const RESULT_KEYS = {
     promote: ['changed'],
     ack: ['changed'],
     restart: ['state'],
+    ensure: ['state'],
     reset: ['state'],
 };
 
@@ -264,7 +266,7 @@ export function parse(line, verb = null) {
 // {ok: true, outcome: {kind: 'result'|'error', ...}} or {ok: false, code}, where a missing terminal line or a code other than 0/1 is
 // E_ENGINE_DIED and a line that broke a rule is E_PROTOCOL.
 const VERB_EVENTS = {
-    status: [], setup: [], 'own-id': [], forget: [], revoke: [], finish: [], harden: [], promote: [], ack: [], restart: [], reset: [],
+    status: [], setup: [], 'own-id': [], forget: [], revoke: [], finish: [], harden: [], promote: [], ack: [], restart: [], ensure: [], reset: [],
     host: ['candidate', 'link', 'peer'],
     join: ['link', 'peer'],
 };

@@ -23,10 +23,33 @@ export async function waitFor(cond, limit = 8000) {
     }
 }
 
-// `marker`: the notes folder carries the `.stfolder` directory Syncthing makes. `deleted`: how many deleted records are in the folder at the start.
+// A bridge that runs no process (the product's SyncBridge would start /usr/bin/cetli-sync of the machine the test runs on). One run at a time like the real
+// runner (the second is E_BUSY, counted in `busy`); `answer[verb]` is the outcome or a function of it (it may return a promise); every run is in `calls`.
+export function fakeBridge(answer = {}) {
+    const b = {calls: [], busy: 0, active: false};
+    b.run = async verb => {
+        if (b.active) {
+            b.busy++;
+            return {ok: false, error: {code: 'E_BUSY', step: null}};
+        }
+        b.calls.push(verb);
+        b.active = true;
+        try {
+            const a = answer[verb] ?? (() => ({ok: false, error: {code: 'E_SERVICE_TIMEOUT', step: null}}));
+            return await (typeof a === 'function' ? a() : a);
+        } finally {
+            b.active = false;
+        }
+    };
+    b.start = (verb, opts) => ({done: b.run(verb, opts), accept: () => false, stop: () => Promise.resolve()});
+    b.stop = () => Promise.resolve();
+    return b;
+}
+
+// `bridge`: what the app talks to (default: a fakeBridge that answers every verb with E_SERVICE_TIMEOUT). `marker`: the notes folder carries the `.stfolder` directory Syncthing makes. `deleted`: how many deleted records are in the folder at the start.
 // `seed(dirs)`: the caller puts more files into the notes folder before the program starts.
 // `scenario(env)` gets {ctl, app (createApp's result), windows, files(), records(), check, tick, waitFor}; its failures are reported, the process exits 0/1.
-export function runStartGate({marker, deleted = 0, seed = null}, scenario) {
+export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBridge()}, scenario) {
     const base = GLib.dir_make_tmp('cetli-start-XXXXXX');
     const dirs = {notes: `${base}/data/notes`, tmp: `${base}/data/tmp`, state: `${base}/state`};
     GLib.mkdir_with_parents(dirs.notes, 0o755);
@@ -60,8 +83,8 @@ export function runStartGate({marker, deleted = 0, seed = null}, scenario) {
         return out.sort();
     };
     const records = () => files().map(f => JSON.parse(new TextDecoder().decode(GLib.file_get_contents(`${dirs.notes}/${f}`)[1])));
-    const app = createApp({dirs, homeDir: base});
-    scenario({ctl: app.ctl, app, windows: app.windows, files, records, check, tick, waitFor}).then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {
+    const app = createApp({dirs, homeDir: base, bridge});
+    scenario({ctl: app.ctl, app, bridge, windows: app.windows, files, records, check, tick, waitFor}).then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {
         print(`${checks - failed}/${checks} checks passed`);
         print(failed === 0 ? 'RESULT PASS' : 'RESULT FAIL');
         GLib.spawn_command_line_async(`rm -rf ${base}`);

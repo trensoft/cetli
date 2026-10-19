@@ -272,3 +272,34 @@ test('status counters: promote_pending is a 0.2.5 pair without the flag (0 while
     r = (await perform(frozen, 'status')).result;
     assert.deepEqual([r.revocation_open, r.promote_pending], [true, 0]);
 });
+
+// 0.2.7 (A-list, msg 9568 point 1): `ack` is NOT a gate. A computer that arrived by introduction (`new: true`) is in the folder's device list the moment
+// the daemon admits it, and Syncthing syncs a folder with every device in that list. Nothing the engine does in between (status, harden) takes it out or
+// waits for an `ack`; `ack` writes the state file only and puts out the `new` mark. The real proof with several computers is the multi-instance harness.
+test('A-list: a computer that came by introduction and is still `new: true` is shared and connected without any `ack`; status and harden leave the share alone; ack only puts out the mark', async () => {
+    const w = await ready();
+    const [a, b] = ids(2);
+    w.pair(a, {introducer: true});                                        // accepted here
+    w.introduce(b, a);                                                    // arrived by introduction, nobody has acknowledged it
+    connectAll(w);
+    const shareOf = () => JSON.stringify(w.folders.get('cetli-notes').devices.map(d => [d.id, d.introducedBy]));
+    const shareBefore = shareOf();
+    const stateFile = `${w.home}/cetli-sync-state.json`;
+    const peer = r => r.peers.find(p => p.id === b);
+    const first = (await perform(w, 'status')).result;
+    valid('status', first);
+    assert.equal(peer(first).new, true, 'precondition: the introduced computer is NEW (not acknowledged)');
+    assert.deepEqual([first.state, peer(first).shared, peer(first).connected, peer(first).link], ['paired', true, true, 'stable'], 'shared and connected while new');
+    assert.equal(first.harden_pending, 1, 'precondition: the introduced computer arrived with the flag, harden has work');
+    assert.equal((await perform(w, 'harden')).result.changed, 1, 'the window runs harden by itself, without a click');
+    const after = (await perform(w, 'status')).result;
+    assert.deepEqual([after.state, peer(after).new, peer(after).shared, peer(after).connected], ['paired', true, true, true], 'still new, still shared and connected after harden');
+    assert.equal(shareOf(), shareBefore, 'the folder share is the one the daemon made');
+    assert.equal(w.fsMap.has(stateFile), false, 'no ack was written by anything the window ran');
+    assert.equal(w.timeline.some(e => /ack/.test(e)), false);
+    const acked = await perform(w, 'ack', {ids: [b]});
+    assert.equal(acked.result.changed, 1);
+    const last = (await perform(w, 'status')).result;
+    assert.deepEqual([peer(last).new, peer(last).shared, peer(last).connected], [false, true, true], 'ack puts out the mark and changes nothing about the share');
+    assert.equal(shareOf(), shareBefore);
+});

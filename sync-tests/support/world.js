@@ -43,6 +43,7 @@ export function createWorld(opts = {}) {
                                                    // `id` is added again (as an introduced device) after a delete and whenever a second or more passes (PLAN-0.2.6 5)
         hung: false,                               // the unit is active but the daemon never answers (the failure of 0.2.5.2)
         enabled: true,                             // `systemctl --user is-enabled`: false = the unit was disabled by the user (`forget --all --stop`)
+        orphan: false,                             // a daemon runs and answers but the unit is inactive (its parent was killed: the child holds the lock and the port)
         unitFailed: false,                         // the unit is in the failed state (start limit): starting it is refused until `reset-failed`
         afterDisable: null,                        // (world) -> void: runs while `systemctl --user disable` is working (a path swapped during the wait)
         failSystemctl: new Set(),                  // `systemctl` argument strings (after --user) that fail with rc 1
@@ -126,7 +127,7 @@ export function createWorld(opts = {}) {
         const elems = [...w.folders.keys()].map(id => `\n    <folder id="${id}" label="cetli" path="${w.folders.get(id).path}" type="${w.folders.get(id).type}">\n    </folder>`).join('');
         f.text = base.replace(/(<configuration version="52">)/, `$1${elems}`);
     };
-    const daemonUp = () => w.daemon && !w.hung && (w.startedAt === null || w.mono - w.startedAt >= w.startDelayMs);
+    const daemonUp = () => w.orphan || w.daemon && !w.hung && (w.startedAt === null || w.mono - w.startedAt >= w.startDelayMs);
     const lines = a => `${a.join('\n')}\n`;
     const devJson = id => {
         const d = w.devices.get(id);
@@ -260,6 +261,10 @@ export function createWorld(opts = {}) {
             if (key === `--user is-enabled cetli-syncthing.service`) {
                 w.timeline.push('systemctl is-enabled');
                 return w.enabled ? {rc: 0, out: 'enabled\n'} : {rc: 1, out: 'disabled\n'};
+            }
+            if (key === `--user is-active cetli-syncthing.service`) {
+                w.timeline.push('systemctl is-active');
+                return w.daemon && !w.orphan ? {rc: 0, out: 'active\n'} : w.unitFailed ? {rc: 3, out: 'failed\n'} : {rc: 3, out: 'inactive\n'};
             }
             if (key === `--user reset-failed cetli-syncthing.service`) {
                 w.unitFailed = false;

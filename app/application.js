@@ -72,6 +72,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     const version = readVersion();
     const syncBridge = bridge ?? new SyncBridge({log: m => platform.log.warn(m)});
     let syncWin = null;                  // the one sync window, while it is open
+    let startupEnsure = null;            // the quiet start-up check of the sync program (see ensureSync), once per process
     let menu = null;
     let watcher = null;
     let allNotes = null;                 // the one "All notes" window, while it is open
@@ -229,9 +230,28 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     // The menu item and the first start. A window that is already open is brought to the front.
     function showSync({firstStart = false} = {}) {
         if (syncWin === null)
-            syncWin = new SyncWizard({ctl, bridge: syncBridge, firstStart, ...(linkPollMs === undefined ? {} : {linkPollMs})});
+            syncWin = new SyncWizard({ctl, bridge: syncBridge, startup: startupEnsure, firstStart, ...(linkPollMs === undefined ? {} : {linkPollMs})});
         syncWin.present();
         return syncWin;
+    }
+
+    // 0.2.7: on a computer whose notes folder is synchronised, the sync program is looked at once when the app starts: a `pkill -f cetli` stops it cleanly and
+    // systemd does not start it again, so the sync would stay off until somebody opens the sync window. The engine's `ensure` starts it only when it is
+    // stopped (it never touches a running one). In the background, no window, no error shown; the first status of the sync window waits for it, so there is
+    // no E_BUSY and no second restart. Once per process (a second activation does not ask again).
+    function ensureSync() {
+        if (startupEnsure !== null)
+            return;
+        try {
+            if (!synced())
+                return;
+            startupEnsure = syncBridge.run('ensure').then(out => {
+                (platform.log.info ?? platform.log.warn)(out.ok ? `sync start-up check: ${out.result.state}` : `sync start-up check: ${out.error.code}`);
+            }, () => {}).catch(() => {});
+        } catch (e) {
+            startupEnsure = null;
+            platform.log.warn(`sync start-up check not run: ${e?.message ?? e}`);
+        }
     }
 
     // The first start (PLAN-WIZARD 0H.11): no state file and no `.stfolder` anywhere from notes/ up to $HOME. Nothing runs before the
@@ -386,8 +406,10 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         gtkApp.hold();                                 // the app must live while the core starts
         // A second activation while start() is still running waits for it and then shows all (start() must run once).
         const first = startPromise === null;
-        if (first)
+        if (first) {
+            ensureSync();
             startPromise = start();
+        }
         (first ? startPromise : startPromise.then(() => showAll())).then(() => resolveReady(ctl), e => {
             platform.log.warn(`start failed: ${e?.message ?? e}`);
             rejectReady(e);
