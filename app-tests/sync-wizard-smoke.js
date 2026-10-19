@@ -342,11 +342,11 @@ async function scenario() {
     await closeWin(w);
 
     // ---- the unit does not run (John 8844): inactive, failed, start limit, disabled. The engine answers like the real one: `restart` without
-    // enable on a disabled unit starts nothing and says `disabled`; every other case is started and the status is the paired page again.
+    // enable on a disabled unit starts nothing and says `disabled`; every other case is started and the status is the group page again.
     for (const kind of ['inactive', 'failed', 'start-limit', 'disabled']) {
         let running = false;
         w = await open({
-            status: () => (running ? paired() : fail('E_SERVICE_TIMEOUT')),
+            status: () => (running ? groupOf([peerOf(B)]) : fail('E_SERVICE_TIMEOUT')),
             restart: opts => {
                 if (kind === 'disabled' && opts.flags?.enable !== true)
                     return {ok: true, result: {event: 'result', state: 'disabled'}};
@@ -355,7 +355,7 @@ async function scenario() {
             },
         });
         if (kind !== 'disabled') {
-            check(await pageIs(w, 'paired'), `unit ${kind}: the window ends on the paired page by itself, no click`);
+            check(await pageIs(w, 'group'), `unit ${kind}: the window ends on the group page by itself, no click`);
             check(fake.calls.map(c => c.verb).join() === 'status,restart,status' && fake.calls[1].opts.flags === undefined, `unit ${kind}: status, restart (no enable), status`);
         } else {
             check(await pageIs(w, 'error') && await waitFor(() => fake.count('restart') === 1), 'unit disabled: the automatic try asked, and the error page stays');
@@ -363,8 +363,8 @@ async function scenario() {
             check(fake.calls.map(c => c.verb).join() === 'status,restart' && fake.calls[1].opts.flags === undefined && running === false, 'unit disabled: nothing was started, no second try');
             check(w.w.errAction.get_visible() && labelText(w.w.errAction) === S.syncTryAgain() && w.w.errSecondary.get_visible(), 'unit disabled: the restart button and Reset sync are shown');
             w.w.errAction.emit('clicked');
-            check(await pageIs(w, 'paired') && fake.calls.map(c => c.verb).join() === 'status,restart,restart,status' && fake.calls[2].opts.flags?.enable === true,
-                'unit disabled: the button asks for enable (the user decides), then the paired page');
+            check(await pageIs(w, 'group') && fake.calls.map(c => c.verb).join() === 'status,restart,restart,status' && fake.calls[2].opts.flags?.enable === true,
+                'unit disabled: the button asks for enable (the user decides), then the group page');
         }
         await closeWin(w);
     }
@@ -399,14 +399,14 @@ async function scenario() {
     await closeWin(w);
     // the other computer has been added by the time the wizard asks again: the first answer is 'set-up', the one after the timeout is 'half'
     let accepted = false;
-    w = await open({status: () => (accepted ? status('half', {peer: {id: B, name: null}, connected: false, link: 'none', connected_s: null, shared: true, up_to_date: null}) : status('set-up'))});
+    w = await open({status: () => (accepted ? status('half', {peers: [peerOf(B, {name: null, connected: false, link: 'none', connected_s: null})], computers: 2}) : status('set-up'))});
     await pageIs(w, 'ids');
     fake.hosts[0].finish(fail('E_PEER_TIMEOUT', 'connect'));
     check(await pageIs(w, 'error'), 'E_PEER_TIMEOUT ends on the error page');
     const statusBefore = fake.count('status');
     accepted = true;
     w.w.errAction.emit('clicked');
-    check(await waitFor(() => fake.count('status') === statusBefore + 1) && await pageIs(w, 'half') && fake.hosts.length === 1,
+    check(await waitFor(() => fake.count('status') === statusBefore + 1) && await pageIs(w, 'group') && fake.hosts.length === 1,
         'Try again asks the status and starts no second waiting run');
     await closeWin(w);
 
