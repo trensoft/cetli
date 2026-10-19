@@ -72,7 +72,7 @@ test('0.2.5.1: a marker anywhere on the chain means synchronised (no note at the
     assert.equal(syncMarked({markerExists: () => false, notesDir: 'notes', homeDir: HOME}), true);
 });
 
-// app/application.js needs GTK, so the behaviour is in app-tests/synced-start-smoke.js (gjs, headless). Here only the wiring is pinned in node:
+// app/application.js needs GTK, so the behaviour is in the start-gate smokes in app-tests/ (synced-start-deleted, synced-start-empty, unsynced-start; gjs, headless). Here only the wiring is pinned in node:
 // both starts (showStartWindows, showAll) ask the one `synced()`, which asks notesSynced, and neither makes a note on a synchronised folder.
 test('0.2.5.1: both starts of application.js go through synced() and open the list, not a new note', () => {
     const src = readFileSync(new URL('../app/application.js', import.meta.url), 'utf8');
