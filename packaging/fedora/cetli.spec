@@ -91,8 +91,9 @@ press a button; the package itself starts nothing. If two computers change the
 same note before they meet, cetli keeps both versions.
 
 The package also holds a GNOME Shell extension that puts the note windows back
-where they were. It is enabled once, at the first login of each user. cetli itself starts at login and
-opens the notes that were left open (an autostart entry; it can be turned off per user, see the README).
+where they were. It is enabled once, at the first login of each user. cetli
+itself starts at login and opens the notes that were left open (a login entry
+that each user can turn off, see the README).
 
 %prep
 %autosetup
