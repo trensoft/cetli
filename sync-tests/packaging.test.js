@@ -53,8 +53,10 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
     assert.equal(spec.match(/^Version:\s+(.*)$/m)[1], version);
     assert.match(spec, new RegExp(`^\\* .* - ${version.replace(/\./g, '\\.')}-1$`, 'm'));
     const entry = spec.slice(spec.indexOf(`- ${version}-1`), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
-    assert.match(entry, /Supported and measured: up to 4 Syncthing instances on one shared local network/);
-    assert.match(entry, /Not measured: 10 computers, another subnet, a VLAN, a guest or client-isolated WiFi, NAT, connections through relays/);
+    assert.match(entry, /Supported and measured: 10 computers in one group on one shared local network \(a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine\)/);
+    assert.match(entry, /the 11th computer was refused \(E_GROUP_FULL\)/);
+    assert.match(entry, /did not reach the others within 85 s/);
+    assert.match(entry, /Not measured: 10 real computers, another subnet, a VLAN, a guest or client-isolated WiFi, NAT, connections through relays/);
     assert.match(entry, /without it nothing connects/);                                  // M-J7: the direct mesh needs local discovery
     assert.match(entry, /may connect through the first computer only, or not at all/);
     assert.match(entry, /TCP and UDP 22100 and UDP 21127/);
@@ -63,7 +65,9 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
     assert.ok(entry.includes(sentence));
     const readme = read('README.md').replace(/\s+/g, ' ');
     assert.ok(readme.includes(sentence));
-    assert.match(readme, /Not measured: ten computers, another subnet, a VLAN, a guest or client-isolated WiFi, NAT, relays/);
+    assert.match(readme, /measured with 10 computers in one group on one shared local network \(a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine\)/);
+    assert.match(readme, /the 11th computer was refused/);
+    assert.match(readme, /Not measured: 10 real computers, another subnet, a VLAN, a guest or client-isolated WiFi, NAT, relays/);
     assert.match(readme, /without local discovery nothing connects/);
     assert.match(readme, /may connect through the first computer only, or not at all/);
 });

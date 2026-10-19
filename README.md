@@ -43,11 +43,13 @@ them and allow the new rule once: a pair works under the new rule only when it i
 is not offered again when it knocks; **Add again** in **Sync…** lifts that, and you still compare its ID and accept it. **Stop syncing** removes all other computers and their shares; it never removes the folder or a
 note. Going back to 0.2.5 needs **Stop syncing** first.
 
-What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): measured on one shared local network with four
-Syncthing instances (virtual LAN): with local discovery the computers connect to each other directly within a second or two; without
-local discovery nothing connects. Two real instances were measured as well. Not measured: ten computers, another subnet, a VLAN, a guest
-or client-isolated WiFi, NAT, relays, a real RHEL 10 session. There the computers may connect through the first computer only, or not
-at all. A computer whose notes folder is already
+What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): measured with 10 computers in one group on one shared
+local network (a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine): the computers joined one by one, a
+note from each computer reached the other 9, the 11th computer was refused, and after a lost computer was removed on every computer the other 8
+kept syncing. A removal given on one computer only did not reach the others within 85 s, so it has to be given on every computer. Earlier runs
+with up to 4 Syncthing instances and with two real instances: with local discovery the computers connect to each other directly within a second
+or two; without local discovery nothing connects. Not measured: 10 real computers, another subnet, a VLAN, a guest or client-isolated WiFi,
+NAT, relays, a real RHEL 10 session. There the computers may connect through the first computer only, or not at all. A computer whose notes folder is already
 synchronised by a Syncthing you set up by hand is left exactly as it is.
 
 ## Authorship

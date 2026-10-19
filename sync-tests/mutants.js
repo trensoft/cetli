@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The mutants of the group rule (PLAN-ADMISSION-0.2.6 5.2, X1-X11): one line of the data and sync code is changed in a COPY of the tree and the
+// The mutants of the group rule (PLAN-ADMISSION-0.2.6 5.2, X1-X22): one line of the data and sync code is changed in a COPY of the tree and the
 // tests must fail. Data and sync code only; no screens, no texts. Run it only when the gate asks: `node sync-tests/mutants.js [X3 X7 ...]`.
 // The working tree is never touched. A mutant that is not killed (the tests stay green) is a hole in the tests and exits 1.
 import {cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
