@@ -61,7 +61,18 @@ function copyOfSrc(mvPath) {
     const line = "const MV = '/usr/bin/mv';";
     if (text.split(line).length !== 2)
         throw new Error(`gio-layer.js must contain exactly one \`${line}\` (the smoke replaces it in a copy)`);
-    write(file, text.replace(line, `const MV = ${JSON.stringify(mvPath)};`));
+    const swapped = `const MV = ${JSON.stringify(mvPath)};`;
+    write(file, text.replace(line, () => swapped));
+    // the copy must be the original with that one line changed: put the line back and compare every file byte for byte
+    for (const n of names(`${here}/src`)) {
+        const original = readText(`${here}/src/${n}`);
+        const copy = readText(`${dst}/${n}`);
+        const restored = n === 'gio-layer.js' && copy !== null ? copy.replace(swapped, () => line) : copy;
+        if (restored !== original)
+            throw new Error(`the copy of src/${n} differs from the original beyond the replaced line`);
+    }
+    if (names(dst).length !== names(`${here}/src`).length)
+        throw new Error('the copy of src/ has other files than the original');
     return dst;
 }
 

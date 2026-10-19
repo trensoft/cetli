@@ -169,7 +169,7 @@ const MUTANTS = [
     {id: 'M75', rule: '0.2.7.1: an empty file that the exchange took out is kept in backup/ too', file: 'store.js',
         find: "if (st.type !== 'regular' || st.size === 0) {", repl: "if (st.type !== 'regular') {"},
     {id: 'M76', rule: '0.2.7.1: the pruning of backup/ drops the NEWEST files', file: 'store.js',
-        find: "names.slice(0, Math.max(0, names.length - BACKUP_KEEP))", repl: "names.slice(BACKUP_KEEP)"},
+        find: "names.filter(n => n !== mine).slice(0, Math.max(0, names.length - BACKUP_KEEP))", repl: "names.filter(n => n !== mine).slice(BACKUP_KEEP)"},
     {id: 'M77', rule: '0.2.7.1: backup/ is not bounded', file: 'store.js',
         find: "const BACKUP_KEEP = 32;", repl: "const BACKUP_KEEP = 3200000;"},
     {id: 'M78', rule: '0.2.7.1: without an exchange the slot is not looked at before the move', file: 'store.js',
@@ -178,6 +178,10 @@ const MUTANTS = [
         find: "await this._keepOrDrop(`${this.dirs.tmp}/${item.name}`, 'orphan', null);", repl: "await this.fs.remove(`${this.dirs.tmp}/${item.name}`);"},
     {id: 'M80', rule: '0.2.7.1: a conflict file that changed after the scan is not put back under its name (only kept in backup/)', file: 'store.js',
         find: "await this.fs.move(hold, path, {overwrite: false});    // its name is its own: put it back", repl: "throw new Error('no restore');"},
+    {id: 'M81', rule: '0.2.7.1: the prune of backup/ may remove the file it has just written (the clock stepped back)', file: 'store.js',
+        find: "names.filter(n => n !== mine)", repl: "names"},
+    {id: 'M82', rule: '0.2.7.1: backup/ does not count the orphans of a crashed swap (the name pattern knows hex labels only)', file: 'store.js',
+        find: "[0-9a-z-]+\\.json$/", repl: "[0-9a-f-]+\\.json$/"},
 ];
 
 function copyTree(from, to) {

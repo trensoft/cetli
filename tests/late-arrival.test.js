@@ -187,12 +187,20 @@ test('an exchange the system cannot do (NOT_SUPPORTED) falls back to the checked
 
 test('a layer that supports the exchange is used: exactly one exchange, no fallback line (a silent fall-back to the check is a failure)', withEnv({wrap: true}, async env => {
     const ops = [];
-    env.layer.hooks.before.push(op => ops.push(op));
+    const firstArgs = [];
+    env.layer.hooks.before.push((op, args) => {
+        ops.push(op);
+        if (op === 'exchange')
+            firstArgs.push(args[0]);
+    });
     env.putRec(S, D);
     env.putRec(conflictName(X), W);
     await env.store.refresh();
     assert.equal(env.read(S), W.canon);
     assert.equal(ops.filter(o => o === 'exchange').length, 1, 'the slot was replaced by the swap');
+    // the swap partner is what the start-up cleaning keeps in backup/ (the HOLD name), not what it deletes (the .tmp name)
+    assert.equal(path.dirname(firstArgs[0]), env.dirs.tmp);
+    assert.match(path.basename(firstArgs[0]), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.x$/, 'the partner of the exchange has the HOLD name');
     assert.equal(env.warned(/atomic exchange is not available/), false, 'a supported layer never reports the fall-back');
     assert.deepEqual(leftovers(env), []);
 }));
@@ -246,6 +254,52 @@ test('backup/ is bounded: 32 files, the oldest go first', withEnv({}, async env 
     assert.match(text, /LATE-8\b/);
     assert.doesNotMatch(text, /LATE-7\b/);
 }));
+
+// the prune must never drop the file it has just written, and orphans count like every other backup
+const lateRound = async (env, i) => {
+    env.clock.t += 1000;
+    const x = uuid(100 + i);
+    env.putRec(`${x}.json`, rec({id: x, rev: 1, text: `old ${i}`, updated: at(300)}));
+    env.putRec(conflictName(x), rec({id: x, rev: 2, text: `new ${i}`, updated: at(200), device: DEV_B}));
+    const late = rec({id: x, rev: 3, text: `LATE-${i}`, updated: at(100), device: DEV_B});
+    let done = false;
+    const hook = op => {
+        if (!done && op === 'exchange') {
+            done = true;
+            arrive(env, `${x}.json`, late.bytes);
+        }
+    };
+    env.layer.hooks.before.push(hook);
+    await env.store.refresh();
+    env.layer.hooks.before.splice(env.layer.hooks.before.indexOf(hook), 1);
+    assert.equal(done, true, `round ${i}`);
+};
+
+test('backup/: the clock went back and 32 later-stamped backups exist: the new backup is kept, an older-named one goes', withEnv({}, async env => {
+    fs.mkdirSync(backupDir(env), {recursive: true});
+    for (let i = 0; i < 32; i++)
+        fs.writeFileSync(path.join(backupDir(env), `999999999999999-${String(i).padStart(6, '0')}-aaaaaaaa.json`), `FUTURE-${i}`);
+    await lateRound(env, 0);
+    const text = backupText(env);
+    assert.equal(backups(env).length, 32);
+    assert.match(text, /LATE-0\b/, 'the backup written now is not the one the prune removes');
+    assert.doesNotMatch(text, /FUTURE-0\b/, 'the lowest name of the others went instead');
+    assert.match(text, /FUTURE-31\b/);
+}));
+
+test('backup/: orphans (a swap partner left by a crash) are counted in the 32 and pruned like the others', async () => {
+    const env = makeEnv({wrap: true});
+    try {
+        fs.mkdirSync(env.dirs.tmp, {recursive: true});
+        for (let i = 0; i < 40; i++)
+            fs.writeFileSync(path.join(env.dirs.tmp, `bbbbbbbb-0000-4000-8000-${String(i).padStart(12, '0')}.x`), `{"text":"ORPHAN-${i}"}`);
+        await env.start();
+        assert.deepEqual(env.tmpNames(), []);
+        assert.equal(backups(env).length, 32, '40 orphans, at most 32 files');
+    } finally {
+        env.cleanup();
+    }
+});
 
 test('start-up: a swap partner left by a crash (*.x) is kept in backup/, a *.tmp leftover is deleted', async () => {
     const env = makeEnv({wrap: true});

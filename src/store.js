@@ -77,7 +77,7 @@ const TMP_NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const HOLD_NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.x$/;
 // backup/ holds file versions that left notes/ without another copy; at most BACKUP_KEEP files, the oldest go first.
 const BACKUP_KEEP = 32;
-const BACKUP_NAME_RE = /^[0-9]{15}-[0-9]{6}-[0-9a-f-]+\.json$/;
+const BACKUP_NAME_RE = /^[0-9]{15}-[0-9]{6}-[0-9a-z-]+\.json$/;      // the label is a note id or 'orphan'
 const CAUSE_TEXT = Object.freeze({
     [CAUSE.QUARANTINE]: t => `newer date: quarantine until ${t}`,
     [CAUSE.NOT_READABLE]: () => 'file not readable',
@@ -439,16 +439,18 @@ export class Store {
     }
 
     // Move one file into backup/ (same file system as tmp/ and notes/: a rename) and drop the oldest beyond BACKUP_KEEP.
-    // The name sorts by time: 15 digits of ms, a sequence number for the same ms.
+    // The name sorts by time: 15 digits of ms, a sequence number for the same ms. The file just written is never the one
+    // that goes (the clock may have stepped back, so older-looking names can be newer files).
     async _backup(path, label) {
         await this.fs.ensureDir(this._backupDir);
         const seq = String(this._backupSeq++ % 1000000).padStart(6, '0');
         const dest = `${this._backupDir}/${String(this.p.now()).padStart(15, '0')}-${seq}-${label}.json`;
         await this.fs.move(path, dest, {overwrite: false});
         try {
+            const mine = dest.slice(dest.lastIndexOf('/') + 1);
             const names = (await this.fs.listDir(this._backupDir))
                 .filter(i => i.type === 'regular' && BACKUP_NAME_RE.test(i.name)).map(i => i.name).sort();
-            for (const old of names.slice(0, Math.max(0, names.length - BACKUP_KEEP)))
+            for (const old of names.filter(n => n !== mine).slice(0, Math.max(0, names.length - BACKUP_KEEP)))
                 await this.fs.remove(`${this._backupDir}/${old}`);
         } catch { /* the copy is in place; the next backup prunes */ }
     }
