@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The packaging lines of the sync window (PLAN-WIZARD 0F.1, 0F.3): the unit is shipped as data, not enabled; its home cannot drift from the
+// The packaging lines of the sync window (PLAN-WIZARD 0F.1, 0F.3): the unit is shipped as data and registered with the user preset, never restarted by the package; its home cannot drift from the
 // engine's; the spec and the Makefile carry the small list and nothing more.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,12 +29,16 @@ test('the unit file is named like the engine\'s constant and is installed as dat
     assert.match(make, /USERUNITDIR \?= \$\(PREFIX\)\/lib\/systemd\/user/);
 });
 
-test('the spec: systemd-rpm-macros for the macro only, USERUNITDIR passed, the unit and the program in %files, NO systemd scriptlets, no new Requires', () => {
+test('the spec: systemd-rpm-macros for the macro only, USERUNITDIR passed, the unit and the program in %files, the user unit scriptlets (preset, disable, NO restart), no new Requires', () => {
     assert.match(specCode, /^BuildRequires:\s+systemd-rpm-macros$/m);
     assert.match(specCode, /USERUNITDIR=%\{_userunitdir\}/);
     assert.match(specCode, /^%\{_userunitdir\}\/%\{name\}-syncthing\.service$/m);
     assert.match(specCode, /^%\{_bindir\}\/%\{name\}-sync$/m);
-    assert.equal(/%systemd_user|%systemd_post|%systemd_preun|%systemd_postun|^%(post|preun|postun|pre)\b/m.test(specCode), false, 'the package enables and restarts nothing');
+    assert.match(specCode, /^%post\n%systemd_user_post %\{name\}-syncthing\.service$/m);
+    assert.match(specCode, /^%preun\n%systemd_user_preun %\{name\}-syncthing\.service$/m);
+    assert.match(specCode, /^%postun\n%systemd_user_postun %\{name\}-syncthing\.service$/m);
+    assert.equal(/_with_restart/.test(specCode), false, 'no restart on update: it would stop a running sync');
+    assert.equal(/%systemd_(post|preun|postun)\b|^%(pre|posttrans|trigger\w*)\b/m.test(specCode), false, 'the unit is a user unit: no system scriptlet, no other scriptlet');
     assert.equal(/^Requires:.*(syncthing|systemd)/m.test(specCode), false, 'no new dependency');
     assert.match(specCode, /^Recommends:\s+syncthing$/m);
     assert.equal(/^%package|^%exclude/m.test(specCode), false, 'one package, no subpackage, no exclude');
@@ -48,22 +52,15 @@ test('the Makefile: the launcher of the engine, the sync tree installed, check-c
     assert.match(make, /\$\(INSTALL\) -D -m 0755 \$\(BUILD\)\/\$\(NAME\)-sync '\$\(DESTDIR\)\$\(BINDIR\)\/\$\(NAME\)-sync'/);
 });
 
-test('VERSION, the spec and the changelog agree, and the changelog names what is NOT measured', () => {
+test('VERSION, the spec and the changelog agree, and the README says what is NOT measured', () => {
     const version = read('VERSION').trim();
     assert.equal(spec.match(/^Version:\s+(.*)$/m)[1], version);
     assert.match(spec, new RegExp(`^\\* .* - ${version.replace(/\./g, '\\.')}-1$`, 'm'));
+    assert.equal(spec.match(/^%changelog\n\* .* - (\S+)$/m)[1], `${version}-${spec.match(/^Release:\s+(\d+)/m)[1]}`, 'the first changelog entry is the Release of the spec');
     const entry = spec.slice(spec.indexOf('- 0.2.7-1'), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));   // the entry of 0.2.7: its points stay pinned
-    assert.match(entry, /Supported and measured: 10 computers in one group on one shared local network \(a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine\)/);
-    assert.match(entry, /the 11th computer was refused \(E_GROUP_FULL\)/);
-    assert.match(entry, /did not reach the others within 85 s; after it was given on 6 of the 9 remaining computers, none of them listed it any more \(on the other 3 the call answered E_BAD_ID\)\. A note from one computer then reached the other 8\./);
     assert.doesNotMatch(entry, /so it has to be given on every computer|kept syncing/);   // a conclusion, not a measurement
-    assert.match(entry, /Not measured: 10 real computers, another subnet, a VLAN, a guest or client-isolated WiFi, NAT, connections through relays/);
-    assert.match(entry, /without it nothing connects/);                                  // M-J7: the direct mesh needs local discovery
-    assert.match(entry, /may connect through the first computer only, or not at all/);
-    assert.match(entry, /TCP and UDP 22100 and UDP 21127/);
-    // Nicole's sentence (PLAN-ADMISSION-0.2.6 0), word for word, in the changelog and in the README
+    // Nicole's sentence (PLAN-ADMISSION-0.2.6 0), word for word, in the README
     const sentence = 'A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all your computers.';
-    assert.ok(entry.includes(sentence));
     const readme = read('README.md').replace(/\s+/g, ' ');
     assert.ok(readme.includes(sentence));
     assert.match(readme, /measured with 10 computers in one group on one shared local network \(a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine\)/);
@@ -73,23 +70,28 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
     assert.match(readme, /Not measured: 10 real computers, another subnet, a VLAN, a guest or client-isolated WiFi, NAT, relays/);
     assert.match(readme, /without local discovery nothing connects/);
     assert.match(readme, /may connect through the first computer only, or not at all/);
+    assert.match(readme, /ports TCP and UDP 22100 and UDP 21127/);
 });
 
-test('the changelog of this version carries the Fix point of the atomic swap: the requirement, the fall-back, what is measured and what is not covered', () => {
+test('the changelog carries the Fix point of the atomic swap first, the spec requires the coreutils that has it, and the README carries the fall-back, what is measured and what is not covered', () => {
     const version = read('VERSION').trim();
     assert.equal(version, '0.2.8');
     assert.equal(/0\.2\.7\.1/.test(specCode), false, 'there is no 0.2.7.1 entry or version: the fix is part of 0.2.7');
     const entry = spec.slice(spec.indexOf('- 0.2.7-1'), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
-    assert.match(entry, /^- Fix: a note could lose its newest text\. /m, 'the Fix point is in the 0.2.7-1 entry');
-    assert.equal(entry.indexOf('- Fix: a note could lose its newest text.') < entry.indexOf('- New: cetli syncs up to 10 computers.'), true, 'and it comes first');
+    assert.match(entry, /^- Fix: a note could lose its newest text /m, 'the Fix point is in the 0.2.7-1 entry');
+    assert.equal(entry.indexOf('- Fix: a note could lose its newest text') < entry.indexOf('- New: cetli syncs up to 10 computers'), true, 'and it comes first');
     assert.match(specCode, /^Requires:\s+coreutils >= 9\.5$/m);
-    assert.match(entry, /so the package requires coreutils 9\.5 or later/);
-    assert.match(entry, /on such a file system a conflict file is deleted after a check only \(that window stays, and it is not logged\), so "put back" above holds only where the file system can do the swap\./);
-    assert.match(entry, /Measured under gjs by the smoke app-tests\/exchange-smoke\.js: `mv --exchange` started by the real src\/gio-layer\.js, with the mv of the Fedora 43 and CentOS Stream 10 roots \(each started with its own loader\), under Debian bookworm gjs 1\.74\.2, with a positive control .* and a negative control /);
-    assert.match(entry, /Not measured: a real Fedora or EL10 session; a real sync program delivering at that moment\./);
-    assert.match(entry, /Not covered by this fix: the write of a note into a place where none is, and the local save of the user over a note that changed at that moment \(both work as in 0\.2\.6\); also, a conflict file that is put back can, in a very short window, overwrite a file that has appeared under the same name meanwhile \(the newer version stays on the computer that sent it\)/);
+    assert.match(entry, /coreutils 9\.5 or later is required/);
     assert.doesNotMatch(entry, /not yet run by the gate|both work as in 0\.2\.7\)/);
     assert.doesNotMatch(entry, /no version (of a note )?is lost|nothing is ever lost/i, 'the changelog does not claim that no version is ever lost');
+    // the long text of the 0.2.7 Fix point (moved out of the spec changelog, word for word) lives in the README
+    const readme = read('README.md').replace(/\s+/g, ' ');
+    assert.match(readme, /so the package requires coreutils 9\.5 or later/);
+    assert.match(readme, /on such a file system a conflict file is deleted after a check only \(that window stays, and it is not logged\), so "put back" above holds only where the file system can do the swap\./);
+    assert.match(readme, /Measured under gjs by the smoke app-tests\/exchange-smoke\.js: `mv --exchange` started by the real src\/gio-layer\.js, with the mv of the Fedora 43 and CentOS Stream 10 roots \(each started with its own loader\), under Debian bookworm gjs 1\.74\.2, with a positive control .* and a negative control /);
+    assert.match(readme, /Not measured: a real Fedora or EL10 session; a real sync program delivering at that moment\./);
+    assert.match(readme, /Not covered by this fix: the write of a note into a place where none is, and the local save of the user over a note that changed at that moment \(both work as in 0\.2\.6\); also, a conflict file that is put back can, in a very short window, overwrite a file that has appeared under the same name meanwhile \(the newer version stays on the computer that sent it\)/);
+    assert.doesNotMatch(readme, /no version (of a note )?is lost|nothing is ever lost/i, 'the README does not claim that no version is ever lost');
 });
 
 test('0H.12: env -i is mandatory in ExecStart with exactly HOME and PATH; no EnvironmentFile, PassEnvironment or UnsetEnvironment', () => {
@@ -128,13 +130,12 @@ test('0.2.8: the autostart entry is installed from the Makefile and the spec, ru
     assert.match(specCode, /^desktop-file-validate %\{buildroot\}%\{_sysconfdir\}\/xdg\/autostart\/%\{app_id\}\.desktop$/m);
 });
 
-test('0.2.8: the changelog and the README say how to turn it off and what is not measured', () => {
+test('0.2.8: the changelog and the README say how to turn it off, the README says what is not measured', () => {
     const entry = spec.slice(spec.indexOf('- 0.2.8-1'), spec.indexOf('* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.7-1'));
     const readme = read('README.md').replace(/\s+/g, ' ');
     assert.match(entry, /runs `cetli --autostart`/);
-    assert.match(entry, /no new empty note, no list of all notes, no first-start sync window/);
     assert.match(entry, /Hidden=true/);
-    assert.match(entry, /Not measured: a real login or restart of a GNOME session/);
+    assert.match(readme, /no new empty note, no list of all notes, no first-start sync window/);
     assert.match(readme, /Since 0\.2\.8 cetli starts by itself when you log in to GNOME/);
     assert.match(readme, /~\/\.config\/autostart\/io\.github\.trensoft\.cetli\.desktop/);
     assert.match(readme, /Hidden=true/);

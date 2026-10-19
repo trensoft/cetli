@@ -64,7 +64,7 @@ them and allow the new rule once: a pair works under the new rule only when it i
 is not offered again when it knocks; **Add again** in **Sync…** lifts that, and you still compare its ID and accept it. **Stop syncing** removes all other computers and their shares; it never removes the folder or a
 note. Going back to 0.2.5 needs **Stop syncing** first.
 
-What is measured and what is not (see the changelog in `packaging/fedora/cetli.spec`): measured with 10 computers in one group on one shared
+What is measured and what is not (the details are in the release notes, https://github.com/trensoft/cetli/releases): measured with 10 computers in one group on one shared
 local network (a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine): the computers joined one by one, a
 note from each computer reached the other 9, and the 11th computer was refused. A removal given on one computer only did not reach the others
 within 85 s; after it was given on 6 of the 9 remaining computers, none of them listed it any more (on the other 3 the call answered
@@ -73,6 +73,29 @@ with up to 4 Syncthing instances and with two real instances: with local discove
 or two; without local discovery nothing connects. Not measured: 10 real computers, another subnet, a VLAN, a guest or client-isolated WiFi,
 NAT, relays, a real RHEL 10 session. There the computers may connect through the first computer only, or not at all. A computer whose notes folder is already
 synchronised by a Syncthing you set up by hand is left exactly as it is.
+
+**Settling a sync conflict (0.2.7; the text of the changelog entry of that version, word for word, wrapped):** Fix: a note could lose its
+newest text. When the sync program delivered a newer version of a note at the very moment cetli was settling a sync conflict of the same
+note, cetli wrote over that version and no copy of it was left (since 0.2.5.4). cetli now swaps the note in with one atomic step and looks
+afterwards at what it took out: a version that cetli had not read is kept, outside the synced folder, in the folder backup/ beside the notes
+folder (in ~/.local/share/cetli/backup, at most 32 files, the oldest are dropped first); nothing is put into the notes folder, so nothing
+spreads to the other computers. The same holds for a conflict file that changes just before cetli deletes it: it is put back. The note shows
+the version cetli settled on; the version in backup/ is not shown in the window and is not restored by cetli itself, it is a file you can
+open and copy from. The swap uses `mv --exchange`, so the package requires coreutils 9.5 or later (CentOS Stream 10 has 9.5 and Fedora 43
+has 9.7, both measured; that gnome-shell 47 brings coreutils 9.5 was derived, not measured; the Fedora releases between were not looked at).
+Where the file system cannot do the swap (tmp/ on another file system, a file system without it), cetli checks the note right before
+replacing it, which narrows the window but does not close it, and says so once in the log; on such a file system a conflict file is deleted
+after a check only (that window stays, and it is not logged), so "put back" above holds only where the file system can do the swap. Tests:
+tests/late-arrival.test.js (also: a supported layer does the swap and reports no fall-back; tmp/ on another file system falls back and loses
+nothing), the sweep tests/f1prime-late-injection.test.js (a new version injected before every file call of the settlement), the mutants
+M71-M82 in tests/mutants.js. Measured under gjs by the smoke app-tests/exchange-smoke.js: `mv --exchange` started by the real
+src/gio-layer.js, with the mv of the Fedora 43 and CentOS Stream 10 roots (each started with its own loader), under Debian bookworm gjs
+1.74.2, with a positive control (the two files swap and no fall-back line appears) and a negative control (the coreutils 9.1 of that system
+has no --exchange: the fall-back line appears once and nothing is lost); the swap in the node tests goes through python3. Not measured: a
+real Fedora or EL10 session; a real sync program delivering at that moment. Not covered by this fix: the write of a note into a place where
+none is, and the local save of the user over a note that changed at that moment (both work as in 0.2.6); also, a conflict file that is put
+back can, in a very short window, overwrite a file that has appeared under the same name meanwhile (the newer version stays on the computer
+that sent it)
 
 ## Authorship
 
