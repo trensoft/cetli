@@ -8,7 +8,7 @@ import Gtk from 'gi://Gtk?version=4.0';
 import {createApp} from '../app/application.js';
 import {NOTE_RHEL_RED, buildCss, cssClassOf} from '../app/data.js';
 import * as S from '../app/strings.js';
-import {CAUSE} from '../src/constants.js';
+import {CAUSE, SAVE_COALESCE_MS} from '../src/constants.js';
 import {NOTE_COLOR_IDS} from '../src/colors.js';
 
 const base = GLib.dir_make_tmp('cetli-gtk-XXXXXX');
@@ -97,7 +97,8 @@ async function scenario() {
     // editing and coalesced save
     w.buffer.insert_at_cursor('héllo 🎉', -1);
     w.buffer.insert_at_cursor(' world', -1);
-    await sleep(700);
+    await until(() => fileRec(id).text === 'héllo 🎉 world', 5000);
+    await sleep(SAVE_COALESCE_MS + 200);                  // a late second write (rev 3) must still fail the next check
     check(fileRec(id).text === 'héllo 🎉 world', 'typed text saved (UTF-8, coalesced)');
     check(fileRec(id).rev === 2, `one write for the burst (rev ${fileRec(id).rev})`);
 
@@ -105,7 +106,7 @@ async function scenario() {
     const startColor = w.color;
     const pickedColor = NOTE_COLOR_IDS.find(c => c !== startColor);
     w.setColor(pickedColor);
-    await sleep(500);
+    await until(() => fileRec(id).color === pickedColor, 5000);
     check(fileRec(id).color === pickedColor && w.win.has_css_class(`cetli-${pickedColor}`) && !w.win.has_css_class(cssClassOf(startColor)), 'colour change saved and class swapped');
     check(w.titleLabel.get_label() === '', 'a colour other than the exact red has no title');
     w.setColor('#ed0000');
@@ -120,7 +121,7 @@ async function scenario() {
     const end = w.buffer.get_iter_at_offset(w.buffer.get_char_count());
     w.buffer.place_cursor(end);
     remoteWrite(id, {rev: fileRec(id).rev + 1, updated: new Date(Date.now() + 1000).toISOString(), device: 'b5b5b5b5', text: 'REMOTE héllo 🎉 world'});
-    await sleep(1000);
+    await until(() => w._bufferText() === 'REMOTE héllo 🎉 world', 5000);
     check(w._bufferText() === 'REMOTE héllo 🎉 world', `clean window takes the remote text (${w._bufferText()})`);
     check(w.buffer.get_iter_at_mark(w.buffer.get_insert()).get_offset() === Array.from('REMOTE héllo 🎉 world').length, 'cursor at the end stays at the end');
     check(w.mark === null, 'no mark after applying');
@@ -162,7 +163,7 @@ async function scenario() {
     // new note through the application action
     const sizeBefore = windows.size;
     gtkApp.activate_action('new-note', null);
-    await sleep(600);
+    await until(() => windows.size === sizeBefore + 1, 5000);
     check(windows.size === sizeBefore + 1, `New note opens one more window (${sizeBefore} -> ${windows.size})`);
 
     // layout.json: an entry written by the extension; closing a window writes open=false, nothing else changes
@@ -172,14 +173,14 @@ async function scenario() {
         `the second new note is not red (${fileRec(id2).color})`);
     await ctl.store.saveLayout({[id2]: {x: 10, y: 20, w: 321, h: 222, monitor: '1920x1080+0+0', open: true}});
     w2.win.close();
-    await sleep(500);
+    await until(() => !windows.has(id2) && JSON.parse(readText(`${dirs.state}/layout.json`))[id2]?.open === false, 5000);
     const lay = JSON.parse(readText(`${dirs.state}/layout.json`));
     check(lay[id2].open === false && lay[id2].x === 10 && lay[id2].w === 321 && lay[id2].monitor === '1920x1080+0+0', 'closing writes open=false and keeps the extension members');
     check(!windows.has(id2), 'closed window removed from the app');
 
     // another launch of the program: the closed note comes back and its flag is true again
     gtkApp.activate();
-    await sleep(600);
+    await until(() => windows.has(id2) && JSON.parse(readText(`${dirs.state}/layout.json`))[id2]?.open === true, 5000);
     check(windows.has(id2), 'a second launch brings the closed note back');
     check(JSON.parse(readText(`${dirs.state}/layout.json`))[id2].open === true, 'and writes open=true');
 
@@ -187,7 +188,7 @@ async function scenario() {
     const freshNote = async () => {
         const known = new Set(windows.keys());
         gtkApp.activate_action('new-note', null);
-        await sleep(600);
+        await until(() => [...windows.keys()].some(k => !known.has(k)), 5000);
         const nid = [...windows.keys()].find(k => !known.has(k));
         return [nid, windows.get(nid)];
     };
@@ -208,7 +209,8 @@ async function scenario() {
         w3.buffer.insert_at_cursor(t, -1);
         await sleep(60);
     }
-    await sleep(500);
+    await until(() => fileRec(id3).text === 'abc', 5000);
+    await sleep(SAVE_COALESCE_MS + 200);                  // a late second write must still fail the next check
     check(fileRec(id3).text === 'abc' && fileRec(id3).rev === rev0 + 1, `three keys 60 ms apart are one write (rev ${rev0} -> ${fileRec(id3).rev})`);
 
     // the 2 s quiet rule: saved and clean, but a key 1 s ago: a remote version waits, then it is taken with its colour
@@ -219,17 +221,17 @@ async function scenario() {
     const startColor3 = w3.color;
     const remoteColor = NOTE_COLOR_IDS.find(c => c !== startColor3);
     remoteWrite(id3, {rev: fileRec(id3).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'abcd REMOTE', color: remoteColor});
-    await sleep(700);
+    await until(() => w3.mark?.kind === 'newer', 5000);
     check(w3._bufferText() === 'abcd' && w3.mark?.kind === 'newer', 'a clean window with a key 1 s ago keeps its text and shows the mark');
     check(w3.color === startColor3 && !w3.win.has_css_class(`cetli-${remoteColor}`), 'and its colour');
-    await sleep(1700);
+    await until(() => w3._bufferText() === 'abcd REMOTE' && w3.mark === null, 6000);
     check(w3._bufferText() === 'abcd REMOTE' && w3.mark === null, 'after 2 s without a key the remote text is taken, the mark goes');
     check(w3.color === remoteColor && w3.win.has_css_class(`cetli-${remoteColor}`) && !w3.win.has_css_class(cssClassOf(startColor3)), 'the colour of the remote version is applied');
 
     // a cursor exactly at the start of the changed region stays before the new text
     w3.buffer.place_cursor(w3.buffer.get_iter_at_offset(4));
     remoteWrite(id3, {rev: fileRec(id3).rev + 1, updated: future(), device: 'b5b5b5b5', text: 'abcdXYZ REMOTE', color: remoteColor});
-    await sleep(900);
+    await until(() => w3._bufferText() === 'abcdXYZ REMOTE', 5000);
     check(w3._bufferText() === 'abcdXYZ REMOTE', `the text was inserted (${w3._bufferText()})`);
     const at = m => w3.buffer.get_iter_at_mark(m).get_offset();
     check(at(w3.buffer.get_insert()) === 4 && at(w3.buffer.get_selection_bound()) === 4, `a cursor at the start of the region stays before the new text (${at(w3.buffer.get_insert())})`);
@@ -240,7 +242,7 @@ async function scenario() {
     quarantine(id4);
     await sleep(800);
     w4.buffer.insert_at_cursor('typed', -1);
-    await sleep(600);
+    await until(() => w4.mark?.kind === 'refused' && w4._dirty(), 5000);
     check(w4.mark?.kind === 'refused' && w4._dirty(), `a quarantined file: the save is refused, the text stays (${w4.mark?.text})`);
     await sleep(2300);
     const filesBefore = noteFiles().length;
@@ -256,13 +258,13 @@ async function scenario() {
     quarantine(id5);
     await sleep(800);
     w5.buffer.insert_at_cursor('unsaved', -1);
-    await sleep(600);
+    await until(() => w5.mark?.kind === 'refused', 5000);
     check(w5.mark?.kind === 'refused', 'refused again');
     w5.win.close();
     await until(() => w5.mark?.text === S.markCloseUnsaved(), 5000);
     check(windows.has(id5) && w5.win.get_visible() && w5.mark?.text === S.markCloseUnsaved(), `the first close only warns (${w5.mark?.text})`);
     w5.win.close();
-    await sleep(500);
+    await until(() => !windows.has(id5), 5000);
     check(!windows.has(id5), 'the second close closes the window');
 
     // 0.2.6: a file that leaves the view without being gone (here: a quarantined date) is not a vanished file: a CLEAN window stays open with the mark.
@@ -327,7 +329,7 @@ async function scenario() {
     // About
     const before = Gtk.Window.list_toplevels().length;
     w.ctl.showAbout(w.win);
-    await sleep(300);
+    await until(() => Gtk.Window.list_toplevels().length === before + 1, 5000);
     check(Gtk.Window.list_toplevels().length === before + 1, 'About opens as an extra window');
     // libadwaita before 1.5 shows an Adw.AboutWindow (a toplevel with `comments`); the 1.5 dialog is not a toplevel
     const about = Gtk.Window.list_toplevels().find(t => typeof t.comments === 'string');
@@ -340,7 +342,7 @@ async function scenario() {
 
     // delete (menu action win.delete)
     w.win.lookup_action('delete').activate(null);
-    await sleep(600);
+    await until(() => fileRec(id).deleted === true && !windows.has(id), 5000);
     check(fileRec(id).deleted === true && fileRec(id).text === '', 'delete writes a tombstone');
     check(!windows.has(id), 'deleted note: window closed');
 }
