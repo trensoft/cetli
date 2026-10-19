@@ -108,7 +108,8 @@ export class AllNotesWindow {
         this.newNoteButton = new Gtk.Button({label: S.menuNewNote(), halign: Gtk.Align.CENTER});
         this.newNoteButton.add_css_class('suggested-action');
         this.newNoteButton.add_css_class('pill');
-        this.newNoteButton.connect('clicked', () => this.ctl.newNote(null).catch(e => this.ctl.log(`All notes: ${e?.message ?? e}`)));
+        this.creating = false;
+        this.newNoteButton.connect('clicked', () => this._newNote());
         this.stack.add_named(new Adw.StatusPage({title: S.noNotesTitle(), description: S.noNotesText(), icon_name: 'document-edit-symbolic', vexpand: true, child: this.newNoteButton}), 'none');
         this.stack.add_named(new Adw.StatusPage({title: S.noResultsTitle(), description: S.noResultsText(), icon_name: 'system-search-symbolic', vexpand: true}), 'nores');
         const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL});
@@ -117,6 +118,8 @@ export class AllNotesWindow {
         this.toasts = new Adw.ToastOverlay({child: box});
         this.win.set_child(this.toasts);
         this.setDark(ctl.dark());
+        this.win.connect('map', () => GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => { this._dropButtonFocus(); return GLib.SOURCE_REMOVE; }));
+        this.win.connect('notify::is-active', () => this._dropButtonFocus());
         this.win.connect('close-request', () => {
             this.cancelRefresh();
             this.ctl.onAllNotesClosed(this);
@@ -183,6 +186,23 @@ export class AllNotesWindow {
         this._updatePage();
     }
 
+    // One creation at a time: a second click while the first note is being written would make a second note (and not the red first one). The
+    // button is insensitive until the answer is there; a refusal of the core is shown as a toast (the application passes it to showError).
+    async _newNote() {
+        if (this.creating)
+            return;
+        this.creating = true;
+        this.newNoteButton.set_sensitive(false);
+        try {
+            await this.ctl.newNote(this);
+        } catch (e) {
+            this.ctl.log(`All notes: ${e?.message ?? e}`);
+        } finally {
+            this.creating = false;
+            this.newNoteButton.set_sensitive(true);
+        }
+    }
+
     // The page of the stack: the cards; "no notes" when there are none; "no results" when the search leaves none. The search
     // field is shown with the cards and with "no results", not above "no notes".
     _updatePage() {
@@ -194,6 +214,17 @@ export class AllNotesWindow {
         const page = this.rows.size === 0 ? 'none' : (shown === 0 ? 'nores' : 'list');
         this.stack.set_visible_child_name(page);
         this.search.set_visible(page !== 'none');
+        // The button is the only widget that can take the focus on the empty page, and GTK gives it to it (measured). An Enter or a Space typed
+        // into a window that just appeared would make a note, on every computer of a synchronised folder. The focus is taken off it: a click, or Tab and then
+        // Enter, is the way to press it.
+        this._dropButtonFocus();
+    }
+
+    // GTK hands the initial focus out when the window is shown, after the first _updatePage: so this also runs when the window is mapped and when
+    // it first becomes the active one.
+    _dropButtonFocus() {
+        if (this.stack.get_visible_child_name() === 'none' && this.win.get_focus() === this.newNoteButton)
+            this.win.set_focus(null);
     }
 
     // The eye follows the state of the note window.

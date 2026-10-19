@@ -273,9 +273,14 @@ test('0.2.5.2: a sync program that does not answer has a restart and, as the way
 test('0.2.5.2: after a restart that ends on E_CONFIG_UNSAFE (a dead end) the way out "reset" is offered; nowhere else, and not without a restart before', () => {
     assert.deepEqual(errorView('E_CONFIG_UNSAFE', {afterRestart: true}), {code: 'E_CONFIG_UNSAFE', neutral: false, action: 'none', secondary: 'reset'});
     assert.equal(Object.hasOwn(errorView('E_CONFIG_UNSAFE'), 'secondary'), false, 'the plain error stays as it was');
-    for (const c of ERROR_CODES.filter(x => x !== 'E_SERVICE_TIMEOUT' && x !== 'E_CONFIG_UNSAFE'))
+    for (const c of ERROR_CODES.filter(x => x !== 'E_SERVICE_TIMEOUT' && x !== 'E_CONFIG_UNSAFE' && x !== 'E_NO_USER_SYSTEMD'))
         assert.equal(Object.hasOwn(errorView(c, {afterRestart: true}), 'secondary'), false, c);
     assert.equal(errorView('E_SERVICE_TIMEOUT', {afterRestart: true}).secondary, 'reset');
+});
+
+test('0.2.6 (Petra 8970): a restart that ends on E_NO_USER_SYSTEMD is no page without a way out: "Try again" and "Reset sync"; the plain error stays as it was', () => {
+    assert.deepEqual(errorView('E_NO_USER_SYSTEMD', {afterRestart: true}), {code: 'E_NO_USER_SYSTEMD', neutral: false, action: 'retry', secondary: 'reset'});
+    assert.deepEqual(errorView('E_NO_USER_SYSTEMD'), {code: 'E_NO_USER_SYSTEMD', neutral: false, action: 'none'});
 });
 
 test('the ID rows and the compare line', () => {

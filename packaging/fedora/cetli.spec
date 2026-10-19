@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.6
+Version:        0.2.7
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -131,7 +131,7 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 
 %changelog
-* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.6-1
+* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.7-1
 - New: cetli syncs up to 10 computers. You connect a new computer to any computer of the group with one ID comparison; the other computers learn the new one by themselves. A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all your computers. cetli guides you through it and never claims a computer is removed from the whole group, only from the one it runs on
 - If you paired computers with 0.2.5, open Sync on each of them and allow the new rule once; a pair works under the new rule only when it is allowed on both of its computers, until then it behaves as in 0.2.5 (a new computer is not passed on). A computer you removed is not offered again when it knocks until you press Add again in Sync (you still compare its ID and accept it). Going back to 0.2.5 needs "Stop syncing" first
 - Supported and measured: up to 4 Syncthing instances on one shared local network (a virtual LAN) and two real instances; with local discovery on, the computers connect to each other directly within a second or two, and without it nothing connects. Not measured: 10 computers, another subnet, a VLAN, a guest or client-isolated WiFi, NAT, connections through relays, a real RHEL 10 with a user service manager; there the computers may connect through the first computer only, or not at all. A firewall on any computer can stop the pairing: the ports are TCP and UDP 22100 and UDP 21127
@@ -139,6 +139,15 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 - The engine keeps a small state file (computer IDs only) in the sync home; the window shows how each computer came into the group and which are new. Removing a lost computer first stops this computer from taking anything over from the others, then removes the computer; the window says what must still be done on the other computers
 - A machine whose notes folder is already synchronised by a Syncthing you set up by hand is detected and left exactly as it is; the window says so
 - Tests: the engine, the group rule (sync-tests/, mutants X1-X10 in sync-tests/mutants.js) and the window have their own tests
+
+* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.6-1
+- Fix: the line "Not connected right now" in the sync window could stay on while notes synced both ways. The window now asks again every 3 seconds while the page with the other computer is on screen, so the line follows the connection (also when it breaks later). A check whose call failed is shown as "Checking the connection", never as "Not connected right now"; a poll whose call fails (for example the sync program stops on this computer) also turns the line to "Checking the connection", the earlier "Connected" or "Not connected right now" does not stay on screen, and the next answer shows the real state.
+- Fix: a note window that holds nothing unsaved closes by itself when the other computer deletes the note (or the note file disappears); if it was the last window of a synchronised notes folder, the list of notes opens instead, so the program does not leave without a word. A window with unsaved text or a save still waiting stays open with the mark, and typing or saving brings the note back, as before.
+- Fix: "New note" makes one note per press (a quick second press made a second note), the empty list does not give the keyboard focus to its "New note" button (an Enter or a Space typed into the window that just appeared made a note), and a note that cannot be saved is reported in the list.
+- Fix: the sync restart does not start the sync program when systemd cannot say clearly whether it is switched off (masked, no answer); a restart that fails because of systemd now offers "Try again" and "Reset sync". "Reset sync" looks at the marker folder of cetli again right before it takes it away.
+- Measured since 0.2.5.2 (John, Syncthing 2.1.6): the marker folder of Syncthing holds one plain file, syncthing-folder-90ca15.txt (117 bytes).
+- Tests: the engine and window tests of these changes (sync-tests/engine-connect.test.js, engine-recover.test.js, flow.test.js; app-tests/link-poll-smoke.js (with the case of a failed poll after "Connected"), new-note-guard-smoke.js, gtk-smoke.js); the mutants R5, R6, R11, R12, R13 (sync-tests/mutants-recover.js) are all killed.
+- Not measured: a real GNOME Shell, a real mouse click, a real synchronised pair of computers, a real systemd user session, a real note window that closes when the other computer deletes the note, and a real Syncthing state during a package change.
 
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5.4-1
 - Fix: the header of a note no longer shows "N unresolved". The copies that Syncthing makes when two computers change a note at the same time (files named <id>.sync-conflict-<date>-<time>-<id>.json) were kept but never resolved, so the counter only grew. The program now resolves them by itself, without losing a text: the newest version becomes the note, and every other version is kept as a note of its own (same text, same colour, no mark and no changed title); the conflict file is deleted only after its text is safe in a note. A frozen note (its own file damaged or not readable) is left as it is, with the conflict files.

@@ -152,6 +152,11 @@ const MUTANTS = [
         find: "out.set(k, JSON.parse(json));", repl: "out.set(k, v);"},
     {id: 'M68', rule: 'extra: two sets of unknown keys with the same names but other values count as equal', file: 'store.js',
         find: "if (!b.has(k) || JSON.stringify(b.get(k)) !== JSON.stringify(v))", repl: "if (!b.has(k))"},
+    // 0.2.6: the `gone` flag of the 'removed' event (a clean window closes only for a vanished file).
+    {id: 'M69', rule: '0.2.6: every removed note is "gone" (a quarantined or unknown file too)', file: 'store.js',
+        find: "gone: !g || (!g.main && g.conflicts.length === 0)}", repl: "gone: true}"},
+    {id: 'M70', rule: '0.2.6: "gone" is negated (a vanished file is not gone)', file: 'store.js',
+        find: "gone: !g || (!g.main && g.conflicts.length === 0)}", repl: "gone: !!g?.main}"},
 ];
 
 function copyTree(from, to) {

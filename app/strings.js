@@ -187,7 +187,7 @@ export const syncDonePeerId = () => _('ID of the other computer:');
 // "Connected", "This computer" and "Stop syncing".
 export const syncCheckOther = () => _('Now open cetli on the other computer. It must also say Connected. If it does not, or if the ID shown here is not the one the other computer shows as This computer, press Stop syncing here.');
 
-// ---- the group (0.2.6): one row per computer ----
+// ---- the group (0.2.7): one row per computer ----
 export const syncGroupTitle = () => _('Your computers');
 export const syncGroupCount = (n, max) => fill(_('%s / %s computers'), String(n), String(max));
 export const syncAddButton = () => _('Add a computer');
@@ -200,6 +200,7 @@ export function syncLinkText(key) {
     switch (key) {
     case 'connected': return _('Connected');
     case 'unstable': return _('The connection is not confirmed yet');
+    case 'checking': return _('Checking the connection…');
     case 'offline': return _('Not connected right now');
     default: return '';
     }

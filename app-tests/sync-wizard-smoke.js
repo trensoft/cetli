@@ -120,7 +120,7 @@ class FakeBridge {
 }
 
 const fake = new FakeBridge();
-const app = createApp({dirs, bridge: fake, homeDir: HOME});
+const app = createApp({dirs, bridge: fake, homeDir: HOME, linkPollMs: 0});            // the link poll has its own smoke (link-poll-smoke.js)
 const {gtkApp} = app;
 
 const labelText = l => l.get_label();
@@ -397,13 +397,17 @@ async function scenario() {
     w = await open({status: () => fixture('status-half')});
     await pageIs(w, 'group');
     await closeWin(w);
-    w = await open({status: () => status('set-up')});
+    // the other computer has been added by the time the wizard asks again: the first answer is 'set-up', the one after the timeout is 'half'
+    let accepted = false;
+    w = await open({status: () => (accepted ? status('half', {peer: {id: B, name: null}, connected: false, link: 'none', connected_s: null, shared: true, up_to_date: null}) : status('set-up'))});
     await pageIs(w, 'ids');
     fake.hosts[0].finish(fail('E_PEER_TIMEOUT', 'connect'));
     check(await pageIs(w, 'error'), 'E_PEER_TIMEOUT ends on the error page');
     const statusBefore = fake.count('status');
+    accepted = true;
     w.w.errAction.emit('clicked');
-    check(await waitFor(() => fake.count('status') === statusBefore + 1) && fake.hosts.length === 1, 'Try again asks the status and starts no second waiting run');
+    check(await waitFor(() => fake.count('status') === statusBefore + 1) && await pageIs(w, 'half') && fake.hosts.length === 1,
+        'Try again asks the status and starts no second waiting run');
     await closeWin(w);
 
     // ---- entering the other ID: the waiting run stops, join gets the line as typed, errors stay under the field

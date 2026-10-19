@@ -453,6 +453,29 @@ test('status link rule: paired + ten unbroken connected samples = stable with co
     assert.ok(quick.sleeps - s0 <= 1, 'the first not-connected sample ends the run at once');
 });
 
+test('0.2.6 status: a failed or timed-out `show connections` is an unknown link (null), never "none" (not connected); a real not-connected sample stays "none"', async () => {
+    const mk = async (connected, fails) => {
+        const w = await ready();
+        w.pair(PEER);
+        w.connections.set(PEER, connected);
+        const t0 = w.mono;
+        w.failConnections = fails === null ? null : ms => fails(ms - t0);
+        return {w, r: (await perform(w, 'status')).result};
+    };
+    let {w, r} = await mk(true, () => true);                                // the first call fails
+    assert.deepEqual([r.state, r.peers[0].link, r.peers[0].connected, r.peers[0].connected_s], ['paired', null, null, null]);
+    assert.ok(w.journal.some(l => /connection query failed/.test(l)), 'and the journal says that a call failed (codes only)');
+    assert.equal(JSON.stringify(w.journal).includes(PEER), false);
+    ({r} = await mk(true, ms => ms >= 3000 && ms < 3500));                  // the fourth call fails after three good samples
+    assert.deepEqual([r.peers[0].link, r.peers[0].connected, r.peers[0].connected_s], [null, null, null]);
+    ({r} = await mk(false, null));                                          // the call answers: not connected
+    assert.deepEqual([r.peers[0].link, r.peers[0].connected], ['none', false]);
+    ({r} = await mk(true, null));
+    assert.deepEqual([r.peers[0].link, r.peers[0].connected, r.peers[0].connected_s], ['stable', true, 9]);
+    const lines = [emit({...r, event: 'result'}, 'status')];
+    assert.equal(checkRun('status', lines, 0).ok, true);
+});
+
 test('the journal carries codes, steps and field names only: no ID, no name, no address', async () => {
     const w = await ready();
     knock(w, 3000, PEER, 'secret-looking-name');

@@ -170,11 +170,16 @@ test('restart --enable on a unit that is enabled is the same restart as without 
     }
 });
 
-test('restart: only the word "disabled" counts. An is-enabled that fails some other way (no answer, masked, an error) does not stop the restart', async () => {
+test('restart: only the word "disabled" is a disabled unit; an is-enabled that fails some other way (no answer, masked, an error) starts NOTHING (fail closed, Nicole 8971)', async () => {
     const a = await notRunning('inactive');
     a.failSystemctl.add('is-enabled cetli-syncthing.service');                     // rc 1, the text "Failed"
-    assert.equal((await perform(a, 'restart')).result.state, 'restarted');
-    assert.deepEqual(systemctl(a), ['is-enabled', 'reset-failed', 'restart']);
+    assert.deepEqual(await perform(a, 'restart'), {error: {code: 'E_NO_USER_SYSTEMD', step: 'service'}});
+    assert.deepEqual(systemctl(a), ['is-enabled'], 'no reset-failed, no restart, no enable');
+    assert.equal(a.daemon, false);
+    const c = await notRunning('inactive');
+    c.failSystemctl.add('is-enabled cetli-syncthing.service');
+    assert.deepEqual(await perform(c, 'restart', {enable: true}), {error: {code: 'E_NO_USER_SYSTEMD', step: 'service'}}, 'the button does not start it either');
+    assert.deepEqual(systemctl(c), ['is-enabled']);
     const b = await notRunning('disabled');
     b.systemd = false;                                                             // no user service manager at all
     assert.deepEqual(await perform(b, 'restart'), {error: {code: 'E_NO_USER_SYSTEMD', step: 'service'}});
@@ -226,6 +231,21 @@ test('reset: the unit is stopped, the instance is MOVED (not deleted), the marke
         emit(e, 'reset');
     emit(r.result, 'reset');
     assert.equal(JSON.stringify([w.events, w.journal]).includes(FAKE_KEY), false);
+});
+
+test('reset: the marker is measured again right before it goes: a path swapped for a link while the unit stops is left alone (Nicole 8971)', async () => {
+    const w = await stuck();
+    const marker = `${w.notes}/.stfolder`;
+    w.put(`${marker}/syncthing-folder-abc123.txt`, 'hint');
+    const inMarker = () => JSON.stringify([...w.fsMap.entries()].filter(([k]) => k === marker || k.startsWith(`${marker}/`)).map(([k, v]) => [k, {...v, link: undefined}]).sort());
+    w.afterDisable = x => { x.fsMap.get(marker).link = true; };                     // the swap, while `disable --now` works
+    const before = inMarker();
+    const r = await perform(w, 'reset');
+    assert.deepEqual(r, {result: {event: 'result', state: 'not-set-up'}}, 'the instance is still moved aside');
+    assert.equal(w.fsMap.has(marker), true, 'the marker stays');
+    assert.equal(inMarker(), before, 'and nothing inside it was removed (the link flag aside)');
+    assert.equal(w.timeline.some(e => e.startsWith('remove') || e.startsWith('rmdir')), false, 'no removal at all');
+    assert.ok(w.journal.some(l => /marker changed/.test(l)), 'and the journal says so');
 });
 
 test('reset moves, never deletes: every file of the instance exists once under the new name, and the only thing removed anywhere is the marker', async () => {
@@ -333,7 +353,7 @@ test('reset then setup: the window starts from the beginning with a fresh instan
     assert.equal(w.fsMap.has(`${w.home}.bak-${STAMP}/config.xml`), true, 'the backup is still there');
     const st = (await perform(w, 'status')).result;
     assert.equal(st.state, 'set-up');
-    assert.equal(st.peer, null, 'no partner: the other computer must be entered again');
+    assert.deepEqual(st.peers, [], 'no partner: the other computer must be entered again');
     assert.equal(st.notes, 3);
 });
 

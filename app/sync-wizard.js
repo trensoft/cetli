@@ -18,6 +18,7 @@ import {buttonGroup, compareLine, errorView, forgetId, groupView, idRows, idsRed
 import * as S from './strings.js';
 
 const ID_FIELD_MAX = 100;
+const LINK_POLL_MS = 3000;                    // the pause between two link checks while the paired page is on screen
 
 const mono = label => {
     label.add_css_class('monospace');
@@ -29,9 +30,23 @@ export class SyncWizard {
     // start(verb, opts) -> {done, accept(id), stop()}, run(verb, opts), stop(). firstStart: open at the consent page without any engine
     // call (PLAN-WIZARD 0H.11 rule 1); a missing Syncthing program still shows its own page. shortcutRemove: the policy switch of the
     // "I still have this computer" path (only the tests give another value).
-    constructor({ctl, bridge, firstStart = false, binaryExists = () => Gio.File.new_for_path(BACKEND_EXE).query_exists(null), shortcutRemove = SHORTCUT_REMOVE}) {
+    constructor({ctl, bridge, firstStart = false, linkPollMs = LINK_POLL_MS, binaryExists = () => Gio.File.new_for_path(BACKEND_EXE).query_exists(null), shortcutRemove = SHORTCUT_REMOVE}) {
         this.ctl = ctl;
-        this.bridge = bridge;
+        this.bridge = {
+            // a link poll that is still running is stopped before any other run starts (the runner takes one run at a time)
+            run: async (verb, opts) => {
+                await this._cancelPoll();
+                return bridge.run(verb, opts);
+            },
+            start: (verb, opts) => {
+                this._cancelPoll();
+                return bridge.start(verb, opts);
+            },
+        };
+        this.rawBridge = bridge;
+        this.pollTimer = 0;
+        this.pollRun = null;
+        this.linkPollMs = linkPollMs;                // 0: the window does not poll (a test that counts the calls of the fake bridge)
         this.firstStart = firstStart;
         this.shortcutRemove = shortcutRemove;
         this.binaryExists = binaryExists;
@@ -41,6 +56,7 @@ export class SyncWizard {
         this.ids = initialIdsState;
         this.status = null;
         this.closed = false;
+        this.restartTried = false;                   // one automatic restart per opening (see _restart)
         this.retry = null;
         this.mode = 'ids';                  // 'ids' (no other computer yet, may type) or 'add' (a group exists, only waits)
         this.view = null;                   // groupView of the status on the group page
@@ -389,6 +405,84 @@ export class SyncWizard {
 
     _show(name) {
         this.stack.set_visible_child_name(name);
+        if (name === 'group')
+            this._schedulePoll();
+        else
+            this._stopPollTimer();
+    }
+
+    // The group page is a snapshot of one `status` run. A link that was not up in that second (the window opens while the computers
+    // reconnect, a call that failed) used to stay on screen until the window was reopened; and a link that breaks later was never shown.
+    // So while the group page is on screen the window asks `status` again, linkPollMs after the last answer.
+    _schedulePoll() {
+        this._stopPollTimer();
+        if (this.closed || this.linkPollMs === 0)
+            return;
+        this.pollTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this.linkPollMs, () => {
+            this.pollTimer = 0;
+            this._poll();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _stopPollTimer() {
+        if (this.pollTimer !== 0) {
+            GLib.source_remove(this.pollTimer);
+            this.pollTimer = 0;
+        }
+    }
+
+    // Another run is about to start: no poll may be pending or running.
+    async _cancelPoll() {
+        this._stopPollTimer();
+        const run = this.pollRun;
+        if (run === null)
+            return;
+        this.pollRun = null;
+        await run.stop();
+    }
+
+    async _poll() {
+        if (this.closed || this.page !== 'group' || this.pollRun !== null)
+            return;
+        const run = this.rawBridge.start('status');
+        this.pollRun = run;
+        const out = await run.done;
+        if (this.pollRun !== run)
+            return;                                              // cancelled: another run owns the screen now
+        this.pollRun = null;
+        if (this.closed || this.page !== 'group')
+            return;
+        if (out.ok) {
+            this.status = out.result;
+            if (pageForStatus(out.result) !== 'group')
+                this._showForStatus(out.result);                 // no longer a group (stopped on the other side, or the program says otherwise)
+            else if (!this._updateLinks(out.result))
+                this._fillGroup(out.result);                     // the list of computers changed: the whole page is built again
+        } else {
+            for (const r of this.rowWidgets)                     // a failed poll: the last good line ("Connected") would be a claim nobody checked
+                this._setLinkLabel(r.link, 'checking');
+        }
+        if (this.page === 'group')
+            this._schedulePoll();                                // a failed poll leaves the page and is asked again
+    }
+
+    _setLinkLabel(label, key) {
+        const text = S.syncLinkText(key);
+        label.set_label(text);
+        label.set_visible(text !== '');
+    }
+
+    // The poll changes the link lines in place while the same computers are listed (the rows stay under the pointer: a click is not lost to a
+    // page that is built again every few seconds). Returns false when the list is not the same, then the caller builds the page.
+    _updateLinks(status) {
+        const v = groupView(status);
+        if (v.rows.length !== this.rowWidgets.length || v.rows.some((r, i) => r.id !== this.rowWidgets[i].id))
+            return false;
+        v.rows.forEach((r, i) => this._setLinkLabel(this.rowWidgets[i].link, r.link));
+        this._setListenerNote(this.w.groupListener, status);
+        this.view = v;
+        return true;
     }
 
     _copy(text) {
@@ -1097,6 +1191,9 @@ export class SyncWizard {
             this.ctl.dismissSync?.();
         this.hostRun?.stop();
         this.joinRun?.stop();
+        this._stopPollTimer();
+        this.pollRun?.stop();
+        this.pollRun = null;
         this.ctl.onSyncClosed?.(this);
     }
 }

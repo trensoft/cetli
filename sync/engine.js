@@ -148,6 +148,19 @@ export function createEngine(ports) {
         }
     }
 
+    // The names inside a marker directory when it is no link, its notes directory is no link, and it holds nothing or only plain hint files; else null.
+    // Asked again right before the marker is taken away (the leaving of the unit can take long, and a path can be swapped meanwhile).
+    function plainMarkerNames(path) {
+        try {
+            if (files.isSymlink(dirs.notes) || !files.exists(path) || files.isSymlink(path) || !files.isDir(path))
+                return null;
+            const names = files.listNames(path);
+            return names.every(n => MARKER_HINT_FILE.test(n) && !files.isSymlink(`${path}/${n}`) && !files.isDir(`${path}/${n}`)) ? names : null;
+        } catch {
+            return null;
+        }
+    }
+
     // The marker of OUR folder in the notes directory, or null. Ours means: our own config.xml holds `cetli-notes` with exactly the notes path,
     // the notes path and the marker are no links, and the marker is a directory that holds nothing or only Syncthing's hint file(s) as plain files.
     // Anything else (a foreign marker, a link, a file of unknown name) is null and stays where it is. Read BEFORE the instance is moved.
@@ -157,12 +170,8 @@ export function createEngine(ports) {
             const folder = readFolders(files.readText(configPath)).find(f => f.id === FOLDER_ID);
             if (!folder || folder.path !== dirs.notes || files.isSymlink(dirs.notes))
                 return null;
-            if (!files.exists(path) || files.isSymlink(path) || !files.isDir(path))
-                return null;
-            const names = files.listNames(path);
-            if (!names.every(n => MARKER_HINT_FILE.test(n) && !files.isSymlink(`${path}/${n}`) && !files.isDir(`${path}/${n}`)))
-                return null;
-            return {path, names};
+            const names = plainMarkerNames(path);
+            return names === null ? null : {path, names};
         } catch {
             return null;
         }
@@ -284,6 +293,8 @@ export function createEngine(ports) {
     // `connectedS` is the length of the unbroken run this engine saw, first to last sample, in whole seconds; null unless stable.
     // `observe(connected)` takes the answer of a call somebody else made (status reads ONE `show connections` for all peers); `sample()`
     // makes the call itself (host and join watch one peer).
+    // A sample also says `failed` (the call itself failed or timed out): for the count that is a broken sample, but `status` must not turn it into
+    // "not connected" (0.2.6: the call said nothing about the link).
     function createLinkTracker(peerId) {
         let consecutive = 0;
         let runStart = null;
@@ -292,7 +303,7 @@ export function createEngine(ports) {
         const v = {link: 'none', connectedS: null, connected: false};
         const tracker = {
             get value() { return {...v}; },
-            observe(connected) {
+            observe(connected, failed = false) {
                 const at = ports.monotonic();
                 if (lastAt !== null && at - lastAt > 2 * t.linkGapMs)
                     consecutive = 0;
@@ -302,7 +313,7 @@ export function createEngine(ports) {
                     consecutive = 0;
                     v.link = everConnected ? 'flapping' : 'none';
                     v.connectedS = null;
-                    return {...v};
+                    return {...v, failed};
                 }
                 everConnected = true;
                 if (consecutive === 0)
@@ -313,7 +324,7 @@ export function createEngine(ports) {
                 const stable = consecutive >= t.linkSamples && spanMs >= (t.linkSamples - 1) * t.linkGapMs;
                 v.link = stable ? 'stable' : 'flapping';
                 v.connectedS = stable ? Math.floor(spanMs / 1000) : null;
-                return {...v};
+                return {...v, failed};
             },
             async sample() {
                 return tracker.observe(connectedIn(await readConnections(), peerId));
@@ -365,20 +376,32 @@ export function createEngine(ports) {
 
     // status: ONE `show connections` call per second feeds one tracker per peer. A peer's run ends at its first not-connected sample or when it
     // is stable; the run ends when every peer is done, so a computer that is off costs one sample and the success path pays the K samples
-    // once for all peers together (as in 0.2.5 for one). Returns the values in the order of `peerIds`.
+    // once for all peers together (as in 0.2.5 for one). A call that failed ends the run of every peer still active, but as "unknown" (link null,
+    // connected null): the window shows "Checking the connection" and asks again, it never claims "not connected" (0.2.6). Returns the values in
+    // the order of `peerIds`.
     async function measureLinks(peerIds) {
         const trackers = peerIds.map(id => createLinkTracker(id));
+        const unknown = new Set();
+        let queryLogged = false;
         let active = trackers.map((_, i) => i);
         for (let i = 0; i < t.linkSamples + 1 && active.length > 0; i++) {
             const connections = await readConnections();
+            if (connections === null && !queryLogged) {
+                queryLogged = true;
+                log('link: the connection query failed');
+            }
             active = active.filter(k => {
-                const s = trackers[k].observe(connectedIn(connections, peerIds[k]));
+                const s = trackers[k].observe(connectedIn(connections, peerIds[k]), connections === null);
+                if (s.failed) {
+                    unknown.add(k);
+                    return false;
+                }
                 return s.connected && s.link !== 'stable';
             });
             if (active.length > 0 && i < t.linkSamples)
                 await ports.sleep(t.linkGapMs);
         }
-        return trackers.map(tr => tr.value);
+        return trackers.map((tr, k) => unknown.has(k) ? {link: null, connected: null, connectedS: null} : tr.value);
     }
 
     // host and join: sample until stable. Events on every change of the state, at most one per sample (one per second).
@@ -779,6 +802,8 @@ export function createEngine(ports) {
             recheckConfig();
             const was = await run.systemctl(['--user', 'is-enabled', UNIT_NAME], {timeoutMs: t.systemctlMs});
             const disabled = was.rc !== 0 && was.out.trim() === 'disabled';
+            if (was.rc !== 0 && !disabled)
+                throw new Fail('E_NO_USER_SYSTEMD');                              // masked, not found, timed out, unreadable: nothing is started (fail closed)
             if (disabled && !enable) {
                 state = 'disabled';
                 return;
@@ -828,7 +853,12 @@ export function createEngine(ports) {
         if (marker !== null) {
             await step('folder', async () => {
                 try {
-                    for (const n of marker.names)
+                    const names = plainMarkerNames(marker.path);                // measured again now, not the list from before the unit was stopped
+                    if (names === null) {
+                        log('reset: the marker changed, it is left');
+                        return;
+                    }
+                    for (const n of names)
                         files.removeFile(`${marker.path}/${n}`);
                     files.removeDir(marker.path);                              // only an empty directory goes
                 } catch {

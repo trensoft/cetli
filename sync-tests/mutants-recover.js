@@ -22,7 +22,7 @@ const MUTANTS = [
     {id: 'R4', rule: '(b) reset writes a file into the notes folder', file: 'sync/engine.js',
         find: "log('reset: the instance directory was moved aside');", repl: "log('reset: the instance directory was moved aside'); files.writeText(`${dirs.notes}/.reset`, '', 0o600);"},
     {id: 'R5', rule: '(c) reset takes away a marker with anything inside, not only the hint file', file: 'sync/engine.js',
-        find: 'if (!names.every(n => MARKER_HINT_FILE.test(n) && !files.isSymlink(`${path}/${n}`) && !files.isDir(`${path}/${n}`)))', repl: 'if (false)'},
+        find: 'return names.every(n => MARKER_HINT_FILE.test(n) && !files.isSymlink(`${path}/${n}`) && !files.isDir(`${path}/${n}`)) ? names : null;', repl: 'return names;'},
     {id: 'R6', rule: '(c) reset takes away a marker without asking whose it is (our folder, the notes path)', file: 'sync/engine.js',
         find: 'if (!folder || folder.path !== dirs.notes || files.isSymlink(dirs.notes))', repl: 'if (false)'},
     {id: 'R7', rule: '(d) restart does not clear the failed state of the unit first', file: 'sync/engine.js',
@@ -34,6 +34,12 @@ const MUTANTS = [
     {id: 'R10', rule: 'reset goes on when the unit could not be stopped', file: 'sync/engine.js',
         find: "            const off = await run.systemctl(['--user', 'disable', '--now', UNIT_NAME], {timeoutMs: t.systemctlMs});\n            if (off.rc !== 0)\n                throw new Fail('E_NO_USER_SYSTEMD');                         // nothing was changed\n",
         repl: "            await run.systemctl(['--user', 'disable', '--now', UNIT_NAME], {timeoutMs: t.systemctlMs});\n"},
+    {id: 'R11', rule: '0.2.6: an is-enabled that is not clearly "disabled" (masked, error) no longer stops the start (fail closed)', file: 'sync/engine.js',
+        find: "            if (was.rc !== 0 && !disabled)\n                throw new Fail('E_NO_USER_SYSTEMD');                              // masked, not found, timed out, unreadable: nothing is started (fail closed)\n", repl: ''},
+    {id: 'R12', rule: '0.2.6: reset takes the marker away from the list read before the unit stopped, without measuring it again', file: 'sync/engine.js',
+        find: 'const names = plainMarkerNames(marker.path);                // measured again now, not the list from before the unit was stopped', repl: 'const names = marker.names;'},
+    {id: 'R13', rule: '0.2.6: a failed `show connections` call is told as "not connected" (link none) instead of unknown', file: 'sync/engine.js',
+        find: "            if (s.failed)\n                return {link: null, connected: null, connectedS: null};\n", repl: ''},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});

@@ -21,6 +21,7 @@ msgstr ""
 msgid "Cetli"
 msgstr "Cetli"
 
+#. Translators: the short description in the About window.
 #: data/io.github.trensoft.cetli.desktop.in
 #: data/io.github.trensoft.cetli.metainfo.xml.in app/strings.js
 msgid "Small notes on the desktop that sync between your computers"
@@ -62,6 +63,7 @@ msgstr "A cetli névjegye"
 msgid "All notes"
 msgstr "Összes jegyzet"
 
+#. Translators: shown in the "All notes" list for a note that has no text.
 #: app/strings.js
 msgid "(empty note)"
 msgstr "(üres jegyzet)"
@@ -74,6 +76,7 @@ msgstr "Főmenü"
 msgid "Note text"
 msgstr "Jegyzet szövege"
 
+#. Translators: the title in the header of a red note, meaning "this note matters" (not "urgent", not "a famous person").
 #: app/strings.js
 msgid "Important"
 msgstr "Fontos"
@@ -186,6 +189,7 @@ msgstr "%d megoldatlan"
 msgid "Conflicting copies of notes were kept; cetli does not merge them yet"
 msgstr "Ütköző jegyzetmásolatok maradtak meg; a cetli még nem egyesíti őket"
 
+#. Translators: how the code was written; shown in the About window below the description.
 #: app/strings.js
 msgid "The code of this project was written with the help of AI agents."
 msgstr "Ennek a projektnek a kódját AI-ügynökök segítségével írták."
@@ -219,6 +223,7 @@ msgstr "Nincs találat"
 msgid "Try a different search"
 msgstr "Próbálj más keresést"
 
+#. Translators: tooltips of the eye button on a card in the "All notes" list: the note window is open / closed now.
 #: app/strings.js
 msgid "Hide note"
 msgstr "Jegyzet elrejtése"
@@ -268,6 +273,7 @@ msgstr "Aláhúzott"
 msgid "Strikethrough"
 msgstr "Áthúzott"
 
+#. Translators: the key combination in the brackets is not translated.
 #: app/strings.js
 msgid "Bold (Ctrl+B)"
 msgstr "Félkövér (Ctrl+B)"
@@ -553,6 +559,8 @@ msgstr "%s másodperce kapcsolódva."
 msgid "ID of the other computer:"
 msgstr "A másik számítógép azonosítója:"
 
+#. Translators: the quoted words are the names of the texts and the button in this window, keep them the same as the translations of
+#. "Connected", "This computer" and "Stop syncing".
 #: app/strings.js
 msgid ""
 "Now open cetli on the other computer. It must also say Connected. If it does "
@@ -835,9 +843,9 @@ msgid ""
 "Stop syncing there. Your notes stay on all your computers. Afterwards you "
 "enter the ID of another computer again."
 msgstr ""
-"Ez az utolsó kiút: ez a számítógép új azonosítót kap. A többi számítógép "
-"még a régi azonosítót tartja nyilván: ott távolítsd el ezt a számítógépet, "
-"vagy nyomd meg a „Szinkron leállítása” gombot. A jegyzeteid minden gépen "
+"Ez az utolsó kiút: ez a számítógép új azonosítót kap. A többi számítógép még "
+"a régi azonosítót tartja nyilván: ott távolítsd el ezt a számítógépet, vagy "
+"nyomd meg a „Szinkron leállítása” gombot. A jegyzeteid minden gépen "
 "megmaradnak. Utána újra be kell írnod egy másik számítógép azonosítóját."
 
 #: app/strings.js
@@ -974,6 +982,10 @@ msgstr "Egy másik szinkronlépés még fut."
 #: app/strings.js
 msgid "Something went wrong, see the log."
 msgstr "Hiba történt, nézd meg a naplót."
+
+#: app/strings.js
+msgid "Checking the connection…"
+msgstr "A kapcsolat ellenőrzése…"
 
 #~ msgid "Sync"
 #~ msgstr "Szinkron"

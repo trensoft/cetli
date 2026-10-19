@@ -318,6 +318,14 @@ const MUTANTS = [
         find: "new Gtk.Label({label: '', ellipsize: Pango.EllipsizeMode.END})", repl: "new Gtk.Label({label: ''})"},
     {id: 'A240', rule: '0.2.4 red: every new note is red again (only the very first one is, when no live note exists)', file: 'application.js', gjs: true, tests: ['allnotes-smoke.js', 'gtk-smoke.js'],
         find: "store.listNotes().some(n => !n.deleted) ? {text: ''} : {text: '', color: NOTE_RHEL_RED}", repl: "{text: '', color: NOTE_RHEL_RED}"},
+    // 0.2.6 _clean(): each half on its own (killed by gtk-smoke.js: CETLI_GJS_TESTS=gtk-smoke.js)
+    {id: 'A133', rule: '0.2.6: a window with text only in the window counts as clean (the dirty half of _clean is gone)', file: 'window.js', gjs: true,
+        find: "return !this._dirty() && this._saveTimer === null;", repl: "return this._saveTimer === null;"},
+    {id: 'A134', rule: '0.2.6: a window with a save waiting counts as clean (the timer half of _clean is gone)', file: 'window.js', gjs: true,
+        find: "return !this._dirty() && this._saveTimer === null;", repl: "return !this._dirty();"},
+    // 0.2.6 last window of a gone note (killed by gone-last-window-smoke.js: CETLI_GJS_TESTS=gone-last-window-smoke.js)
+    {id: 'A135', rule: '0.2.6: the last window of a deleted note closes and the list of notes does not come up', file: 'application.js', gjs: true,
+        find: "if (allNotes === null && synced() && [...windows.keys()].every(k => k === id))\n                showAllNotes();", repl: ""},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
@@ -358,7 +366,7 @@ let skipped = 0;
 try {
     const clone = to => {
         fs.mkdirSync(to);
-        for (const d of ['app', 'app-tests', 'po', 'src', 'tests'])
+        for (const d of ['app', 'app-tests', 'po', 'src', 'sync', 'tests'])
             copyTree(path.join(root, d), path.join(to, d));
         fs.copyFileSync(path.join(root, 'package.json'), path.join(to, 'package.json'));
     };

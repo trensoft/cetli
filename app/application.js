@@ -65,7 +65,7 @@ function loadCss() {
 // `dirs`, `fs` and `platform` can be given by a test; the product uses the defaults of the core's Gio layer. `bridge` and `homeDir` are given
 // by a test too (a fake bridge replays the engine; the home is where the first-start hook looks for `.stfolder` markers).
 // `firstStartSync`: the product (main.js) turns the first-start sync window on; the tests of the notes leave it off.
-export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false} = {}) {
+export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false, linkPollMs = undefined} = {}) {
     const gtkApp = new Adw.Application({application_id: APP_ID, flags: Gio.ApplicationFlags.DEFAULT_FLAGS});
     const store = createStore({fs, platform, dirs, resolveConflicts: true});   // the copies of Syncthing conflicts are resolved by the product; the store default stays off
     const windows = new Map();
@@ -90,6 +90,13 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         closed: id => {
             windows.delete(id);
             allNotes?.scheduleRefresh();               // the eye of its card
+        },
+        // 0.2.6: a clean window is about to close because its note is gone (deleted on the other computer, or the file vanished). If it is the
+        // last window of a synchronised folder, the list of notes opens first: the program must not leave without a word (GTK quits when the
+        // last window is gone), and a start without a note window does the same.
+        beforeGoneClose: id => {
+            if (allNotes === null && synced() && [...windows.keys()].every(k => k === id))
+                showAllNotes();
         },
         setOpen: async (id, open) => {
             try {
@@ -161,7 +168,12 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     async function newNote(from) {
         const res = await createNoteRed1st();
         if (!res.ok) {
-            from?._setMark('refused', S.markNotSaved(res.cause.code));
+            // a note window shows its own mark; the list (or, from the menu, the open list) shows a toast; with neither there is nobody to tell
+            const text = S.markNotSaved(res.cause.code);
+            if (from?._setMark)
+                from._setMark('refused', text);
+            else
+                (from ?? allNotes)?.showError?.(text);
             return null;
         }
         allNotes?.scheduleRefresh();
@@ -217,7 +229,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     // The menu item and the first start. A window that is already open is brought to the front.
     function showSync({firstStart = false} = {}) {
         if (syncWin === null)
-            syncWin = new SyncWizard({ctl, bridge: syncBridge, firstStart});
+            syncWin = new SyncWizard({ctl, bridge: syncBridge, firstStart, ...(linkPollMs === undefined ? {} : {linkPollMs})});
         syncWin.present();
         return syncWin;
     }
@@ -293,7 +305,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
             }
             break;
         case 'removed':
-            w?.onRemoved();
+            w?.onRemoved(ev.gone === true);
             break;
         case 'save-retried':
             w?.onSaveRetried(ev.result);
@@ -341,7 +353,18 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         loadCss();
         menu = buildMenu();
         const add = new Gio.SimpleAction({name: 'new-note'});
-        add.connect('activate', () => newNote(null));
+        add.connect('activate', async () => {
+            if (!add.get_enabled())
+                return;
+            add.set_enabled(false);                                  // New note (menu, Ctrl+N) is off until the note is written: two quick presses make one note
+            try {
+                await newNote(null);
+            } catch (e) {
+                platform.log.warn(`new note: ${e?.message ?? e}`);
+            } finally {
+                add.set_enabled(true);
+            }
+        });
         gtkApp.add_action(add);
         const all = new Gio.SimpleAction({name: 'all-notes'});
         all.connect('activate', () => showAllNotes());

@@ -9,9 +9,12 @@ runStartGate({marker: true, deleted: 2}, async ({app, windows, files, records, c
     check(files().length === 2 && records().every(r => r.deleted === true), 'the folder holds two deleted records and no live note');
     check(windows.size === 0 && files().length === 2, 'the start makes no note and opens no note window');
     check(await waitFor(() => app.allNotes?.win.get_visible() === true), 'the start opens the list of notes');
-    check(app.allNotes.stack.get_visible_child_name() === 'none', 'the list shows the "no notes" page');
+    check(await waitFor(() => app.allNotes.stack.get_visible_child_name() === 'none'), 'the list shows the "no notes" page');
     const button = app.allNotes.newNoteButton;
-    check(button !== undefined && button.get_label() === S.menuNewNote() && button.get_mapped(), 'the empty page shows a "New note" button');
+    check(button !== undefined && button.get_label() === S.menuNewNote() && await waitFor(() => button.get_mapped()), 'the empty page shows a "New note" button');
+    await tick(500);
+    check(windows.size === 0 && files().length === 2 && records().every(r => r.deleted === true), 'and without a click NO note comes, however long the list is open');
+    check(app.allNotes.win.get_focus() !== button, 'the button does not hold the keyboard focus (an Enter or a Space typed into the new window would press it)');
     button?.emit('clicked');
     check(await waitFor(() => windows.size === 1 && records().filter(r => !r.deleted).length === 1), 'the button makes ONE live note and opens its window');
     await tick(300);

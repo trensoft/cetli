@@ -12,7 +12,7 @@ export const PAGES = Object.freeze([
 ]);
 
 // The page for a `status` result. `set-up` (no other computer yet) goes to the ID page: the waiting machine waits, the other one types.
-// `half` and `paired` are one page since 0.2.6: the list of the group, each computer with its own link. `set-up` with a removal still open
+// `half` and `paired` are one page since 0.2.7: the list of the group, each computer with its own link. `set-up` with a removal still open
 // (the last computer was revoked and the window closed before Finish) is the group page too: it has the freeze banner and Finish, the ID
 // page has neither and its `host` would only fail with E_REVOCATION_OPEN.
 export function pageForStatus(status) {
@@ -37,12 +37,14 @@ export function isConnected(peer) {
 }
 
 // Which line a row shows (a key; strings.js has the text). `unmeasured`: the engine did not measure the link (a foreign entry, a group over
-// the limit): the row says nothing about it.
-export function linkKey(peer) {
+// the limit): the row says nothing about it. `checking` (0.2.6): the engine did measure and the call failed (link null in a paired or half
+// status that is not over the limit): the row says "Checking the connection…", never "Not connected right now". `status` is given where the
+// row is shown; without it a null link is `unmeasured`.
+export function linkKey(peer, status = null) {
     if (peer === null || peer === undefined || typeof peer !== 'object')
         return 'none';
     if (peer.link === null || peer.link === undefined)
-        return 'unmeasured';
+        return (status?.state === 'paired' || status?.state === 'half') && status.over_limit !== true ? 'checking' : 'unmeasured';
     if (peer.link === 'stable')
         return 'connected';
     if (peer.link === 'flapping')
@@ -81,7 +83,7 @@ export function peerRow(status, peer) {
         name: peer.name ?? null,
         compare: compareLine(peer.id),
         how,
-        link: linkKey(peer),
+        link: linkKey(peer, status),
         connected: isConnected(peer),
         limited: status?.revocation_open === true && peer.introducer === false,
         sameName: typeof peer.name === 'string' && peers.some(p => p.id !== peer.id && p.name === peer.name),
@@ -92,7 +94,7 @@ export function peerRow(status, peer) {
 
 export const peerRows = status => peersOf(status).map(p => peerRow(status, p));
 
-// The direct peers whose introducer flag is off: the computers the one-time consent of 0.2.6 is about. Not offered while a removal is open
+// The direct peers whose introducer flag is off: the computers the one-time consent of 0.2.7 is about. Not offered while a removal is open
 // or over the limit (the engine refuses `promote` then).
 export function promoteIds(status) {
     if (!(status?.promote_pending > 0) || status.revocation_open === true || status.over_limit === true)
@@ -227,13 +229,16 @@ const SECONDARY = Object.freeze({
 
 // A restart (the automatic one or the button) that ends on one of these codes leaves a dead end: the config of the sync program is not what cetli
 // wrote, so no restart will ever work. The window then offers "Reset sync" as well (with its confirmation).
-const RESET_AFTER_RESTART = Object.freeze(['E_CONFIG_UNSAFE']);
+const RESET_AFTER_RESTART = Object.freeze(['E_CONFIG_UNSAFE', 'E_NO_USER_SYSTEMD']);
 
 export function errorView(code, {afterRestart = false} = {}) {
     const known = Object.hasOwn(ACTIONS, code);
     const c = known ? code : 'E_INTERNAL';
     const secondary = Object.hasOwn(SECONDARY, c) ? SECONDARY[c] : afterRestart && RESET_AFTER_RESTART.includes(c) ? 'reset' : null;
-    return {code: c, neutral: isNeutralCode(c), action: ACTIONS[c], ...(secondary !== null ? {secondary} : {})};
+    // E_NO_USER_SYSTEMD after a restart (the unit is masked or missing, systemctl refused): no longer a page without a way out; the first try may have
+    // been a one-off, so "Try again" asks the status again, and "Reset sync" follows.
+    const action = afterRestart && c === 'E_NO_USER_SYSTEMD' ? 'retry' : ACTIONS[c];
+    return {code: c, neutral: isNeutralCode(c), action, ...(secondary !== null ? {secondary} : {})};
 }
 
 // The ID in two rows of four groups for a monospace label, and the short line to compare (the first two groups).
