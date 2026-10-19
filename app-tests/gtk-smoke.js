@@ -202,16 +202,26 @@ async function scenario() {
     w.setDark(false);
     check(!w.win.has_css_class('cetli-dark'), 'and light removes it');
 
-    // coalescing: keys 60 ms apart are ONE write
-    const [id3, w3] = await freshNote();
-    const rev0 = fileRec(id3).rev;
-    for (const t of ['a', 'b', 'c']) {
-        w3.buffer.insert_at_cursor(t, -1);
-        await sleep(60);
+    // coalescing: keys 60 ms apart are ONE write. The save timer runs SAVE_COALESCE_MS from the FIRST key: on a loaded machine the
+    // 60 ms sleeps can stretch until the last key comes after the timer fired, and then two writes are right (the premise is gone, not
+    // the product). Such an attempt is repeated on a fresh note (at most 3); an attempt whose keys all came in time is checked unchanged.
+    let id3, w3, rev0, span;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        [id3, w3] = await freshNote();
+        rev0 = fileRec(id3).rev;
+        const t0 = GLib.get_monotonic_time();
+        for (const t of ['a', 'b', 'c']) {
+            w3.buffer.insert_at_cursor(t, -1);
+            span = (GLib.get_monotonic_time() - t0) / 1000;
+            await sleep(60);
+        }
+        await until(() => fileRec(id3).text === 'abc', 5000);
+        await sleep(SAVE_COALESCE_MS + 200);              // a late second write must still fail the next check
+        if (span < SAVE_COALESCE_MS - 50)
+            break;
+        print(`info three keys: the last key came ${span.toFixed(0)} ms after the first (>= ${SAVE_COALESCE_MS - 50}), attempt ${attempt} is not a valid burst`);
     }
-    await until(() => fileRec(id3).text === 'abc', 5000);
-    await sleep(SAVE_COALESCE_MS + 200);                  // a late second write must still fail the next check
-    check(fileRec(id3).text === 'abc' && fileRec(id3).rev === rev0 + 1, `three keys 60 ms apart are one write (rev ${rev0} -> ${fileRec(id3).rev})`);
+    check(fileRec(id3).text === 'abc' && fileRec(id3).rev === rev0 + 1, `three keys 60 ms apart are one write (rev ${rev0} -> ${fileRec(id3).rev}, last key at ${span.toFixed(0)} ms)`);
 
     // the 2 s quiet rule: saved and clean, but a key 1 s ago: a remote version waits, then it is taken with its colour
     w3.buffer.insert_at_cursor('d', -1);
