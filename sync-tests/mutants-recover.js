@@ -38,8 +38,8 @@ const MUTANTS = [
         find: "            if (was.rc !== 0 && !disabled)\n                throw new Fail('E_NO_USER_SYSTEMD');                              // masked, not found, timed out, unreadable: nothing is started (fail closed)\n", repl: ''},
     {id: 'R12', rule: '0.2.6: reset takes the marker away from the list read before the unit stopped, without measuring it again', file: 'sync/engine.js',
         find: 'const names = plainMarkerNames(marker.path);                // measured again now, not the list from before the unit was stopped', repl: 'const names = marker.names;'},
-    {id: 'R13', rule: '0.2.6: a failed `show connections` call is told as "not connected" (link none) instead of unknown', file: 'sync/engine.js',
-        find: "            if (s.failed)\n                return {link: null, connected: null, connectedS: null};\n", repl: ''},
+    {id: 'R13', rule: '0.2.6: a failed `show connections` call is told as "not connected" (the tracker value) instead of unknown', file: 'sync/engine.js',
+        find: "                    unknown.add(k);\n", repl: ''},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
