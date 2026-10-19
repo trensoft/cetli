@@ -160,8 +160,8 @@ const MUTANTS = [
     // 0.2.7.1: no version of a note is destroyed by the resolution without a copy (atomic exchange, backup/).
     {id: 'M71', rule: '0.2.7.1: a captured conflict file is deleted without comparing it to what was read', file: 'store.js',
         find: "if (st !== null && sigOf(st) === entry.sig) {", repl: "if (st !== null) {"},
-    {id: 'M72', rule: '0.2.7.1: <X>.json is replaced by a move, not by the atomic exchange', file: 'store.js',
-        find: "const swap = overwrite && expect !== null && typeof this.fs.exchange === 'function';", repl: "const swap = false;"},
+    {id: 'M72', rule: '0.2.7.1: the exchange is never done (as if it always failed): the store falls back to the checked move on a layer that supports it', file: 'store.js',
+        find: "await this.fs.exchange(tmp, dest);\n                done = true;", repl: "throw Object.assign(new Error('mutant'), {code: FS.NOT_SUPPORTED});\n                done = true;"},
     {id: 'M73', rule: '0.2.7.1: what the exchange took out is deleted instead of kept in backup/', file: 'store.js',
         find: "await this._backup(path, label);\n            return 'kept';", repl: "await this.fs.remove(path);\n            return 'kept';"},
     {id: 'M74', rule: '0.2.7.1: "the very version we read" is inverted (every other version is dropped, D is kept)', file: 'store.js',

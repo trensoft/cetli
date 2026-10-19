@@ -185,6 +185,40 @@ test('an exchange the system cannot do (NOT_SUPPORTED) falls back to the checked
     assert.deepEqual(leftovers(env), []);
 }));
 
+test('a layer that supports the exchange is used: exactly one exchange, no fallback line (a silent fall-back to the check is a failure)', withEnv({wrap: true}, async env => {
+    const ops = [];
+    env.layer.hooks.before.push(op => ops.push(op));
+    env.putRec(S, D);
+    env.putRec(conflictName(X), W);
+    await env.store.refresh();
+    assert.equal(env.read(S), W.canon);
+    assert.equal(ops.filter(o => o === 'exchange').length, 1, 'the slot was replaced by the swap');
+    assert.equal(env.warned(/atomic exchange is not available/), false, 'a supported layer never reports the fall-back');
+    assert.deepEqual(leftovers(env), []);
+}));
+
+test('EXDEV: tmp/ on another file system, the real swap answers EXDEV -> falls back, loses nothing, says so once', async () => {
+    const env = makeEnv({tmpOnOtherFs: true, wrap: true});
+    try {
+        await env.start();
+        env.putRec(S, D);
+        env.putRec(conflictName(X), W);
+        const copy = fmt.expectedCopy(D, X);
+        env.put(`${copy.id}.json`, copy.bytes);           // D already has its copy, so the install of W is reached
+        let swaps = 0;
+        env.layer.hooks.before.push(op => { if (op === 'exchange') swaps++; });
+        await env.store.refresh();
+        await env.store.refresh();
+        assert.ok(swaps >= 2, 'the swap was tried on every attempt');
+        assert.equal(env.lines.filter(l => /atomic exchange is not available/.test(l)).length, 1, 'logged once, not once per attempt');
+        assert.equal(env.read(S), D.canon, 'the note in the slot is untouched (the move across file systems is refused too)');
+        assert.equal(env.read(conflictName(X)), W.canon, 'the conflict file is untouched: nothing was lost');
+        assert.deepEqual(leftovers(env), []);
+    } finally {
+        env.cleanup();
+    }
+});
+
 test('backup/ is bounded: 32 files, the oldest go first', withEnv({}, async env => {
     for (let i = 0; i < 40; i++) {
         env.clock.t += 1000;
