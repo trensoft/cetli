@@ -245,10 +245,14 @@ test('1.5/2.6: a save writes the canonical bytes into tmp/ (outside notes/) and 
     env.layer.calls.length = 0;
     const again = await env.store.saveNote(res.record.id, res.record, {text: 'second', color: 'pink', deleted: false});
     assert.equal(again.ok, true);
-    const mv = env.layer.calls.find(c => c.op === 'move');
-    assert.deepEqual(mv.args[2], {overwrite: true}, 'replacing a known valid version: OVERWRITE');
-    assert.ok(env.layer.calls.every(c => c.op !== 'move' || c.args[1].startsWith(env.dirs.notes)));
-    assert.equal(env.layer.calls.filter(c => c.op === 'remove').length, 0);
+    // 0.2.8.1: a known valid version is replaced by the atomic exchange (no OVERWRITE move); the version taken out is
+    // the one this save read, so it is dropped (1 remove), not put in backup/
+    assert.equal(env.layer.calls.filter(c => c.op === 'move').length, 0, 'replacing a known valid version: no move');
+    const ex = env.layer.calls.find(c => c.op === 'exchange');
+    assert.equal(ex.args[1], `${env.dirs.notes}/${res.record.id}.json`);
+    assert.ok(ex.args[0].startsWith(`${env.dirs.tmp}/`) && ex.args[0].endsWith('.x'));
+    assert.equal(env.layer.calls.filter(c => c.op === 'remove').length, 1);
+    assert.deepEqual(env.tmpNames(), [], 'nothing is left in tmp/');
 }));
 
 test('[P2-T13] 1.5: a move that cannot be a rename (NOT_SUPPORTED) is a visible refusal; no file in notes/, tmp/ file gone', withEnv({wrap: true}, async env => {

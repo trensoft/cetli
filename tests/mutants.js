@@ -182,6 +182,18 @@ const MUTANTS = [
         find: "names.filter(n => n !== mine)", repl: "names"},
     {id: 'M82', rule: '0.2.7: backup/ does not count the orphans of a crashed swap (the name pattern knows hex labels only)', file: 'store.js',
         find: "[0-9a-z-]+\\.json$/", repl: "[0-9a-f-]+\\.json$/"},
+    {id: 'M83', rule: '0.2.8.1: the save replaces <X>.json without the exchange (no expect: a plain OVERWRITE move)', file: 'store.js',
+        find: "own: true, expect: d !== null ? s : null}", repl: "own: true}"},
+    {id: 'M84', rule: '0.2.8.1: every failed install of a save is read again (an EIO is retried like a changed file)', file: 'store.js',
+        find: "changed: r.code === 'CHANGED'}", repl: "changed: true}"},
+    {id: 'M85', rule: '0.2.8.1: a save that found <X>.json changed is not read again (plain MOVE_FAILED, the arrival is not made a copy)', file: 'store.js',
+        find: "changed: r.code === 'CHANGED'}", repl: "changed: false}"},
+    {id: 'M86', rule: '0.2.8.1: a completed write of the save is not remembered (own: false, the echo would be announced)', file: 'store.js',
+        find: "own: true, expect: d !== null ? s : null}", repl: "own: false, expect: d !== null ? s : null}"},
+    {id: 'M87', rule: '0.2.8.1: the internal changed flag leaks into the result of the save', file: 'store.js',
+        find: "        delete result.changed;\n", repl: ""},
+    {id: 'M88', rule: '0.2.8.1: a save is never read again (SAVE_RERUNS = 1)', file: 'store.js',
+        find: "const SAVE_RERUNS = 3;", repl: "const SAVE_RERUNS = 1;"},
 ];
 
 function copyTree(from, to) {

@@ -16,7 +16,8 @@ const copyOf = l => fmt.expectedCopy(l, X);
 const copyName = l => `${copyOf(l).id}.json`;
 const cn = n => `${X}.sync-conflict-20261017-1200${String(n).padStart(2, '0')}-ABCDEFG.json`;
 const mine = (text = 'mine', extra = {}) => ({text, color: 'yellow', deleted: false, ...extra});
-const MOVES = env => env.layer.calls.filter(c => c.op === 'move' && c.args[1].startsWith(env.dirs.notes)).map(c => path.basename(c.args[1]));
+// the writes into notes/: a move (new slot, copy) or, over a known version, the exchange (0.2.8.1)
+const MOVES = env => env.layer.calls.filter(c => (c.op === 'move' || c.op === 'exchange') && c.args[1].startsWith(env.dirs.notes)).map(c => path.basename(c.args[1]));
 
 const withEnv = (opts, fn) => async () => {
     const env = makeEnv({wrap: true, ...opts});
@@ -233,7 +234,7 @@ test('[P2-T10] 3 (4): only a COMPLETED write is remembered: a failed record that
     const created = (await env.store.createNote({text: 'v1'})).record;
     let intended = null;
     env.layer.hooks.before.push((op, args) => {
-        if (op === 'move' && args[1].endsWith(`${created.id}.json`)) {
+        if ((op === 'move' || op === 'exchange') && args[1].endsWith(`${created.id}.json`)) {
             intended = fs.readFileSync(args[0]);                // the bytes of the record that did not make it
             throw new FsError(FS.IO, 'injected');
         }
@@ -457,7 +458,7 @@ test('[P2-T10] 2.5: a refusal without a blocking file (move failed) is NOT retri
     const created = (await env.store.createNote({text: 'v1'})).record;
     env.putRec(`${created.id}.json`, mk({id: created.id, rev: 2, text: 'remote', device: DEV_B, updated: at(1), created: created.created}));
     await env.store.refresh({hint: [`${created.id}.json`]});
-    env.layer.hooks.before.push((op, args) => { if (op === 'move' && args[1].startsWith(env.dirs.notes) && args[1].endsWith(`${created.id}.json`)) throw new FsError(FS.IO, 'injected EIO'); });
+    env.layer.hooks.before.push((op, args) => { if ((op === 'move' || op === 'exchange') && args[1].startsWith(env.dirs.notes) && args[1].endsWith(`${created.id}.json`)) throw new FsError(FS.IO, 'injected EIO'); });
     const r = await env.store.saveNote(created.id, created, mine('typed'));
     env.layer.hooks.before.length = 0;
     assert.equal(r.ok, false);

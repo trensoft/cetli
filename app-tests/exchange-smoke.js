@@ -213,6 +213,55 @@ async function scenario() {
         check(fallbackLines(r).length === 1, 'late arrival, fall-back: reported once');
     }
     check(hasNoLeftovers(r), 'late arrival: tmp/ is clean');
+
+    // 3. 0.2.8.1: the SAVE of the user over a known version. Same two moments as above.
+    async function runSave(label, {inject}) {
+        const root = `${base}/${label}`;
+        const dirs = {notes: `${root}/data/notes`, tmp: `${root}/data/tmp`, state: `${root}/state`};
+        const lines = [];
+        let injected = false;
+        const arrive = () => {
+            injected = true;
+            write(`${dirs.notes}/.syncthing.late.tmp`, new TextDecoder().decode(D2.bytes));
+            Gio.File.new_for_path(`${dirs.notes}/.syncthing.late.tmp`).move(Gio.File.new_for_path(`${dirs.notes}/${S}`), Gio.FileCopyFlags.OVERWRITE, null, null);
+        };
+        const wrapped = {
+            ...fs,
+            async exchange(a, b) {
+                if (inject === 'before-exchange' && !injected)
+                    arrive();
+                return fs.exchange(a, b);
+            },
+            async writeTmp(path, bytes) {
+                await fs.writeTmp(path, bytes);
+                if (inject === 'after-write' && !injected && path.endsWith('.x'))
+                    arrive();
+            },
+        };
+        const store = createStore({
+            fs: wrapped,
+            platform: {...platform, log: {warn: m => lines.push(`WARN ${m}`), info: m => lines.push(`INFO ${m}`)}},
+            dirs,
+            resolveConflicts: true,
+        });
+        await store.start();
+        write(`${dirs.notes}/${S}`, new TextDecoder().decode(D.bytes));
+        await store.refresh();
+        const res = await store.saveNote(X, store.getNote(X), {text: 'TEXT-MINE-typed', color: 'yellow', deleted: false});
+        return {dirs, backup: `${root}/data/backup`, lines, res, injected: () => injected};
+    }
+    r = await runSave(positive ? 'save-positive' : 'save-negative', {inject: positive ? 'before-exchange' : 'after-write'});
+    check(r.injected(), 'save: the newer version was put into the slot by the test at the chosen moment');
+    check(r.res.ok === true && readText(`${r.dirs.notes}/${S}`) === r.res.record.canon, `save: the typed text is in place (ok ${r.res.ok}, ${r.res.cause?.code ?? 'no cause'})`);
+    if (positive) {
+        check(/THE NEWEST TEXT FROM THE OTHER MACHINE/.test(backupText(r)), 'save: the text that mv --exchange took out is kept in backup/, outside the synced folder');
+        check(fallbackLines(r).length === 0, 'save: no fall-back line');
+    } else {
+        const copy = names(r.dirs.notes).filter(n => n !== S && /THE NEWEST TEXT FROM THE OTHER MACHINE/.test(readText(`${r.dirs.notes}/${n}`) ?? ''));
+        check(copy.length === 1, `save, fall-back: the checked move saw the change, the save read again and the newer version is a visible copy in notes/ (${copy.length})`);
+        check(fallbackLines(r).length === 1, 'save, fall-back: reported once');
+    }
+    check(hasNoLeftovers(r), 'save: tmp/ is clean');
 }
 
 scenario().then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {

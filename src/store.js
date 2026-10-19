@@ -91,6 +91,7 @@ const CAUSE_TEXT = Object.freeze({
     [CAUSE.BAD_INPUT]: () => 'bad input',
 });
 
+const SAVE_RERUNS = 3;                          // reads of <X>.json one save may start over on, see _saveLocked
 const RETRY_CAUSES = new Set([CAUSE.QUARANTINE, CAUSE.NOT_READABLE, CAUSE.NEWER_SCHEMA, CAUSE.COPY_PLACE_TAKEN, CAUSE.COPY_NOT_WRITTEN]);
 
 const mainName = id => `${id}.json`;
@@ -824,7 +825,12 @@ export class Store {
     }
 
     async _saveLocked(request) {
-        const result = await this._doSave(request);
+        // A save that found <X>.json changed under its hands starts over on a fresh read (the arrival becomes the copy of
+        // 2.5 (ii)); after SAVE_RERUNS tries it is a MOVE_FAILED like any other, and nothing was overwritten.
+        let result = await this._doSave(request);
+        for (let n = 1; result.changed && n < SAVE_RERUNS; n++)
+            result = await this._doSave(request);
+        delete result.changed;
         const prior = this._refused.get(request.id);
         if (!result.ok) {
             // The mark carries its CAUSE in text and in the log (2.5).
@@ -935,9 +941,12 @@ export class Store {
             }
         }
 
-        const r = await this._install(name, rec, {overwrite: d !== null, own: true});
-        if (!r.ok)
-            return this._refuse(CAUSE.MOVE_FAILED, {watch: name});
+        const r = await this._install(name, rec, {overwrite: d !== null, own: true, expect: d !== null ? s : null});
+        if (!r.ok) {
+            // CHANGED: <X>.json is no longer the entry this save read (checked move) or vanished (exchange). Nothing was
+            // replaced; the save runs again on a fresh read (_saveLocked). Any other failure stays a MOVE_FAILED.
+            return {...this._refuse(CAUSE.MOVE_FAILED, {watch: name}), changed: r.code === 'CHANGED'};
+        }
         await this._refreshLocked({});
         return {ok: true, record: rec};
     }
