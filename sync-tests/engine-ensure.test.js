@@ -65,6 +65,16 @@ test('ensure: an orphan child (the parent was killed: the daemon answers, the un
     assert.equal(w.timeline.some(e => DID_NOT_START.test(e)), false);
 });
 
+test('ensure: a unit that is activating (on its way up, the daemon does not answer yet) is not restarted: nothing is started here', async () => {
+    const w = await paired();
+    w.daemon = false;
+    w.activating = true;
+    assert.deepEqual(await perform(w, 'ensure'), {result: {event: 'result', state: 'skipped'}});
+    assert.deepEqual(systemctl(w), ['is-enabled', 'is-active']);
+    assert.equal(w.timeline.some(e => DID_NOT_START.test(e)), false);
+    assert.equal(w.daemon, false);
+});
+
 test('ensure: a unit the user switched off (disabled) is not started; masked, not found or no answer from systemd: not started either (fail closed), only a journal line', async () => {
     const off = await paired();
     off.daemon = false;

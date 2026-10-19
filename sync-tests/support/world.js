@@ -44,6 +44,7 @@ export function createWorld(opts = {}) {
         hung: false,                               // the unit is active but the daemon never answers (the failure of 0.2.5.2)
         enabled: true,                             // `systemctl --user is-enabled`: false = the unit was disabled by the user (`forget --all --stop`)
         orphan: false,                             // a daemon runs and answers but the unit is inactive (its parent was killed: the child holds the lock and the port)
+        activating: false,                         // the unit is on its way up (`is-active` says activating, rc 3) and the daemon does not answer yet
         unitFailed: false,                         // the unit is in the failed state (start limit): starting it is refused until `reset-failed`
         afterDisable: null,                        // (world) -> void: runs while `systemctl --user disable` is working (a path swapped during the wait)
         failSystemctl: new Set(),                  // `systemctl` argument strings (after --user) that fail with rc 1
@@ -264,7 +265,7 @@ export function createWorld(opts = {}) {
             }
             if (key === `--user is-active cetli-syncthing.service`) {
                 w.timeline.push('systemctl is-active');
-                return w.daemon && !w.orphan ? {rc: 0, out: 'active\n'} : w.unitFailed ? {rc: 3, out: 'failed\n'} : {rc: 3, out: 'inactive\n'};
+                return w.daemon && !w.orphan ? {rc: 0, out: 'active\n'} : w.activating ? {rc: 3, out: 'activating\n'} : w.unitFailed ? {rc: 3, out: 'failed\n'} : {rc: 3, out: 'inactive\n'};
             }
             if (key === `--user reset-failed cetli-syncthing.service`) {
                 w.unitFailed = false;

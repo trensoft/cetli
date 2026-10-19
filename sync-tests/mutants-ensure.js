@@ -31,6 +31,8 @@ const MUTANTS = [
         repl: "        await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});\n        const on = await run.systemctl(['--user', 'restart'"},
     {id: 'E9', rule: 'ensure does not clear the failed state (start limit) before the restart', file: 'sync/engine.js',
         find: "        recheckConfig();\n        await run.systemctl(['--user', 'reset-failed', UNIT_NAME], {timeoutMs: t.systemctlMs});\n        const on", repl: "        recheckConfig();\n        const on"},
+    {id: 'E10', rule: 'ensure restarts every unit that is not `active` (an `activating` unit is on its way up: a restart would kill the start)', file: 'sync/engine.js',
+        find: "if (word !== 'inactive' && word !== 'failed')", repl: "if (word === 'active')"},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
