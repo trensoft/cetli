@@ -31,6 +31,15 @@ const MUTANTS = [
         find: '            ensureSync();\n            startPromise = start();', repl: '            if (!autostart)\n                ensureSync();\n            startPromise = start();'},
     {id: 'A8', rule: 'the autostart entry starts cetli without --autostart (every login would open a new note or all notes)', file: 'data/io.github.trensoft.cetli.autostart.desktop.in',
         find: 'Exec=@BINDIR@/cetli --autostart', repl: 'Exec=@BINDIR@/cetli'},
+    {id: 'A9', rule: 'a window that goes away with the stopped program writes open: false (the notes would not come back at the next login)', file: 'app/window.js',
+        smokes: ['autostart-quit-smoke.js', 'autostart-sigterm-smoke.js'],
+        find: 'if (!this.deleted && !stopping) {', repl: 'if (!this.deleted) {'},
+    {id: 'A10', rule: 'SIGTERM does not mark the program as stopping before the stop begins (a window closed in that turn writes open: false)', file: 'app/application.js',
+        smokes: ['autostart-sigterm-smoke.js'],
+        find: '        stopping = true;\n        gtkApp.quit();', repl: '        gtkApp.quit();'},
+    {id: 'A11', rule: 'quit() does not mark the program as stopping in time (a window closed during the shutdown writes open: false)', file: 'app/application.js',
+        smokes: ['autostart-quit-smoke.js'],
+        find: "        stopping = true;                               // before GTK takes the windows down (the class handler runs after this one)\n", repl: ''},
 ];
 
 const copyTree = (from, to) => fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
@@ -72,6 +81,8 @@ try {
     const refSmokes = gtkenv ? smokes.map(s => runSmoke(clean, s)) : [];
     console.log(`unmutated: node ${ref.failed.length} failed; gjs ${gtkenv ? `${refSmokes.reduce((n, r) => n + r.failed.length, 0)} failed` : 'not run (CETLI_GTKENV not set)'}`);
     if (ref.failed.length > 0 || ref.status !== 0 || refSmokes.some(r => r.failed.length > 0)) {
+        for (const f of [...ref.failed, ...refSmokes.flatMap(r => r.failed)])
+            console.log(`  unmutated failure: ${f}`);
         console.log('the unmutated tests are not green; mutants make no sense');
         process.exit(2);
     }

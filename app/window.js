@@ -619,10 +619,13 @@ export class NoteWindow {
         }
         const text = this._bufferText();
         const ranges = this.bar.ranges();      // read now: the window is gone when the queued save runs
+        // 0.2.8: a window that goes away because the program is stopped (quit(), SIGTERM, the end of the session) is not closed by the user: the note keeps
+        // its "open" mark and comes back at the next login. Only the user closing the window writes it false.
+        const stopping = this.ctl.stopping();
         // The last text and the "closed" flag are written even if this was the last window (the app is held meanwhile).
         this._queue(async () => {
             await this._doSave(text, ranges);
-            if (!this.deleted) {
+            if (!this.deleted && !stopping) {
                 this.ctl.hold();
                 try {
                     await this.ctl.setOpen(this.id, false);

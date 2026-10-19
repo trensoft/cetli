@@ -23,7 +23,8 @@ up. On RHEL 10 / CentOS Stream 10 `syncthing` comes from EPEL 10; the notes work
 Since 0.2.8 cetli starts by itself when you log in to GNOME and opens the notes that were open when you last left. It
 opens only those: no new empty note, no list of all notes, no first-start sync window; if no note was open it opens
 nothing and ends quietly. A computer whose notes folder is synchronised still gets its start-up check of the sync
-program. Started by hand, cetli behaves as always.
+program. Started by hand, cetli behaves as always. Only closing a note window yourself marks the note as closed: when the program
+is stopped (quit, SIGTERM, the end of the session) the notes that were open stay marked open and come back at the next login.
 
 The package installs `/etc/xdg/autostart/io.github.trensoft.cetli.desktop` (`Exec=/usr/bin/cetli --autostart`). To turn it
 off for your user, put a file with the same name into `~/.config/autostart`; it overrides the system one, and an update of

@@ -51,8 +51,9 @@ export function fakeBridge(answer = {}) {
 // 0.2.8: `argv`: the command line given to app.run (e.g. ['cetli', '--autostart']). `firstStartSync`: createApp's switch of the first-start sync window.
 // `ownExit`: the program is NOT quit by the test: it must end by itself once the scenario is over (a start at login without a window); the result is
 // printed from the 'shutdown' of the program, and a program that is still running 5 s after the scenario fails. `extra`: more createApp options.
+// 0.2.8: `atShutdown({check, dirs})` runs once the program has ended (app.run returned, ownExit only), before the result is printed: what it left behind.
 // `scenario(env)` gets {ctl, app (createApp's result), windows, files(), records(), check, tick, waitFor, dirs, base}; its failures are reported, the process exits 0/1.
-export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBridge(), argv = [], firstStartSync = false, ownExit = false, extra = {}}, scenario) {
+export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBridge(), argv = [], firstStartSync = false, ownExit = false, atShutdown = null, extra = {}}, scenario) {
     const base = GLib.dir_make_tmp('cetli-start-XXXXXX');
     const dirs = {notes: `${base}/data/notes`, tmp: `${base}/data/tmp`, state: `${base}/state`};
     GLib.mkdir_with_parents(dirs.notes, 0o755);
@@ -87,7 +88,9 @@ export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBri
     };
     const records = () => files().map(f => JSON.parse(new TextDecoder().decode(GLib.file_get_contents(`${dirs.notes}/${f}`)[1])));
     const app = createApp({dirs, homeDir: base, bridge, firstStartSync, ...extra});
+    let resultPrinted = false;
     const report = () => {
+        resultPrinted = true;
         print(`${checks - failed}/${checks} checks passed`);
         print(failed === 0 ? 'RESULT PASS' : 'RESULT FAIL');
         GLib.spawn_command_line_async(`rm -rf ${base}`);
@@ -100,7 +103,8 @@ export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBri
                 return;
             reported = true;
             check(scenarioOver, 'the program ended by itself, not before the scenario was over');
-            report();
+            if (atShutdown === null)
+                report();
         });
     }
     scenario({ctl: app.ctl, app, bridge, windows: app.windows, files, records, check, tick, waitFor, dirs, base}).then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {
@@ -122,6 +126,10 @@ export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBri
         });
     });
     const status = app.run(argv);
+    if (atShutdown !== null && reported && !resultPrinted) {
+        atShutdown({check, dirs});
+        report();
+    }
     if (!reported) {
         print('FAIL the program ended before the scenario was over');
         print('RESULT FAIL');

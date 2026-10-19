@@ -79,6 +79,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     let watcher = null;
     let allNotes = null;                 // the one "All notes" window, while it is open
     let starting = false;
+    let stopping = false;                // the program is being stopped (see ctl.stopping)
     let unresolved = 0;
     let resolveReady;
     let rejectReady;
@@ -87,6 +88,8 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         store, gtkApp, windows, version,
         get menu() { return menu; },
         dark: () => Adw.StyleManager.get_default().get_dark(),
+        // 0.2.8: the program is being stopped (quit(), SIGTERM, the end of the session). Windows closed by that are not closed by the user: they keep their `open` mark.
+        stopping: () => stopping,
         hold: () => gtkApp.hold(),
         release: () => gtkApp.release(),
         log: m => platform.log.warn(m),
@@ -443,7 +446,16 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         });
     });
 
+    // SIGTERM (what the session sends at logout) is a clean stop like quit(): the 'shutdown' below runs (the sync bridge is stopped) and, with `stopping`
+    // set first, no window that goes away with the program writes `open: false`. Without a handler the signal would kill the process outright.
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, 15, () => {
+        stopping = true;
+        gtkApp.quit();
+        return GLib.SOURCE_REMOVE;
+    });
+
     gtkApp.connect('shutdown', () => {
+        stopping = true;                               // before GTK takes the windows down (the class handler runs after this one)
         watcher?.stop();
         syncBridge.stop();
     });
