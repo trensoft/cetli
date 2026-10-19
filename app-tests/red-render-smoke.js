@@ -183,6 +183,7 @@ async function backdrop(scheme) {
                 return cur;
             prev = cur;
         }
+        info(`${scheme}: the picture of a bar did not settle after 50 rounds of 200 ms (10 s): measuring the last one`);
         return prev;
     };
     const alpha = (now, active, strip) => Math.abs(grey(now) - grey(strip)) / Math.abs(grey(active) - grey(strip));
