@@ -13,6 +13,9 @@
 //                                 `overwrite` an existing dest entry (of any kind) makes it fail with EXISTS
 //   remove(path)               -> void
 //   ensureDir(dir)             -> void
+//   exchange(a, b)             -> void   OPTIONAL. Atomic swap of two existing entries (renameat2 RENAME_EXCHANGE): at no moment is
+//                                 either name absent. NOT_FOUND if one of them does not exist, NOT_SUPPORTED if the system cannot
+//                                 do it; the store then falls back to a check right before the move (a narrower, not a closed window)
 // Platform: {sha256Hex(bytes), sha1(bytes) -> Uint8Array(20), now() -> ms, randomUuid(), randomBytes(n), log: {warn, info}}
 
 import {
@@ -69,6 +72,12 @@ function sameExtra(a, b) {
     return true;
 }
 const TMP_NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+// The partner of an exchange or the capture of a deletion: after the swap it may hold a version nobody else has a copy of,
+// so the start-up cleaning keeps it (in backup/) instead of deleting it like a `.tmp` leftover.
+const HOLD_NAME_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.x$/;
+// backup/ holds file versions that left notes/ without another copy; at most BACKUP_KEEP files, the oldest go first.
+const BACKUP_KEEP = 32;
+const BACKUP_NAME_RE = /^[0-9]{15}-[0-9]{6}-[0-9a-f-]+\.json$/;
 const CAUSE_TEXT = Object.freeze({
     [CAUSE.QUARANTINE]: t => `newer date: quarantine until ${t}`,
     [CAUSE.NOT_READABLE]: () => 'file not readable',
@@ -98,7 +107,9 @@ export class Store {
         this.resolveConflicts = resolveConflicts;
         this.fs = fs;
         this.p = platform;
-        this.dirs = dirs;                 // {notes, tmp, state}
+        this.dirs = dirs;                 // {notes, tmp, state, backup?}: backup is beside tmp/ (same file system) unless given
+        this._backupDir = dirs.backup ?? `${dirs.tmp.replace(/\/[^/]*$/, '')}/backup`;
+        this._backupSeq = 0;
         this.maxNotes = maxNotes;
         this.fmt = makeFormat({sha256Hex: platform.sha256Hex, sha1: platform.sha1});
         this.deviceId = null;
@@ -294,6 +305,9 @@ export class Store {
                 try {
                     await this.fs.remove(`${this.dirs.tmp}/${item.name}`);
                 } catch { /* our own leftover; the next start tries again */ }
+            } else if (item.type === 'regular' && HOLD_NAME_RE.test(item.name)) {
+                // a crash between the swap and the check of what it took out: keep that, whatever it is
+                await this._keepOrDrop(`${this.dirs.tmp}/${item.name}`, 'orphan', null);
             }
         }
     }
@@ -334,36 +348,151 @@ export class Store {
     // OVERWRITE flag only where a rule replaces a known valid version (2.6). A failed write leaves the slot as it was
     // and removes our tmp file (4 (d) (iii)). Only a COMPLETED write of the save path (`own`) enters the own-write
     // filter (2.5, 3 (4)); the installs of the resolution do not, because the front end has to apply their result.
-    async _install(name, rec, {overwrite, own = false}) {
+    //
+    // `expect` (an entry of the last scan, with `overwrite`): the slot must still hold that entry. The transport can put a
+    // new version into the slot at any moment, so a stat before the rename leaves a window. With `fs.exchange` there is
+    // none: the swap takes whatever is in the slot out to tmp/, and what came out is looked at AFTERWARDS (_keepDisplaced):
+    // a version that is not the one we read goes to backup/. Without `fs.exchange` the stat right before the move is all
+    // there is (the window stays, only narrower).
+    async _install(name, rec, {overwrite, own = false, expect = null}) {
         const dest = this._notePath(name);
-        const tmp = `${this.dirs.tmp}/${this.p.randomUuid()}.tmp`;
+        const swap = overwrite && expect !== null && typeof this.fs.exchange === 'function';
+        const tmp = `${this.dirs.tmp}/${this.p.randomUuid()}.${swap ? 'x' : 'tmp'}`;
         try {
             await this.fs.writeTmp(tmp, rec.bytes);
         } catch (e) {
             try { await this.fs.remove(tmp); } catch { /* partial file may not exist */ }
             return {ok: false, code: e.code ?? FS.IO, stage: 'write'};
         }
-        try {
-            await this.fs.move(tmp, dest, {overwrite});
-        } catch (e) {
-            try { await this.fs.remove(tmp); } catch { /* already gone */ }
-            return {ok: false, code: e.code ?? FS.IO, stage: 'move'};
+        let done = false;
+        if (swap) {
+            try {
+                await this.fs.exchange(tmp, dest);
+                done = true;
+            } catch (e) {
+                if (e.code === FS.NOT_FOUND) {
+                    try { await this.fs.remove(tmp); } catch { /* already gone */ }
+                    this._logOnce(`gone|${name}`, `${name} vanished since it was read; not replaced this round`);
+                    return {ok: false, code: 'CHANGED', stage: 'exchange'};
+                }
+                this._logOnce('noexchange', `atomic exchange is not available (${e.code ?? e.message}): ${name} is replaced after a check only`);
+            }
+        }
+        if (done) {
+            const outcome = await this._keepDisplaced(tmp, name, expect);
+            if (outcome === 'kept')
+                this.p.log.warn(`${name} changed while it was replaced: the version that was there is in ${this._backupDir}`);
+        } else {
+            if (expect !== null) {
+                // the slot must still be the entry we read, checked right before the rename (after the durable tmp write)
+                const st = await this.fs.stat(dest).catch(() => null);
+                if (st === null || sigOf(st) !== expect.sig) {
+                    try { await this.fs.remove(tmp); } catch { /* already gone */ }
+                    return {ok: false, code: 'CHANGED', stage: 'check'};
+                }
+            }
+            try {
+                await this.fs.move(tmp, dest, {overwrite});
+            } catch (e) {
+                try { await this.fs.remove(tmp); } catch { /* already gone */ }
+                return {ok: false, code: e.code ?? FS.IO, stage: 'move'};
+            }
         }
         if (own)
             this._ownWrites.set(rec.id, rec.v);
         return {ok: true};
     }
 
+    // What an exchange took out of `<name>` (it lies at `path` now): gone for good only if it holds no text or is the very
+    // version we read (that one has its copy, or is a tombstone: the precondition of the install). Anything else is moved to
+    // backup/, outside the synced folder. Returns 'gone' | 'same' | 'kept' | 'left'.
+    async _keepDisplaced(path, name, expect) {
+        return this._keepOrDrop(path, name.slice(0, UUID_LEN), expect);
+    }
+
+    async _keepOrDrop(path, label, expect) {
+        try {
+            const st = await this.fs.stat(path);
+            if (st === null)
+                return 'gone';
+            if (st.type === 'directory') {
+                this.p.log.warn(`${path} is a directory that took the place of a note; left where it is`);
+                return 'left';
+            }
+            if (st.type !== 'regular' || st.size === 0) {
+                await this.fs.remove(path);              // a symlink or an empty file holds no note text
+                return 'gone';
+            }
+            if (expect !== null) {
+                const c = this.fmt.classify(await this.fs.readBytes(path), label, this.p.now());
+                if (c.state === ST.VALID && c.rec.v === expect.rec.v) {
+                    await this.fs.remove(path);
+                    return 'same';
+                }
+            }
+            await this._backup(path, label);
+            return 'kept';
+        } catch (e) {
+            this.p.log.warn(`what was taken out of ${label} could not be kept (${e.code ?? e.message}); it stays in ${path}`);
+            return 'left';
+        }
+    }
+
+    // Move one file into backup/ (same file system as tmp/ and notes/: a rename) and drop the oldest beyond BACKUP_KEEP.
+    // The name sorts by time: 15 digits of ms, a sequence number for the same ms.
+    async _backup(path, label) {
+        await this.fs.ensureDir(this._backupDir);
+        const seq = String(this._backupSeq++ % 1000000).padStart(6, '0');
+        const dest = `${this._backupDir}/${String(this.p.now()).padStart(15, '0')}-${seq}-${label}.json`;
+        await this.fs.move(path, dest, {overwrite: false});
+        try {
+            const names = (await this.fs.listDir(this._backupDir))
+                .filter(i => i.type === 'regular' && BACKUP_NAME_RE.test(i.name)).map(i => i.name).sort();
+            for (const old of names.slice(0, Math.max(0, names.length - BACKUP_KEEP)))
+                await this.fs.remove(`${this._backupDir}/${old}`);
+        } catch { /* the copy is in place; the next backup prunes */ }
+    }
+
+    // Delete one file of notes/ only if it is still the entry we read. The rename takes exactly the file that is there at
+    // that instant (no window between a check and a delete); what was taken is compared afterwards and put back, or kept in
+    // backup/, if it is not the entry we read. A tmp/ on another file system cannot take a rename: the old stat-then-delete.
     async _removeIfUnchanged(entry) {
         const path = this._notePath(entry.name);
         try {
-            const st = await this.fs.stat(path);
-            if (st === null || sigOf(st) !== entry.sig) {
-                this._logOnce(`chg|${entry.name}|${sigOf(st)}`, `${entry.name} changed since it was read; not deleted this round`);
-                return false;
+            const hold = `${this.dirs.tmp}/${this.p.randomUuid()}.x`;
+            let captured = true;
+            try {
+                await this.fs.move(path, hold, {overwrite: false});
+            } catch (e) {
+                if (e.code === FS.NOT_FOUND) {
+                    this._logOnce(`chg|${entry.name}|absent`, `${entry.name} changed since it was read; not deleted this round`);
+                    return false;
+                }
+                if (e.code !== FS.NOT_SUPPORTED)
+                    throw e;
+                captured = false;
             }
-            await this.fs.remove(path);
-            return true;
+            if (!captured) {
+                const st = await this.fs.stat(path);
+                if (st === null || sigOf(st) !== entry.sig) {
+                    this._logOnce(`chg|${entry.name}|${sigOf(st)}`, `${entry.name} changed since it was read; not deleted this round`);
+                    return false;
+                }
+                await this.fs.remove(path);
+                return true;
+            }
+            const st = await this.fs.stat(hold);
+            if (st !== null && sigOf(st) === entry.sig) {
+                await this.fs.remove(hold);
+                return true;
+            }
+            this._logOnce(`chg|${entry.name}|${sigOf(st)}`, `${entry.name} changed since it was read; not deleted this round`);
+            try {
+                await this.fs.move(hold, path, {overwrite: false});    // its name is its own: put it back
+            } catch {
+                await this._keepOrDrop(hold, entry.name.slice(0, UUID_LEN), null);
+            }
+            return false;
         } catch (e) {
             this.p.log.warn(`delete of ${entry.name} failed: ${e.code ?? e.message}`);
             return false;
@@ -654,7 +783,7 @@ export class Store {
                 this._logOnce(`stuck|${x}|${d.v}|${w.rec.v}`, `group ${x}: ${mainName(x)} holds version ${d.v.slice(0, 8)} without a copy; ${w.rec.v.slice(0, 8)} not installed`);
                 return {work, unsettled: true};
             }
-            const r = await this._install(mainName(x), w.rec, {overwrite: s !== null});
+            const r = await this._install(mainName(x), w.rec, {overwrite: s !== null, expect: s});
             if (!r.ok) {
                 this.p.log.warn(`install of ${mainName(x)} failed (${r.stage} ${r.code}); evaluated again at the next event`);
                 return {work, unsettled: true};

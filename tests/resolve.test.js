@@ -304,7 +304,7 @@ test('[P2-T8] 2.2 step 3(b): the bytes of <X>.json are canon(W) of the VALIDATED
     });
     await env.store.refresh();
     assert.equal(swapped, true);
-    const mv = env.layer.calls.find(c => c.op === 'move' && c.args[1].endsWith(`/${S}`));
+    const mv = env.layer.calls.find(c => c.op === 'exchange' && c.args[1].endsWith(`/${S}`));   // S held D: the swap puts W in
     const tmpWrite = env.layer.calls.find(c => c.op === 'writeTmp' && c.args[0] === mv.args[0]);
     assert.deepEqual(Array.from(tmpWrite.args[1]), Array.from(W.bytes), 'the bytes written are canon(W)');
     assert.notDeepEqual(Array.from(W.bytes), Array.from(Z.bytes));
@@ -365,7 +365,13 @@ test('2.6: OVERWRITE exactly where W replaces a known valid version over D; abse
             await env.store.refresh();
             const mv = env.layer.calls.filter(c => c.op === 'move' && c.args[1].startsWith(env.dirs.notes));
             const toS = mv.find(c => c.args[1].endsWith(`/${S}`));
-            assert.equal(toS.args[2].overwrite, expectOverwrite, label);
+            if (expectOverwrite) {
+                // over a known valid D the replacement is an atomic exchange, never a move with OVERWRITE
+                assert.equal(toS, undefined, `${label}: no overwriting move into <X>.json`);
+                assert.equal(env.layer.calls.filter(c => c.op === 'exchange' && c.args[1].endsWith(`/${S}`)).length, 1, label);
+            } else {
+                assert.equal(toS.args[2].overwrite, false, label);
+            }
             assert.equal(env.read(S), W.canon);
             for (const m of mv.filter(c => !c.args[1].endsWith(`/${S}`)))
                 assert.equal(m.args[2].overwrite, false, `${label}: copies never overwrite`);

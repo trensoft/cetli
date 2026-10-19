@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A recording fake of the parts of Gio that src/gio-layer.js uses. The flag values are the real ones of Gio.
 import {calls, plan} from './calls.mjs';
+import GLib from './GLib.mjs';
 
 const FileType = {UNKNOWN: 0, REGULAR: 1, DIRECTORY: 2, SYMBOLIC_LINK: 3, SPECIAL: 4};
 const FileQueryInfoFlags = {NONE: 0, NOFOLLOW_SYMLINKS: 1};
@@ -53,6 +54,13 @@ class File {
         return info('x');
     }
 
+    query_info(attrs, flags, cancel) {
+        calls.push(['query_info', this.path, attrs, flags, cancel]);
+        if ((plan.missing ?? []).includes(this.path))
+            throw new GLib.Error(IOErrorEnum, IOErrorEnum.NOT_FOUND, 'gone');
+        return info('x');
+    }
+
     async load_contents_async(cancel) {
         calls.push(['load_contents_async', this.path, cancel]);
         return [plan.contents ?? new Uint8Array([1, 2, 3]), 'etag'];
@@ -73,8 +81,28 @@ class File {
     }
 }
 
+class Subprocess {
+    static new(argv, flags) {
+        calls.push(['subprocess.new', argv, flags]);
+        if (plan.spawnError)
+            throw plan.spawnError;
+        return new Subprocess();
+    }
+
+    async wait_check_async(cancel) {
+        calls.push(['wait_check_async', cancel]);
+        if (plan.waitError)
+            throw plan.waitError;
+        return true;
+    }
+}
+
+const SubprocessFlags = {NONE: 0, STDIN_PIPE: 1, STDIN_INHERIT: 2, STDOUT_PIPE: 4, STDOUT_SILENCE: 8, STDERR_PIPE: 16, STDERR_SILENCE: 32};
+
 export default {
     _promisify() {},
+    Subprocess,
+    SubprocessFlags,
     File,
     FileEnumerator: {prototype: {}},
     FileType,

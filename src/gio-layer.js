@@ -17,10 +17,13 @@ Gio._promisify(Gio.FileEnumerator.prototype, 'next_files_async', 'next_files_fin
 Gio._promisify(Gio.FileEnumerator.prototype, 'close_async', 'close_finish');
 Gio._promisify(Gio.File.prototype, 'query_info_async', 'query_info_finish');
 Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
+Gio._promisify(Gio.Subprocess.prototype, 'wait_check_async', 'wait_check_finish');
 
 const ATTRS = 'standard::name,standard::type,standard::size,time::modified,time::modified-usec';
 const NOFOLLOW = Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS;
 const PRIO = GLib.PRIORITY_DEFAULT;
+// The only process the core starts (see exchange()): a fixed argv, no shell, an absolute path, no PATH search.
+const MV = '/usr/bin/mv';
 
 function mapError(e) {
     if (e instanceof FsError)
@@ -119,6 +122,28 @@ export const fs = {
             fileOf(src).move(fileOf(dest), flags, null, null);
         } catch (e) {
             throw mapError(e);
+        }
+    },
+
+    // Atomic swap of two existing entries (renameat2 RENAME_EXCHANGE). GLib/Gio has no binding for it; coreutils 9.5 and later
+    // has `mv --exchange` (measured: CentOS Stream 10 root 9.5, Fedora 43 root 9.7, outside gjs). mv does not say WHY it
+    // failed ("Unknown error -1"), so a missing entry is found by looking. Any other failure is NOT_SUPPORTED (an older mv, a
+    // file system without the call): the store then replaces after a check instead.
+    async exchange(a, b) {
+        try {
+            const p = Gio.Subprocess.new([MV, '-T', '--exchange', '--', a, b],
+                Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+            await p.wait_check_async(null);
+        } catch (e) {
+            for (const path of [a, b]) {
+                try {
+                    fileOf(path).query_info(ATTRS, NOFOLLOW, null);
+                } catch (e2) {
+                    if (e2 instanceof GLib.Error && e2.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
+                        throw new FsError(FS.NOT_FOUND, `${path} does not exist`);
+                }
+            }
+            throw new FsError(FS.NOT_SUPPORTED, e?.message);
         }
     },
 

@@ -80,3 +80,22 @@ test('1.5: a Gio / GLib error is mapped to the FS code the store works with; a m
         await assert.rejects(layer.fs.move('/t/a', '/n/a', {overwrite: false}), e => e instanceof FsError && e.code === code);
     }
 });
+
+test('exchange: one fixed argv, absolute mv, -T and --, no shell; success is silent', async () => {
+    await layer.fs.exchange('/t/a.x', '/n/a.json');
+    const [c] = only('subprocess.new');
+    assert.deepEqual(c[1], ['/usr/bin/mv', '-T', '--exchange', '--', '/t/a.x', '/n/a.json']);
+    assert.equal(c[2], Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE);
+    assert.equal(only('wait_check_async').length, 1);
+});
+
+test('exchange: a failed mv is NOT_FOUND when one of the two entries is missing (mv does not say), else NOT_SUPPORTED', async () => {
+    plan.waitError = new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.FAILED, 'Child process exited with code 1');
+    plan.missing = ['/n/a.json'];
+    await assert.rejects(layer.fs.exchange('/t/a.x', '/n/a.json'), e => e instanceof FsError && e.code === FS.NOT_FOUND);
+    plan.missing = [];
+    await assert.rejects(layer.fs.exchange('/t/a.x', '/n/a.json'), e => e instanceof FsError && e.code === FS.NOT_SUPPORTED);
+    plan.spawnError = new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND, 'No such file or directory');   // no /usr/bin/mv
+    plan.missing = [];
+    await assert.rejects(layer.fs.exchange('/t/a.x', '/n/a.json'), e => e instanceof FsError && e.code === FS.NOT_SUPPORTED);
+});

@@ -5,6 +5,7 @@
 //    GLib does "test, then rename" (PLAN 2.6, [H]); both refuse an existing target, only the race window differs;
 //  - EXDEV (rename across filesystems) is mapped to NOT_SUPPORTED, as GLib's NO_FALLBACK_FOR_MOVE would answer
 //    G_IO_ERROR_NOT_SUPPORTED [H]; fs.rename never falls back to copy-and-delete.
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {FS, FsError} from '../../src/fs-error.js';
 
@@ -22,6 +23,18 @@ function describe(st) {
     else if (st.isSymbolicLink()) type = 'symlink';
     else if (st.isFIFO() || st.isSocket() || st.isCharacterDevice() || st.isBlockDevice()) type = 'special';
     return {type, size: Number(st.size), mtime: Number(st.mtimeNs / 1000n)};
+}
+
+// Node has no renameat2: the exchange is the real system call through python3 ctypes (RENAME_EXCHANGE = 2, AT_FDCWD = -100).
+// exit code = errno of the call (0 = swapped). 127 = no python3 / no libc symbol: NOT_SUPPORTED, the store then falls back.
+const EXCHANGE_PY = 'import ctypes,sys\nl=ctypes.CDLL(None,use_errno=True)\nr=l.renameat2(-100,sys.argv[1].encode(),-100,sys.argv[2].encode(),2)\nsys.exit(0 if r==0 else ctypes.get_errno())';
+const ERRNO = {2: FS.NOT_FOUND, 22: FS.NOT_SUPPORTED, 38: FS.NOT_SUPPORTED, 95: FS.NOT_SUPPORTED, 18: FS.NOT_SUPPORTED};
+
+function exchangeSync(a, b) {
+    const r = spawnSync('python3', ['-c', EXCHANGE_PY, a, b], {encoding: 'utf8'});
+    const code = r.error ? 127 : r.status;
+    if (code !== 0)
+        throw new FsError(ERRNO[code] ?? (code === 127 ? FS.NOT_SUPPORTED : FS.IO), `exchange ${a} <-> ${b}: errno ${code}`);
 }
 
 export function nodeFs() {
@@ -82,6 +95,9 @@ export function nodeFs() {
             } catch (e) {
                 throw map(e);
             }
+        },
+        async exchange(a, b) {
+            exchangeSync(a, b);
         },
         async remove(path) {
             try {
