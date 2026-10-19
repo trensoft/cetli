@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=cetli
+Exec=@BINDIR@/cetli --autostart
+Icon=io.github.trensoft.cetli
+Terminal=false
+OnlyShowIn=GNOME;
+X-GNOME-Autostart-Phase=Application

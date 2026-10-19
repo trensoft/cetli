@@ -52,6 +52,7 @@ POTJS_MISSING := $(filter-out $(POTJS_IN_TREE),$(POTJS))
 DESKTOP_IN  := data/$(APP_ID).desktop.in
 METAINFO_IN := data/$(APP_ID).metainfo.xml.in
 AUTOSTART_IN := data/$(APP_ID).enable-extension.desktop.in
+AUTOSTART_APP_IN := data/$(APP_ID).autostart.desktop.in
 EXT_SRC  := extension/$(UUID)
 
 # Words in a source file that make it a file with translatable strings (see check-potfiles).
@@ -107,7 +108,7 @@ newlang:
 # ---------------------------------------------------------------------------------------------- generated files
 
 data: $(BUILD)/$(APP_ID).desktop $(BUILD)/$(APP_ID).metainfo.xml $(BUILD)/$(APP_ID).enable-extension.desktop \
-      $(BUILD)/$(NAME) $(BUILD)/$(NAME)-sync
+      $(BUILD)/$(APP_ID).autostart.desktop $(BUILD)/$(NAME) $(BUILD)/$(NAME)-sync
 
 $(BUILD)/$(APP_ID).desktop: $(DESKTOP_IN) po/LINGUAS $(wildcard po/*.po)
 	mkdir -p $(BUILD)
@@ -122,6 +123,11 @@ $(BUILD)/$(APP_ID).metainfo.xml: $(METAINFO_IN) VERSION po/LINGUAS $(wildcard po
 $(BUILD)/$(APP_ID).enable-extension.desktop: $(AUTOSTART_IN)
 	mkdir -p $(BUILD)
 	sed -e 's#@LIBEXECDIR@#$(LIBEXECDIR)#g' $< > $@
+
+# The start of the program at login (0.2.8). A user turns it off with an override of the same file name in ~/.config/autostart (README).
+$(BUILD)/$(APP_ID).autostart.desktop: $(AUTOSTART_APP_IN)
+	mkdir -p $(BUILD)
+	sed -e 's#@BINDIR@#$(BINDIR)#g' $< > $@
 
 $(BUILD)/$(NAME): Makefile
 	mkdir -p $(BUILD)
@@ -162,6 +168,8 @@ install: all
 	$(INSTALL) -D -m 0755 data/cetli-enable-extension '$(DESTDIR)$(LIBEXECDIR)/$(NAME)/enable-extension'
 	$(INSTALL) -D -m 0644 $(BUILD)/$(APP_ID).enable-extension.desktop \
 	    '$(DESTDIR)$(SYSCONFDIR)/xdg/autostart/$(APP_ID).enable-extension.desktop'
+	$(INSTALL) -D -m 0644 $(BUILD)/$(APP_ID).autostart.desktop \
+	    '$(DESTDIR)$(SYSCONFDIR)/xdg/autostart/$(APP_ID).desktop'
 	@for l in $(LINGUAS); do \
 	    $(INSTALL) -D -m 0644 $(BUILD)/locale/$$l/LC_MESSAGES/$(NAME).mo \
 	        "$(DESTDIR)$(LOCALEDIR)/$$l/LC_MESSAGES/$(NAME).mo" || exit 1; done

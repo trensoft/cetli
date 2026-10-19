@@ -18,6 +18,26 @@ sudo dnf install cetli
 Log out and in once, so that GNOME Shell finds the extension. The package recommends `syncthing` and does not set it
 up. On RHEL 10 / CentOS Stream 10 `syncthing` comes from EPEL 10; the notes work without it.
 
+## Start at login
+
+Since 0.2.8 cetli starts by itself when you log in to GNOME and opens the notes that were open when you last left. It
+opens only those: no new empty note, no list of all notes, no first-start sync window; if no note was open it opens
+nothing and ends quietly. A computer whose notes folder is synchronised still gets its start-up check of the sync
+program. Started by hand, cetli behaves as always.
+
+The package installs `/etc/xdg/autostart/io.github.trensoft.cetli.desktop` (`Exec=/usr/bin/cetli --autostart`). To turn it
+off for your user, put a file with the same name into `~/.config/autostart`; it overrides the system one, and an update of
+the package does not touch it:
+
+```
+mkdir -p ~/.config/autostart
+printf '[Desktop Entry]\nType=Application\nHidden=true\n' > ~/.config/autostart/io.github.trensoft.cetli.desktop
+```
+
+Remove that file to turn it on again. Not measured: a real GNOME login (the order of cetli and the extension, the
+places of the windows after the login, what GTK does to the windows when the session ends) and whether GNOME Tweaks or
+Settings show or switch this entry.
+
 ## Sync between two machines
 
 cetli writes plain files to `~/.local/share/cetli/notes/`. Since 0.2.5 it can set up the sync itself: open the main menu and

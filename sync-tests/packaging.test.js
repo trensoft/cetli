@@ -52,7 +52,7 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
     const version = read('VERSION').trim();
     assert.equal(spec.match(/^Version:\s+(.*)$/m)[1], version);
     assert.match(spec, new RegExp(`^\\* .* - ${version.replace(/\./g, '\\.')}-1$`, 'm'));
-    const entry = spec.slice(spec.indexOf(`- ${version}-1`), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
+    const entry = spec.slice(spec.indexOf('- 0.2.7-1'), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));   // the entry of 0.2.7: its points stay pinned
     assert.match(entry, /Supported and measured: 10 computers in one group on one shared local network \(a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine\)/);
     assert.match(entry, /the 11th computer was refused \(E_GROUP_FULL\)/);
     assert.match(entry, /did not reach the others within 85 s; after it was given on 6 of the 9 remaining computers, none of them listed it any more \(on the other 3 the call answered E_BAD_ID\)\. A note from one computer then reached the other 8\./);
@@ -77,9 +77,9 @@ test('VERSION, the spec and the changelog agree, and the changelog names what is
 
 test('the changelog of this version carries the Fix point of the atomic swap: the requirement, the fall-back, what is measured and what is not covered', () => {
     const version = read('VERSION').trim();
-    assert.equal(version, '0.2.7');
+    assert.equal(version, '0.2.8');
     assert.equal(/0\.2\.7\.1/.test(specCode), false, 'there is no 0.2.7.1 entry or version: the fix is part of 0.2.7');
-    const entry = spec.slice(spec.indexOf(`- ${version}-1`), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
+    const entry = spec.slice(spec.indexOf('- 0.2.7-1'), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
     assert.match(entry, /^- Fix: a note could lose its newest text\. /m, 'the Fix point is in the 0.2.7-1 entry');
     assert.equal(entry.indexOf('- Fix: a note could lose its newest text.') < entry.indexOf('- New: cetli syncs up to 10 computers.'), true, 'and it comes first');
     assert.match(specCode, /^Requires:\s+coreutils >= 9\.5$/m);
@@ -113,4 +113,30 @@ test('0H.12: the literal STGUIADDRESS is nowhere in the shipped tree (the allowl
         assert.equal(/STGUIADDRESS|STGUIAPIKEY|STHOMEDIR|STCONFDIR|STDATADIR/.test(text), false, f);
     }
     assert.equal(/--gui-address|--gui-apikey/.test(unit), false);
+});
+
+test('0.2.8: the autostart entry is installed from the Makefile and the spec, runs `cetli --autostart` by absolute path and is GNOME only', () => {
+    const desk = read('data/io.github.trensoft.cetli.autostart.desktop.in');
+    assert.match(desk, /^Exec=@BINDIR@\/cetli --autostart$/m);
+    assert.match(desk, /^Type=Application$/m);
+    assert.match(desk, /^OnlyShowIn=GNOME;$/m);
+    assert.doesNotMatch(desk, /^(Hidden|NoDisplay)=/m, 'the system entry is neither hidden nor NoDisplay: only the override of the user says Hidden=true');
+    assert.match(make, /sed -e 's#@BINDIR@#\$\(BINDIR\)#g' \$< > \$@/);
+    assert.match(make, /\$\(INSTALL\) -D -m 0644 \$\(BUILD\)\/\$\(APP_ID\)\.autostart\.desktop \\\n\s+'\$\(DESTDIR\)\$\(SYSCONFDIR\)\/xdg\/autostart\/\$\(APP_ID\)\.desktop'/);
+    assert.match(make, /^data:[^\n]*\\\n[^\n]*\$\(BUILD\)\/\$\(APP_ID\)\.autostart\.desktop/m);
+    assert.match(specCode, /^%config\(noreplace\) %\{_sysconfdir\}\/xdg\/autostart\/%\{app_id\}\.desktop$/m, 'in %files, as a config file the user can override');
+    assert.match(specCode, /^desktop-file-validate %\{buildroot\}%\{_sysconfdir\}\/xdg\/autostart\/%\{app_id\}\.desktop$/m);
+});
+
+test('0.2.8: the changelog and the README say how to turn it off and what is not measured', () => {
+    const entry = spec.slice(spec.indexOf('- 0.2.8-1'), spec.indexOf('* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.7-1'));
+    const readme = read('README.md').replace(/\s+/g, ' ');
+    assert.match(entry, /runs `cetli --autostart`/);
+    assert.match(entry, /no new empty note, no list of all notes, no first-start sync window/);
+    assert.match(entry, /Hidden=true/);
+    assert.match(entry, /Not measured: a real login or restart of a GNOME session/);
+    assert.match(readme, /Since 0\.2\.8 cetli starts by itself when you log in to GNOME/);
+    assert.match(readme, /~\/\.config\/autostart\/io\.github\.trensoft\.cetli\.desktop/);
+    assert.match(readme, /Hidden=true/);
+    assert.match(readme, /Not measured: a real GNOME login/);
 });

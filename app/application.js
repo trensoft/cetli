@@ -15,7 +15,7 @@ import {
     buildCss,
 } from './data.js';
 import {AllNotesWindow} from './allnotes.js';
-import {setOpen, shouldOpen, sizeOf} from './layoutfile.js';
+import {setOpen, shouldOpen, sizeOf, startNotes} from './layoutfile.js';
 import {SyncBridge} from './sync-bridge.js';
 import {notesSynced, wantsFirstStart, writeDismissed} from './sync-hook.js';
 import {SyncWizard} from './sync-wizard.js';
@@ -65,8 +65,10 @@ function loadCss() {
 // `dirs`, `fs` and `platform` can be given by a test; the product uses the defaults of the core's Gio layer. `bridge` and `homeDir` are given
 // by a test too (a fake bridge replays the engine; the home is where the first-start hook looks for `.stfolder` markers).
 // `firstStartSync`: the product (main.js) turns the first-start sync window on; the tests of the notes leave it off.
-export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false, linkPollMs = undefined} = {}) {
+// `autostart`: the start at login (0.2.8), as if `--autostart` was given (the command line sets it too, see handle-local-options).
+export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false, linkPollMs = undefined, autostart: autostartOpt = false} = {}) {
     const gtkApp = new Adw.Application({application_id: APP_ID, flags: Gio.ApplicationFlags.DEFAULT_FLAGS});
+    let autostart = autostartOpt;
     const store = createStore({fs, platform, dirs, resolveConflicts: true});   // the copies of Syncthing conflicts are resolved by the product; the store default stays off
     const windows = new Map();
     const version = readVersion();
@@ -268,15 +270,13 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     const alive = () => store.listNotes().filter(n => !n.deleted);
 
     // First activation: the notes that are not marked closed; when none would show, all of them; when there are none, a new one.
+    // The start at login (0.2.8) opens the notes not marked closed and nothing else: no fall-back to all of them, no new note, no list. Without a
+    // window the program leaves quietly (see the activate handler, which waits for the start-up check of the sync program first).
     async function showStartWindows() {
         const layout = await store.loadLayout();
-        const notes = alive();
-        let show = notes.filter(n => shouldOpen(layout, n.id));
-        if (show.length === 0)
-            show = notes;
-        for (const n of show)
+        for (const n of startNotes(layout, alive(), {autostart}))
             await openWindow(n, layout);
-        if (windows.size === 0) {
+        if (windows.size === 0 && !autostart) {
             if (synced())
                 showAllNotes();                        // 0.2.5.1: a window must open (GTK quits without one), but not a new note
             else
@@ -361,12 +361,31 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         await watcher.start();
         starting = false;
         await showStartWindows();
-        maybeShowFirstStartSync();
+        if (!autostart)                                // at login the first-start sync window would come back until somebody answers it
+            maybeShowFirstStartSync();
     }
 
     const ready = new Promise((res, rej) => {
         resolveReady = res;
         rejectReady = rej;
+    });
+
+    // 0.2.8: `cetli --autostart` is what the XDG autostart entry runs at login (data/io.github.trensoft.cetli.autostart.desktop.in). The option is
+    // handled here, in the process that was started. If the program already runs (the user was quicker than the autostart), this call does
+    // nothing at all: it must not activate the running one (that would bring every note back).
+    gtkApp.add_main_option('autostart', 0, GLib.OptionFlags.NONE, GLib.OptionArg.NONE, 'Start as at login: open only the notes that were left open', null);
+    gtkApp.connect('handle-local-options', (_app, options) => {
+        if (!options.contains('autostart'))
+            return -1;
+        try {
+            gtkApp.register(null);
+            if (gtkApp.get_is_remote())
+                return 0;
+        } catch (e) {
+            platform.log.warn(`autostart: registration failed: ${e?.message ?? e}`);
+        }
+        autostart = true;
+        return -1;
     });
 
     gtkApp.connect('startup', () => {
@@ -414,7 +433,14 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
             platform.log.warn(`start failed: ${e?.message ?? e}`);
             rejectReady(e);
             gtkApp.quit();
-        }).finally(() => gtkApp.release());
+        }).finally(() => {
+            // At login a program without a window would leave at once, and its shutdown stops the sync bridge in the middle of the start-up check:
+            // the check is waited for first. It never throws; the engine bounds it (a quick answer normally, at worst the timeouts of its systemctl calls).
+            if (autostart && startupEnsure !== null)
+                startupEnsure.then(() => gtkApp.release());
+            else
+                gtkApp.release();
+        });
     });
 
     gtkApp.connect('shutdown', () => {

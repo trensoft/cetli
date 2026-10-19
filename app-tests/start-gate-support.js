@@ -48,8 +48,11 @@ export function fakeBridge(answer = {}) {
 
 // `bridge`: what the app talks to (default: a fakeBridge that answers every verb with E_SERVICE_TIMEOUT). `marker`: the notes folder carries the `.stfolder` directory Syncthing makes. `deleted`: how many deleted records are in the folder at the start.
 // `seed(dirs)`: the caller puts more files into the notes folder before the program starts.
-// `scenario(env)` gets {ctl, app (createApp's result), windows, files(), records(), check, tick, waitFor}; its failures are reported, the process exits 0/1.
-export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBridge()}, scenario) {
+// 0.2.8: `argv`: the command line given to app.run (e.g. ['cetli', '--autostart']). `firstStartSync`: createApp's switch of the first-start sync window.
+// `ownExit`: the program is NOT quit by the test: it must end by itself once the scenario is over (a start at login without a window); the result is
+// printed from the 'shutdown' of the program, and a program that is still running 5 s after the scenario fails. `extra`: more createApp options.
+// `scenario(env)` gets {ctl, app (createApp's result), windows, files(), records(), check, tick, waitFor, dirs, base}; its failures are reported, the process exits 0/1.
+export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBridge(), argv = [], firstStartSync = false, ownExit = false, extra = {}}, scenario) {
     const base = GLib.dir_make_tmp('cetli-start-XXXXXX');
     const dirs = {notes: `${base}/data/notes`, tmp: `${base}/data/tmp`, state: `${base}/state`};
     GLib.mkdir_with_parents(dirs.notes, 0o755);
@@ -83,13 +86,46 @@ export function runStartGate({marker, deleted = 0, seed = null, bridge = fakeBri
         return out.sort();
     };
     const records = () => files().map(f => JSON.parse(new TextDecoder().decode(GLib.file_get_contents(`${dirs.notes}/${f}`)[1])));
-    const app = createApp({dirs, homeDir: base, bridge});
-    scenario({ctl: app.ctl, app, bridge, windows: app.windows, files, records, check, tick, waitFor}).then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {
+    const app = createApp({dirs, homeDir: base, bridge, firstStartSync, ...extra});
+    const report = () => {
         print(`${checks - failed}/${checks} checks passed`);
         print(failed === 0 ? 'RESULT PASS' : 'RESULT FAIL');
         GLib.spawn_command_line_async(`rm -rf ${base}`);
-        app.gtkApp.quit();
+    };
+    let scenarioOver = false;
+    let reported = false;
+    if (ownExit) {
+        app.gtkApp.connect('shutdown', () => {
+            if (reported)
+                return;
+            reported = true;
+            check(scenarioOver, 'the program ended by itself, not before the scenario was over');
+            report();
+        });
+    }
+    scenario({ctl: app.ctl, app, bridge, windows: app.windows, files, records, check, tick, waitFor, dirs, base}).then(() => {}, e => { failed++; print(`FAIL exception ${e}\n${e.stack}`); }).finally(() => {
+        scenarioOver = true;
+        if (!ownExit) {
+            reported = true;
+            report();
+            app.gtkApp.quit();
+            return;
+        }
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+            if (!reported) {
+                reported = true;
+                check(false, 'the program ended by itself within 5 s after the scenario');
+                report();
+                app.gtkApp.quit();
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     });
-    const status = app.run([]);
+    const status = app.run(argv);
+    if (!reported) {
+        print('FAIL the program ended before the scenario was over');
+        print('RESULT FAIL');
+        imports.system.exit(1);
+    }
     imports.system.exit(failed === 0 ? status : 1);
 }

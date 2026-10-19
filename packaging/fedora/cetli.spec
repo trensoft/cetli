@@ -43,7 +43,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.7
+Version:        0.2.8
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -91,7 +91,8 @@ press a button; the package itself starts nothing. If two computers change the
 same note before they meet, cetli keeps both versions.
 
 The package also holds a GNOME Shell extension that puts the note windows back
-where they were. It is enabled once, at the first login of each user.
+where they were. It is enabled once, at the first login of each user. cetli itself starts at login and
+opens the notes that were left open (an autostart entry; it can be turned off per user, see the README).
 
 %prep
 %autosetup
@@ -116,6 +117,7 @@ grep -q '<release version="%{version}" ' %{buildroot}%{_metainfodir}/%{app_id}.m
 sh -n %{buildroot}%{_libexecdir}/%{name}/enable-extension
 desktop-file-validate %{buildroot}%{_datadir}/applications/%{app_id}.desktop
 desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
+desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{app_id}.desktop
 appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xml
 
 %files -f %{name}.lang
@@ -131,8 +133,15 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %{_metainfodir}/%{app_id}.metainfo.xml
 %{_datadir}/icons/hicolor/scalable/apps/%{app_id}.svg
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
+%config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.desktop
 
 %changelog
+* Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.8-1
+- New: cetli starts by itself when you log in to GNOME, and the notes that were open at the last logout come back (an XDG autostart entry, /etc/xdg/autostart/io.github.trensoft.cetli.desktop, runs `cetli --autostart`). At login it opens only the notes that were left open: no new empty note, no list of all notes, no first-start sync window, and if no note was open it opens nothing and ends quietly. Started by hand, cetli behaves as before. If the notes folder is synchronised, the start-up check of the sync program still runs (and the program waits for it before it ends)
+- To turn it off, put a file with the same name into ~/.config/autostart (the user's file overrides the system one and an update of the package does not touch it): `printf '[Desktop Entry]\nType=Application\nHidden=true\n' > ~/.config/autostart/io.github.trensoft.cetli.desktop`. Remove that file to turn it on again. If cetli already runs when the autostart entry starts it, the entry does nothing
+- Not measured: a real login or restart of a GNOME session (so: the order of cetli and the extension, the places of the windows after login, what GTK does to the windows when the session ends, whether GNOME Tweaks or Settings list or switch this entry); the tests ran under a headless compositor
+- Tests: the start at login has its own tests (app-tests/autostart-*.js, app-tests/autostart.test.js, sync-tests/packaging.test.js) and mutants (app-tests/mutants-autostart.js)
+
 * Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.7-1
 - Fix: a note could lose its newest text. When the sync program delivered a newer version of a note at the very moment cetli was settling a sync conflict of the same note, cetli wrote over that version and no copy of it was left (since 0.2.5.4). cetli now swaps the note in with one atomic step and looks afterwards at what it took out: a version that cetli had not read is kept, outside the synced folder, in the folder backup/ beside the notes folder (in ~/.local/share/cetli/backup, at most 32 files, the oldest are dropped first); nothing is put into the notes folder, so nothing spreads to the other computers. The same holds for a conflict file that changes just before cetli deletes it: it is put back. The note shows the version cetli settled on; the version in backup/ is not shown in the window and is not restored by cetli itself, it is a file you can open and copy from. The swap uses `mv --exchange`, so the package requires coreutils 9.5 or later (CentOS Stream 10 has 9.5 and Fedora 43 has 9.7, both measured; that gnome-shell 47 brings coreutils 9.5 was derived, not measured; the Fedora releases between were not looked at). Where the file system cannot do the swap (tmp/ on another file system, a file system without it), cetli checks the note right before replacing it, which narrows the window but does not close it, and says so once in the log; on such a file system a conflict file is deleted after a check only (that window stays, and it is not logged), so "put back" above holds only where the file system can do the swap. Tests: tests/late-arrival.test.js (also: a supported layer does the swap and reports no fall-back; tmp/ on another file system falls back and loses nothing), the sweep tests/f1prime-late-injection.test.js (a new version injected before every file call of the settlement), the mutants M71-M82 in tests/mutants.js. Measured under gjs by the smoke app-tests/exchange-smoke.js: `mv --exchange` started by the real src/gio-layer.js, with the mv of the Fedora 43 and CentOS Stream 10 roots (each started with its own loader), under Debian bookworm gjs 1.74.2, with a positive control (the two files swap and no fall-back line appears) and a negative control (the coreutils 9.1 of that system has no --exchange: the fall-back line appears once and nothing is lost); the swap in the node tests goes through python3. Not measured: a real Fedora or EL10 session; a real sync program delivering at that moment. Not covered by this fix: the write of a note into a place where none is, and the local save of the user over a note that changed at that moment (both work as in 0.2.6); also, a conflict file that is put back can, in a very short window, overwrite a file that has appeared under the same name meanwhile (the newer version stays on the computer that sent it)
 - New: cetli syncs up to 10 computers. You connect a new computer to any computer of the group with one ID comparison; the other computers learn the new one by themselves. A computer you accept can add other computers to your group without asking you again. Remove a lost computer on all your computers. cetli guides you through it and never claims a computer is removed from the whole group, only from the one it runs on

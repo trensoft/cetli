@@ -12,6 +12,14 @@
 // A note is shown at start unless its entry says `open: false`.
 export const shouldOpen = (layout, id) => layout[id]?.open !== false;
 
+// The notes that open when the program starts. `notes`: the live notes. A normal start opens the ones not marked closed and, when none would
+// show, all of them. A start at login (`autostart`, 0.2.8) opens exactly the ones not marked closed: no fall-back, because a user who closed
+// every note must not get them all back at the next login.
+export function startNotes(layout, notes, {autostart = false} = {}) {
+    const show = notes.filter(n => shouldOpen(layout, n.id));
+    return show.length === 0 && !autostart ? notes : show;
+}
+
 // The core's loadLayout and saveLayout are two separate steps, so two changes of this process that overlap would lose one
 // (both read, both write). The changes of one store are therefore queued here (the core keeps `updateLayout` out).
 const queues = new WeakMap();
