@@ -64,7 +64,7 @@ them and allow the new rule once: a pair works under the new rule only when it i
 is not offered again when it knocks; **Add again** in **Sync…** lifts that, and you still compare its ID and accept it. **Stop syncing** removes all other computers and their shares; it never removes the folder or a
 note. Going back to 0.2.5 needs **Stop syncing** first.
 
-What is measured and what is not (the details are in the release notes, https://github.com/trensoft/cetli/releases): measured with 10 computers in one group on one shared
+What is measured and what is not (the measurement with 10 computers is also in the release notes of v0.2.7, https://github.com/trensoft/cetli/releases/tag/v0.2.7; the removal figures below, 85 s and E_BAD_ID, are in no release notes): measured with 10 computers in one group on one shared
 local network (a virtual LAN on one machine; 2 of them ran the real application, 8 only the sync engine): the computers joined one by one, a
 note from each computer reached the other 9, and the 11th computer was refused. A removal given on one computer only did not reach the others
 within 85 s; after it was given on 6 of the 9 remaining computers, none of them listed it any more (on the other 3 the call answered
@@ -74,7 +74,7 @@ or two; without local discovery nothing connects. Not measured: 10 real computer
 NAT, relays, a real RHEL 10 session. There the computers may connect through the first computer only, or not at all. A computer whose notes folder is already
 synchronised by a Syncthing you set up by hand is left exactly as it is.
 
-**Settling a sync conflict (0.2.7; the text of the changelog entry of that version, word for word, wrapped):** Fix: a note could lose its
+**Settling a sync conflict (0.2.7; the full text of the changelog entry of that version as it stood in the spec until 0.2.8-1, wrapped; the changelog in the spec is shorter since 0.2.8-2):** Fix: a note could lose its
 newest text. When the sync program delivered a newer version of a note at the very moment cetli was settling a sync conflict of the same
 note, cetli wrote over that version and no copy of it was left (since 0.2.5.4). cetli now swaps the note in with one atomic step and looks
 afterwards at what it took out: a version that cetli had not read is kept, outside the synced folder, in the folder backup/ beside the notes
