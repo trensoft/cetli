@@ -10,8 +10,8 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        0.2.8
-Release:        2%{?dist}
+Version:        1.0.0
+Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
 URL:            https://github.com/trensoft/cetli
@@ -79,8 +79,8 @@ desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{app_id}.desktop
 appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xml
 
 # The sync window enables the unit after the user's click. The scriptlets only register the unit with the preset
-# (%%systemd_user_post) and remove it on package removal (%%systemd_user_preun). There is no restart on update: it
-# would stop a running sync.
+# (%%systemd_user_post) and, on package removal, disable it and stop it where it runs (%%systemd_user_preun, which
+# does "disable --now"). There is no restart on update: it would stop a running sync.
 %post
 %systemd_user_post %{name}-syncthing.service
 
@@ -106,6 +106,10 @@ appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xm
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.desktop
 
 %changelog
+* Tue Oct 20 2026 TrenSoft <trensoft@fedoraproject.org> - 1.0.0-1
+- Update to 1.0.0
+- Saving a note no longer overwrites a version that the sync program delivers at the same moment; that version is kept in backup/
+
 * Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.8-2
 - Add systemd user unit scriptlets; trim spec comments and changelog (review feedback)
 
