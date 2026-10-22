@@ -166,3 +166,12 @@ test('1.0.1: the GitHub Actions workflow runs the node tests on push and pull re
     assert.equal(/gjs|CETLI_GTKENV/.test(code), false, 'nothing here needs gjs');
     assert.match(wf, /^# .*gjs.*$/m, 'the comment names what is not run');
 });
+
+test('1.0.1: the comment on the user unit scriptlets says what the macros contain and makes no claim about a running service; the empty %postun is marked as intended', () => {
+    const comments = spec.split('\n').filter(l => l.startsWith('#')).join('\n');
+    assert.equal(/disable --now/.test(comments), false, 'what the helper does to a running service is not measured');
+    assert.match(comments, /systemd-update-helper install-user-units/);
+    assert.match(comments, /systemd-update-helper remove-user-units/);
+    assert.match(comments, /not on an update/);
+    assert.match(spec, /^# Intended: [^\n]*empty-%%postun\.\n%postun\n%systemd_user_postun /m);
+});

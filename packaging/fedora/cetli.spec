@@ -80,15 +80,18 @@ desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{app_id}.desktop
 appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xml
 appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xml
 
-# The sync window enables the unit after the user's click. The scriptlets only register the unit with the preset
-# (%%systemd_user_post) and, on package removal, disable it and stop it where it runs (%%systemd_user_preun, which
-# does "disable --now"). There is no restart on update: it would stop a running sync.
+# The sync window enables the unit after the user's click. The scriptlets are the macros of systemd-rpm-macros, whose text is
+# the same in the macros.systemd of EL10 (systemd 257), Fedora 43 (258) and Fedora 44 (259): %%systemd_user_post calls
+# `systemd-update-helper install-user-units` on a first installation ($1 = 1), %%systemd_user_preun calls
+# `systemd-update-helper remove-user-units` on a removal ($1 = 0), not on an update, and %%systemd_user_postun expands to nothing.
+# There is no restart on update (%%systemd_user_postun_with_restart would mark the unit for one and stop a running sync).
 %post
 %systemd_user_post %{name}-syncthing.service
 
 %preun
 %systemd_user_preun %{name}-syncthing.service
 
+# Intended: %%systemd_user_postun without restart expands to nothing, rpmlint reports empty-%%postun.
 %postun
 %systemd_user_postun %{name}-syncthing.service
 
