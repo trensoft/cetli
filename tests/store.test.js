@@ -245,7 +245,7 @@ test('1.5/2.6: a save writes the canonical bytes into tmp/ (outside notes/) and 
     env.layer.calls.length = 0;
     const again = await env.store.saveNote(res.record.id, res.record, {text: 'second', color: 'pink', deleted: false});
     assert.equal(again.ok, true);
-    // 0.2.8.1: a known valid version is replaced by the atomic exchange (no OVERWRITE move); the version taken out is
+    // 1.0.0: a known valid version is replaced by the atomic exchange (no OVERWRITE move); the version taken out is
     // the one this save read, so it is dropped (1 remove), not put in backup/
     assert.equal(env.layer.calls.filter(c => c.op === 'move').length, 0, 'replacing a known valid version: no move');
     const ex = env.layer.calls.find(c => c.op === 'exchange');

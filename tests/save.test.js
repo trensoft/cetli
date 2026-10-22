@@ -16,7 +16,7 @@ const copyOf = l => fmt.expectedCopy(l, X);
 const copyName = l => `${copyOf(l).id}.json`;
 const cn = n => `${X}.sync-conflict-20261017-1200${String(n).padStart(2, '0')}-ABCDEFG.json`;
 const mine = (text = 'mine', extra = {}) => ({text, color: 'yellow', deleted: false, ...extra});
-// the writes into notes/: a move (new slot, copy) or, over a known version, the exchange (0.2.8.1)
+// the writes into notes/: a move (new slot, copy) or, over a known version, the exchange (1.0.0)
 const MOVES = env => env.layer.calls.filter(c => (c.op === 'move' || c.op === 'exchange') && c.args[1].startsWith(env.dirs.notes)).map(c => path.basename(c.args[1]));
 
 const withEnv = (opts, fn) => async () => {

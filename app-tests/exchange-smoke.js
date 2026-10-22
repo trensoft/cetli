@@ -214,7 +214,7 @@ async function scenario() {
     }
     check(hasNoLeftovers(r), 'late arrival: tmp/ is clean');
 
-    // 3. 0.2.8.1: the SAVE of the user over a known version. Same two moments as above.
+    // 3. 1.0.0: the SAVE of the user over a known version. Same two moments as above.
     async function runSave(label, {inject}) {
         const root = `${base}/${label}`;
         const dirs = {notes: `${root}/data/notes`, tmp: `${root}/data/tmp`, state: `${root}/state`};

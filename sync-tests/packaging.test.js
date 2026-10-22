@@ -92,6 +92,7 @@ test('the changelog carries the Fix point of the atomic swap first, the spec req
     assert.match(readme, /Not measured: a real Fedora or EL10 session; a real sync program delivering at that moment\./);
     assert.match(readme, /Not covered by this fix: the write of a note into a place where none is \(it works as in 0\.2\.6\); also, a conflict file that is put back can, in a very short window, overwrite a file that has appeared under the same name meanwhile \(the newer version stays on the computer that sent it\)/);
     assert.doesNotMatch(readme, /no version (of a note )?is lost|nothing is ever lost/i, 'the README does not claim that no version is ever lost');
+    assert.doesNotMatch(readme, /local save of the user/, 'the save of the user is covered by this fix since 1.0.0, it is not listed as not covered');
 });
 
 test('0H.12: env -i is mandatory in ExecStart with exactly HOME and PATH; no EnvironmentFile, PassEnvironment or UnsetEnvironment', () => {

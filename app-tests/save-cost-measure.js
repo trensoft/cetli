@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // gjs MEASUREMENT (no display, not part of `make check`): what does one SAVE cost, and does the main loop keep running
-// while it is done. Written for 0.2.8.1 (the save replaces <X>.json with the atomic exchange: one `mv --exchange`
+// while it is done. Written for 1.0.0 (the save replaces <X>.json with the atomic exchange: one `mv --exchange`
 // subprocess more per save). It prints numbers, it does not judge them.
 //
 // Run it on the tree WITH the change and on the tree WITHOUT it (v0.2.8, 6d163c5) and compare the two outputs:

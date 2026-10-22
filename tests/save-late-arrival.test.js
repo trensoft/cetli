@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// 0.2.8.1: the SAVE must not destroy a version of a note that the transport brings in while the save runs. Same guarantee
+// 1.0.0: the SAVE must not destroy a version of a note that the transport brings in while the save runs. Same guarantee
 // as the resolution has since 0.2.7.1 (tests/late-arrival.test.js): what the replacement takes out of <X>.json and nobody
 // else has a copy of goes to backup/ (outside the synced folder). The sweep injects the arrival before EVERY fs call of
 // one save, from the first read of <X>.json to the last write of it.

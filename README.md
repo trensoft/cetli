@@ -93,9 +93,8 @@ src/gio-layer.js, with the mv of the Fedora 43 and CentOS Stream 10 roots (each 
 1.74.2, with a positive control (the two files swap and no fall-back line appears) and a negative control (the coreutils 9.1 of that system
 has no --exchange: the fall-back line appears once and nothing is lost); the swap in the node tests goes through python3. Not measured: a
 real Fedora or EL10 session; a real sync program delivering at that moment. Not covered by this fix: the write of a note into a place where
-none is (it works as in 0.2.6); also, a conflict file that is put
-back can, in a very short window, overwrite a file that has appeared under the same name meanwhile (the newer version stays on the computer
-that sent it)
+none is (it works as in 0.2.6); also, a conflict file that is put back can, in a very short window, overwrite a file that has appeared
+under the same name meanwhile (the newer version stays on the computer that sent it)
 
 ## Authorship
 
