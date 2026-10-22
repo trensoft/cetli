@@ -150,3 +150,19 @@ test('1.0.1: the metainfo is checked with appstreamcli and with appstream-util v
     const check = specCode.slice(specCode.indexOf('%check'), specCode.indexOf('%post'));
     assert.equal(check.includes('appstream-util validate-relax'), true, 'inside %check');
 });
+
+test('1.0.1: the GitHub Actions workflow runs the node tests on push and pull request, with read-only permissions, no secret and pinned actions', () => {
+    const wf = read('.github/workflows/tests.yml');
+    const code = strip(wf);
+    assert.match(code, /^on:\n  push:\n  pull_request:\n/m);
+    assert.match(code, /^permissions:\n  contents: read\n/m);
+    assert.equal(/pull_request_target|secrets\.|GITHUB_TOKEN|id-token|contents: write|^\s+(run|uses):.*(curl|wget)/m.test(code), false);
+    const uses = [...code.matchAll(/^\s+- uses: (\S+)/gm)].map(m => m[1]);
+    assert.equal(uses.length, 2);
+    for (const u of uses)
+        assert.match(u, /^actions\/[a-z-]+@[0-9a-f]{40}$/, 'pinned to a commit');
+    for (const cmd of ['bash tests/run.sh', 'node --test sync-tests/*.test.js', 'node --test app-tests/*.test.js', 'bash extension/tests/run.sh'])
+        assert.equal(code.includes(`run: ${cmd}\n`), true, cmd);
+    assert.equal(/gjs|CETLI_GTKENV/.test(code), false, 'nothing here needs gjs');
+    assert.match(wf, /^# .*gjs.*$/m, 'the comment names what is not run');
+});

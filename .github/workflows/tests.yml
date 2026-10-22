@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# The tests that need only node (>= 22): the core, the sync engine and contract, the pure modules of the app, the extension against
+# fakes of the GNOME APIs. Not run here, because they need gjs, GTK 4, libadwaita and a Wayland compositor (CETLI_GTKENV, see
+# app-tests/run.sh): the smokes app-tests/*-smoke.js, sync-tests/gio-ports-smoke.js, exchange-smoke.js and the i18n check.
+# sync-tests are started with `node --test` and not with sync-tests/run.sh: without CETLI_GTKENV that script ends with exit code 0
+# whatever the node tests said.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
+        with:
+          node-version: 22
+      - name: core (tests/)
+        run: bash tests/run.sh
+      - name: sync engine and contract (sync-tests/)
+        run: node --test sync-tests/*.test.js
+      - name: app, pure modules (app-tests/*.test.js)
+        run: node --test app-tests/*.test.js
+      - name: extension against fakes (extension/tests/)
+        run: bash extension/tests/run.sh
