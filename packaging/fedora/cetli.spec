@@ -24,6 +24,7 @@ BuildRequires:  make
 BuildRequires:  gettext
 BuildRequires:  desktop-file-utils
 BuildRequires:  appstream
+BuildRequires:  libappstream-glib
 BuildRequires:  glib2-devel
 # systemd-rpm-macros: %%{_userunitdir} and the user unit scriptlets
 BuildRequires:  systemd-rpm-macros
@@ -77,6 +78,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{app_id}.desktop
 desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{app_id}.enable-extension.desktop
 desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{app_id}.desktop
 appstreamcli validate --no-net %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xml
+appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/%{app_id}.metainfo.xml
 
 # The sync window enables the unit after the user's click. The scriptlets only register the unit with the preset
 # (%%systemd_user_post) and, on package removal, disable it and stop it where it runs (%%systemd_user_preun, which

@@ -141,3 +141,12 @@ test('0.2.8: the changelog and the README say how to turn it off, the README say
     assert.match(readme, /Hidden=true/);
     assert.match(readme, /Not measured: a real GNOME login/);
 });
+
+test('1.0.1: the metainfo is checked with appstreamcli and with appstream-util validate-relax (AppData guidelines), both in %check, the second one needs libappstream-glib', () => {
+    assert.match(specCode, /^BuildRequires:\s+appstream$/m);
+    assert.match(specCode, /^BuildRequires:\s+libappstream-glib$/m);
+    assert.match(specCode, /^appstreamcli validate --no-net %\{buildroot\}%\{_metainfodir\}\/%\{app_id\}\.metainfo\.xml$/m);
+    assert.match(specCode, /^appstream-util validate-relax --nonet %\{buildroot\}%\{_metainfodir\}\/%\{app_id\}\.metainfo\.xml$/m);
+    const check = specCode.slice(specCode.indexOf('%check'), specCode.indexOf('%post'));
+    assert.equal(check.includes('appstream-util validate-relax'), true, 'inside %check');
+});
