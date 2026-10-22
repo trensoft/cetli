@@ -10,7 +10,7 @@
 %bcond complete 1
 
 Name:           cetli
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        Small notes on the GNOME desktop that sync between your computers
 License:        GPL-3.0-or-later
@@ -113,6 +113,12 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/%{app_id}.meta
 %config(noreplace) %{_sysconfdir}/xdg/autostart/%{app_id}.desktop
 
 %changelog
+* Thu Oct 22 2026 TrenSoft <trensoft@fedoraproject.org> - 1.0.1-1
+- Update to 1.0.1
+- The GNOME Shell extension lists GNOME Shell 50 and 51 as supported
+- New: manual pages cetli(1) and cetli-sync(1)
+- Packaging: the metainfo is also checked with appstream-util validate-relax; the comments on the user unit scriptlets say only what the macros do
+
 * Tue Oct 20 2026 TrenSoft <trensoft@fedoraproject.org> - 1.0.0-1
 - Update to 1.0.0
 - Saving a note no longer overwrites a version that the sync program delivers at the same moment; that version is kept in backup/

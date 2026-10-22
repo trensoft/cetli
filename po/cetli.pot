@@ -5,7 +5,7 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: cetli 1.0.0\n"
+"Project-Id-Version: cetli 1.0.1\n"
 "Report-Msgid-Bugs-To: https://github.com/trensoft/cetli/issues\n"
 "POT-Creation-Date: 2026-10-17 07:13+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"

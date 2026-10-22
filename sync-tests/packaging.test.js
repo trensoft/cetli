@@ -76,7 +76,7 @@ test('VERSION, the spec and the changelog agree, and the README says what is NOT
 
 test('the changelog carries the Fix point of the atomic swap first, the spec requires the coreutils that has it, and the README carries the fall-back, what is measured and what is not covered', () => {
     const version = read('VERSION').trim();
-    assert.equal(version, '1.0.0');
+    assert.equal(version, '1.0.1');
     assert.equal(/0\.2\.7\.1/.test(specCode), false, 'there is no 0.2.7.1 entry or version: the fix is part of 0.2.7');
     const entry = spec.slice(spec.indexOf('- 0.2.7-1'), spec.indexOf('* Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.5-1'));
     assert.match(entry, /^- Fix: a note could lose its newest text /m, 'the Fix point is in the 0.2.7-1 entry');
