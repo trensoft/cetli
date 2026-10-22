@@ -1,0 +1,178 @@
+.\" SPDX-License-Identifier: GPL-3.0-or-later
+.\" The text follows sync/main.js (usage line, exit codes), sync/protocol.js (verbs, flags) and the comments of the verbs in sync/engine.js.
+.TH CETLI\-SYNC 1 "" "cetli"
+.SH NAME
+cetli\-sync \- the sync engine of cetli
+.SH SYNOPSIS
+.B cetli\-sync
+.I verb
+.RI [ argument ...]
+.PP
+The verbs, with their arguments:
+.PP
+.B cetli\-sync status
+.br
+.B cetli\-sync setup
+.br
+.B cetli\-sync own\-id
+.br
+.B cetli\-sync host
+.br
+.B cetli\-sync join
+.br
+.B cetli\-sync finish
+.br
+.B cetli\-sync harden
+.br
+.B cetli\-sync reset
+.br
+.B cetli\-sync ensure
+.br
+.B cetli\-sync restart
+.RB [ \-\-enable ]
+.br
+.B cetli\-sync forget
+.I ID
+.br
+.B cetli\-sync forget \-\-all
+.RB [ \-\-stop ]
+.br
+.B cetli\-sync revoke
+.IR ID ...
+.br
+.B cetli\-sync promote
+.IR ID ...
+.br
+.B cetli\-sync ack
+.IR ID ...
+.br
+.B cetli\-sync ack \-\-all
+.SH DESCRIPTION
+.B cetli\-sync
+is the program behind the sync window of
+.BR cetli (1).
+It sets up and looks after a Syncthing instance of its own for the notes folder, and it connects the computers of one group (up to 10).
+The window starts it for every step; it can also be started by hand in a terminal.
+.PP
+Each call does one verb and prints one JSON object per line on standard output.
+The last line says how the call ended: it has the event
+.B result
+or the event
+.BR error .
+.PP
+An
+.I ID
+is the device ID of a computer in the canonical form of Syncthing: 8 groups of 7 characters (A to Z and 2 to 7), joined by dashes.
+IDs are positional arguments.
+.SH VERBS
+.TP
+.B status
+Reads the state of the sync set\-up and the computers of the group. It changes nothing.
+.TP
+.B setup
+Sets up the instance (its own home directory and a configuration with the notes folder) and enables and starts the user unit
+.BR cetli\-syncthing.service .
+.TP
+.B own\-id
+Prints the ID of this computer.
+.TP
+.B host
+Waits for one computer that wants to join, shows it, and accepts exactly the ID named on standard input
+(one line:
+.BI "accept " ID ).
+It stops at once when standard input ends.
+.TP
+.B join
+Reads the ID of the other computer from standard input (one line) and adds it. The ID is not an argument.
+.TP
+.B finish
+Ends an open removal. It is meant to be run when the user has confirmed that.
+.TP
+.B harden
+Takes the right to introduce other computers away from computers that only came in through another one.
+It never deletes anything.
+.TP
+.B reset
+Goes back to "not set up": stops and disables the unit and moves the instance directory aside under a time\-stamped name.
+It deletes nothing. The notes are not touched; only the marker of the sync folder in the notes folder is taken away.
+.TP
+.B ensure
+The quiet check that
+.B cetli
+makes once when it starts on a computer that is set up: it starts the sync program only when it is stopped and its unit is enabled,
+and does nothing otherwise.
+.TP
+.BR restart " [" \-\-enable ]
+Starts the user unit again when the sync program does not answer. It touches no data.
+A unit that was switched off by the user is left off, unless
+.B \-\-enable
+is given.
+.TP
+.BI forget " ID"
+Removes one computer that the user still has.
+.TP
+.BR "forget \-\-all" " [" \-\-stop ]
+Removes all computers and shares. It never removes the folder or a file. With
+.B \-\-stop
+the unit is stopped and switched off as well.
+.TP
+.BI revoke " ID" ...
+Removes a lost, stolen or unknown computer (the first ID) from the group, and with it the other IDs given, which the user marked as
+"not mine".
+.TP
+.BI promote " ID" ...
+Lets computers that were accepted directly introduce other computers.
+.TP
+.BI ack " ID" ...
+.TP
+.B ack \-\-all
+Marks computers as seen. Only the state file of the engine changes.
+.SH OPTIONS
+.TP
+.B \-\-all
+With
+.B forget
+and
+.BR ack :
+all computers instead of the IDs.
+.TP
+.B \-\-stop
+With
+.BR "forget \-\-all" :
+stop and switch off the unit as well.
+.TP
+.B \-\-enable
+With
+.BR restart :
+switch on a unit that was switched off.
+.SH EXIT STATUS
+.TP
+.B 0
+The call ended with a
+.B result
+line.
+.TP
+.B 1
+The call ended with an
+.B error
+line.
+.TP
+.B 2
+The command line is not one of the above. This line is printed on standard error:
+.IP
+.nf
+usage: cetli\-sync status|setup|own\-id|host|join|finish|harden|reset | restart [\-\-enable] | ensure | forget <ID>|\-\-all [\-\-stop] | revoke|promote <ID>... | ack <ID>...|\-\-all
+.fi
+.SH FILES
+.TP
+.I \(ti/.local/state/cetli/syncthing
+The home directory of the Syncthing instance of cetli, with the state file of the engine
+.RI ( cetli\-sync\-state.json ).
+.TP
+.I $XDG_DATA_HOME/cetli/notes
+The notes folder that is shared (\fI\(ti/.local/share/cetli/notes\fR if XDG_DATA_HOME is not set).
+.TP
+.I /usr/lib/systemd/user/cetli\-syncthing.service
+The user unit that runs the instance.
+.SH SEE ALSO
+.BR cetli (1)

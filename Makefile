@@ -11,7 +11,7 @@
 #   make check-complete        app/main.js and the extension are in the tree (an RPM without them is a skeleton)
 #   make check                 all of the above except check-complete
 #   make                       compile the catalogs and generate the desktop files, the metainfo and the launcher
-#   make install DESTDIR= PREFIX=/usr [USERUNITDIR=/usr/lib/systemd/user]
+#   make install DESTDIR= PREFIX=/usr [USERUNITDIR=/usr/lib/systemd/user] [MANDIR=/usr/share/man]
 #   make clean
 #
 # VERSION is the one source of the version number: this file, the metainfo and the metadata.json of the extension
@@ -33,6 +33,7 @@ LIBEXECDIR ?= $(PREFIX)/libexec
 USERUNITDIR ?= $(PREFIX)/lib/systemd/user
 SYSCONFDIR ?= /etc
 LOCALEDIR  ?= $(DATADIR)/locale
+MANDIR     ?= $(DATADIR)/man
 INSTALL    ?= install
 
 # The date of the release entry of the metainfo: the build date of the package when rpmbuild gives
@@ -165,6 +166,8 @@ install: all
 	$(INSTALL) -D -m 0644 $(BUILD)/$(APP_ID).metainfo.xml '$(DESTDIR)$(DATADIR)/metainfo/$(APP_ID).metainfo.xml'
 	$(INSTALL) -D -m 0644 data/icons/hicolor/scalable/apps/$(APP_ID).svg \
 	    '$(DESTDIR)$(DATADIR)/icons/hicolor/scalable/apps/$(APP_ID).svg'
+	$(INSTALL) -D -m 0644 data/$(NAME).1 '$(DESTDIR)$(MANDIR)/man1/$(NAME).1'
+	$(INSTALL) -D -m 0644 data/$(NAME)-sync.1 '$(DESTDIR)$(MANDIR)/man1/$(NAME)-sync.1'
 	$(INSTALL) -D -m 0755 data/cetli-enable-extension '$(DESTDIR)$(LIBEXECDIR)/$(NAME)/enable-extension'
 	$(INSTALL) -D -m 0644 $(BUILD)/$(APP_ID).enable-extension.desktop \
 	    '$(DESTDIR)$(SYSCONFDIR)/xdg/autostart/$(APP_ID).enable-extension.desktop'

@@ -61,7 +61,7 @@ that each user can turn off, see the README).
 # "pot" writes po/cetli.pot from the sources (the template is made in the build, not only read)
 
 %install
-%make_install PREFIX=%{_prefix} SYSCONFDIR=%{_sysconfdir} LIBEXECDIR=%{_libexecdir} LOCALEDIR=%{_datadir}/locale USERUNITDIR=%{_userunitdir}
+%make_install PREFIX=%{_prefix} SYSCONFDIR=%{_sysconfdir} LIBEXECDIR=%{_libexecdir} LOCALEDIR=%{_datadir}/locale USERUNITDIR=%{_userunitdir} MANDIR=%{_mandir}
 %find_lang %{name}
 
 %check
@@ -100,6 +100,8 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/%{app_id}.meta
 %doc README.md
 %{_bindir}/%{name}
 %{_bindir}/%{name}-sync
+%{_mandir}/man1/%{name}.1*
+%{_mandir}/man1/%{name}-sync.1*
 %{_userunitdir}/%{name}-syncthing.service
 %{_datadir}/%{name}/
 %{_libexecdir}/%{name}/

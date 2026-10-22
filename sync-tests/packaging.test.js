@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {BACKEND_EXE, DEDICATED_HOME_REL, UNIT_NAME} from '../sync/paths.js';
+import {VERBS} from '../sync/protocol.js';
 
 const read = f => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 const strip = t => t.replace(/^#.*$/gm, '');
@@ -175,4 +176,43 @@ test('1.0.1: the comment on the user unit scriptlets says what the macros contai
     assert.match(comments, /systemd-update-helper remove-user-units/);
     assert.match(comments, /not on an update/);
     assert.match(spec, /^# Intended: [^\n]*empty-%%postun\.\n%postun\n%systemd_user_postun /m);
+});
+
+// 1.0.1: the man pages. Their text follows the code and the measured `--help` output; these tests tie the lists in the pages to the lists in the code.
+const unroff = t => t.replace(/\\-/g, '-').replace(/\\\(ti/g, '~');
+
+test('1.0.1: the Makefile installs cetli.1 and cetli-sync.1 into MANDIR/man1 and the spec passes %{_mandir} and lists both in %files', () => {
+    assert.match(make, /^MANDIR\s+\?= \$\(DATADIR\)\/man$/m);
+    assert.match(make, /\$\(INSTALL\) -D -m 0644 data\/\$\(NAME\)\.1 '\$\(DESTDIR\)\$\(MANDIR\)\/man1\/\$\(NAME\)\.1'/);
+    assert.match(make, /\$\(INSTALL\) -D -m 0644 data\/\$\(NAME\)-sync\.1 '\$\(DESTDIR\)\$\(MANDIR\)\/man1\/\$\(NAME\)-sync\.1'/);
+    assert.match(specCode, /^%make_install .* MANDIR=%\{_mandir\}$/m);
+    assert.match(specCode, /^%\{_mandir\}\/man1\/%\{name\}\.1\*$/m);
+    assert.match(specCode, /^%\{_mandir\}\/man1\/%\{name\}-sync\.1\*$/m);
+});
+
+test('1.0.1: cetli-sync.1 names exactly the verbs and flags of the engine and carries the usage line of sync/main.js', () => {
+    const page = read('data/cetli-sync.1');
+    const synopsis = unroff(page.slice(page.indexOf('.SH SYNOPSIS'), page.indexOf('.SH DESCRIPTION')));
+    const used = new Set([...synopsis.matchAll(/^\.B cetli-sync ([a-z-]+)/gm)].map(m => m[1]));
+    used.delete('verb');
+    assert.deepEqual([...used].sort(), [...VERBS].sort(), 'every verb, and no other word, in the synopsis');
+    const verbs = unroff(page.slice(page.indexOf('.SH VERBS'), page.indexOf('.SH OPTIONS')));
+    const described = new Set([...verbs.matchAll(/^\.(?:B|BR|BI) "?([a-z-]+)(?:[ "]|$)/gm)].map(m => m[1]).filter(w => VERBS.includes(w)));
+    assert.deepEqual([...described].sort(), [...VERBS].sort(), 'every verb is described');
+    const flags = new Set(unroff(page).match(/--[a-z]+/g));
+    assert.deepEqual([...flags].sort(), ['--all', '--enable', '--stop']);
+    const usage = read('sync/main.js').match(/printerr\('(usage: [^']+)'\)/)[1];
+    assert.equal(unroff(page).includes(usage), true, 'the usage line of the engine, word for word');
+    assert.match(page, /^\.B 0\n/m);
+    assert.match(page, /^\.B 1\n/m);
+    assert.match(page, /^\.B 2\n/m);
+});
+
+test('1.0.1: cetli.1 describes --autostart with the text of the program and lists the GLib and GApplication options that `cetli --help --help-all` showed, nothing else', () => {
+    const page = unroff(read('data/cetli.1'));
+    const text = read('app/application.js').match(/add_main_option\('autostart', 0, GLib\.OptionFlags\.NONE, GLib\.OptionArg\.NONE, '([^']+)'/)[1];
+    assert.equal(page.includes(text.replace(/\.$/, '') + '.'), true, 'the help text of the option is the first sentence of its entry');
+    assert.deepEqual([...new Set(page.match(/--[a-z-]+/g))].sort(), ['--autostart', '--gapplication-service', '--help', '--help-all', '--help-gapplication']);
+    assert.match(page, /^\.BR -h ", " --help$/m);
+    assert.equal(read('app/application.js').match(/add_main_option\(/g).length, 1, 'the program has one option of its own');
 });

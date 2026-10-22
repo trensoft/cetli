@@ -1,0 +1,61 @@
+.\" SPDX-License-Identifier: GPL-3.0-or-later
+.\" The text follows the output of `cetli --help --help-all` (app/application.js: add_main_option, GLib and GApplication options), the README and the spec.
+.TH CETLI 1 "" "cetli"
+.SH NAME
+cetli \- small notes on the GNOME desktop that sync between your computers
+.SH SYNOPSIS
+.B cetli
+.RB [ \-\-autostart ]
+.SH DESCRIPTION
+.B cetli
+keeps short notes in small windows on the GNOME desktop.
+Every note is one plain file in a folder, so the folder can be kept in step between computers with a tool such as Syncthing.
+The sync window of cetli (menu: Sync) sets up a Syncthing instance of its own after you press a button; it uses
+.BR cetli\-sync (1)
+for that.
+If two computers change the same note before they meet, cetli keeps both versions.
+.PP
+The package also holds a GNOME Shell extension that puts the note windows back where they were.
+.SH OPTIONS
+.TP
+.B \-\-autostart
+Start as at login: open only the notes that were left open.
+No new empty note is made, the list of all notes and the first\-start sync window are not shown, and when no note was open the program
+ends quietly.
+If cetli already runs, this call does nothing.
+The package starts cetli this way at login of a GNOME session (see
+.BR FILES ).
+.TP
+.BR \-h ", " \-\-help
+Show help options.
+.TP
+.B \-\-help\-all
+Show all help options.
+.TP
+.B \-\-help\-gapplication
+Show GApplication options.
+.TP
+.B \-\-gapplication\-service
+Enter GApplication service mode (use from D\-Bus service files).
+.SH FILES
+.TP
+.I $XDG_DATA_HOME/cetli/notes
+The notes, one file per note (\fI\(ti/.local/share/cetli/notes\fR if XDG_DATA_HOME is not set).
+.TP
+.I $XDG_DATA_HOME/cetli/backup
+Versions of a note that left the notes folder without another copy are kept here.
+.TP
+.I $XDG_STATE_HOME/cetli/layout.json
+Where the note windows were (\fI\(ti/.local/state/cetli/layout.json\fR if XDG_STATE_HOME is not set). It is not synchronised.
+.TP
+.I /etc/xdg/autostart/io.github.trensoft.cetli.desktop
+The start at login (\fBcetli \-\-autostart\fR).
+To turn it off for one user, put a file with the same name into
+.I \(ti/.config/autostart
+that holds
+.BR Hidden=true .
+.TP
+.I /usr/share/gnome-shell/extensions/cetli@trensoft.local/
+The GNOME Shell extension.
+.SH SEE ALSO
+.BR cetli\-sync (1)
