@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Runs the real extension.js against fakes of the GNOME APIs (see stubs/). This proves the logic of the extension;
-// it does not prove how mutter 47-49 behaves.
+// it does not prove how mutter 47-51 behaves.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {beforeEach, test} from 'node:test';

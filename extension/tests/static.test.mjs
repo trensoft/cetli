@@ -22,7 +22,7 @@ test('metadata.json', () => {
     const m = JSON.parse(read('metadata.json'));
     assert.equal(m.uuid, 'cetli@trensoft.local');
     assert.equal(path.basename(dir), m.uuid, 'the directory is named after the uuid');
-    assert.deepEqual(m['shell-version'], ['47', '48', '49']);
+    assert.deepEqual(m['shell-version'], ['47', '48', '49', '50', '51']);
     assert.equal(m.name, 'cetli');
     assert.equal(m['settings-schema'], undefined, 'no GSettings');
     assert.equal(m['session-modes'], undefined, 'nothing runs on the lock screen');

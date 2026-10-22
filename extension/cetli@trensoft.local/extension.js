@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// cetli: a thin GNOME Shell extension (47-49, ES module). A Wayland client cannot place its own window, so this puts
+// cetli: a thin GNOME Shell extension (47-51, ES module). A Wayland client cannot place its own window, so this puts
 // each cetli note window on the rectangle saved in ~/.local/state/cetli/layout.json when it appears, and saves the
 // rectangle again when the user moves or resizes it. It draws nothing, shows no text, starts no process, uses no
 // network, and reads and writes nothing but that one file. Every entry point catches its exceptions: nothing may
