@@ -121,10 +121,10 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/%{app_id}.meta
 
 * Tue Oct 20 2026 TrenSoft <trensoft@fedoraproject.org> - 1.0.0-1
 - Update to 1.0.0
-- Saving a note no longer overwrites a version that the sync program delivers at the same moment; that version is kept in backup/
+- Fix: saving a note no longer overwrites a version that the sync program delivers at the same moment; where the file system can swap files atomically, a version cetli had not read is kept in backup/
 
 * Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.8-2
-- Add systemd user unit scriptlets; trim spec comments and changelog (review feedback)
+- Add systemd user unit scriptlets for cetli-syncthing.service
 
 * Mon Oct 19 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.8-1
 - New: cetli starts when you log in to GNOME and opens the notes that were left open (XDG autostart entry, runs `cetli --autostart`)
@@ -162,7 +162,7 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/%{app_id}.meta
 - Fix: a note with a custom colour drew black text when it started from its file
 
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.3-1
-- No change to the application; tests only
+- No change to the application; same program as 0.2.2, only the version number differs
 
 * Sun Oct 18 2026 TrenSoft <trensoft@fedoraproject.org> - 0.2.2-1
 - Menu rearranged: a "+" button for a new note, a colour grid, the All notes window with search

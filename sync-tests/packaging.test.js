@@ -216,3 +216,12 @@ test('1.0.1: cetli.1 describes --autostart with the text of the program and list
     assert.match(page, /^\.BR -h ", " --help$/m);
     assert.equal(read('app/application.js').match(/add_main_option\(/g).length, 1, 'the program has one option of its own');
 });
+
+test('1.0.1: the three old %changelog lines carry the corrected text of the release manager, and the changelog has no % in its text', () => {
+    const log = spec.slice(spec.indexOf('%changelog\n'));
+    assert.equal(log.includes('- Add systemd user unit scriptlets for cetli-syncthing.service\n'), true);
+    assert.equal(log.includes('- No change to the application; same program as 0.2.2, only the version number differs\n'), true);
+    assert.equal(log.includes('- Fix: saving a note no longer overwrites a version that the sync program delivers at the same moment; where the file system can swap files atomically, a version cetli had not read is kept in backup/\n'), true);
+    assert.equal(/trim spec comments|tests only|^- Saving a note no longer/m.test(log), false, 'the old texts are gone');
+    assert.equal(/%/.test(log.replace(/^%changelog\n/, '')), false, 'a % in a changelog line would be a macro');
+});
