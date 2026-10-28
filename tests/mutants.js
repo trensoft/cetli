@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Negative control: each mutant breaks ONE rule of the core in a throwaway copy; the suite must then FAIL.
 // usage: node tests/mutants.js [<src dir> <tests dir>]   (run.sh calls it on the clean copy)
+// CETLI_MUTANT_MEM_MB: memory limit of one suite run in MB (default 512, 0 = off); CETLI_MUTANT_TIMEOUT_MS: time limit (default 60000)
 // A mutant whose search text is not found exactly once is reported as BROKEN (a mutant that silently changes nothing
 // would prove nothing).
 import fs from 'node:fs';
@@ -42,8 +43,8 @@ const MUTANTS = [
     {id: 'M14', rule: '2.6: copies are written WITH the OVERWRITE flag', file: 'store.js',
         find: "const r = await this._install(mainName(copy.id), copy, {overwrite: false});", repl: "const r = await this._install(mainName(copy.id), copy, {overwrite: true});"},
     {id: 'M15', rule: '3 (4)/2.5: a write is remembered in the own-write filter BEFORE it succeeded', file: 'store.js',
-        find: "const tmp = `${this.dirs.tmp}/${this.p.randomUuid()}.tmp`;\n        try {\n            await this.fs.writeTmp(tmp, rec.bytes);",
-        repl: "const tmp = `${this.dirs.tmp}/${this.p.randomUuid()}.tmp`;\n        if (own) this._ownWrites.set(rec.id, rec.v);\n        try {\n            await this.fs.writeTmp(tmp, rec.bytes);"},
+        find: "const tmp = `${this.dirs.tmp}/${this.p.randomUuid()}.${swap ? 'x' : 'tmp'}`;\n        try {\n            await this.fs.writeTmp(tmp, rec.bytes);",
+        repl: "const tmp = `${this.dirs.tmp}/${this.p.randomUuid()}.${swap ? 'x' : 'tmp'}`;\n        if (own) this._ownWrites.set(rec.id, rec.v);\n        try {\n            await this.fs.writeTmp(tmp, rec.bytes);"},
     {id: 'M16', rule: '3 (4): the result of a resolution is filtered as an own-write echo', file: 'store.js',
         find: "const r = await this._install(mainName(x), w.rec, {overwrite: s !== null, expect: s});", repl: "const r = await this._install(mainName(x), w.rec, {overwrite: s !== null, expect: s, own: true});"},
     {id: 'M17', rule: '2.1: the order picks the SMALLEST version', file: 'format.js',
@@ -200,14 +201,32 @@ function copyTree(from, to) {
     fs.cpSync(from, to, {recursive: true, filter: p => !p.includes('node_modules')});
 }
 
+// The memory limit of the child (the whole `node --test` tree, every test file is a process of its own). RLIMIT_DATA
+// (`ulimit -d`) counts the private writable memory of a process, off-heap Buffers included (`--max-old-space-size` would
+// not see a readFileSync of /dev/zero) and not the address space V8 only reserves (`ulimit -v` would need ~4 GB of room).
+// Measured on the unmutated suite (node 22): the highest resident set of a test process is 97 MB; the suite passes with
+// 128 MB, fails with 96 MB, hangs with 64 MB. The default is 512 MB. CETLI_MUTANT_MEM_MB=0 switches the limit off.
+const MEM_LIMIT_MB = process.env.CETLI_MUTANT_MEM_MB === undefined ? 512 : Number(process.env.CETLI_MUTANT_MEM_MB);
+// what a process that hit the limit leaves behind: V8 or libstdc++ abort text, SIGABRT/SIGTRAP of the test file
+const MEM_LIMIT_HIT = /std::bad_alloc|Allocation failed|out of memory|Array buffer allocation failed|Cannot allocate memory/i;
+
 function run(dir) {
-    const r = spawnSync(process.execPath, ['--test', ...fs.readdirSync(path.join(dir, 'tests')).filter(f => f.endsWith('.test.js')).map(f => `tests/${f}`)],
-        {cwd: dir, encoding: 'utf8', env: {...process.env, CETLI_MUTANT_RUN: '1'}, maxBuffer: 1 << 28, timeout: Number(process.env.CETLI_MUTANT_TIMEOUT_MS) || 60000, killSignal: 'SIGKILL'});
+    const tests = fs.readdirSync(path.join(dir, 'tests')).filter(f => f.endsWith('.test.js')).map(f => `tests/${f}`);
+    const limited = Number.isFinite(MEM_LIMIT_MB) && MEM_LIMIT_MB > 0;
+    // no core dump of a killed child (it would be the size of the limit)
+    const [cmd, args] = limited
+        ? ['/bin/sh', ['-c', 'ulimit -c 0; ulimit -d "$1" && shift && exec "$@"', 'sh', String(Math.floor(MEM_LIMIT_MB * 1024)), process.execPath, '--test', ...tests]]
+        : [process.execPath, ['--test', ...tests]];
+    const r = spawnSync(cmd, args,
+        {cwd: dir, encoding: 'utf8', env: {...process.env, CETLI_MUTANT_RUN: '1'}, maxBuffer: 1 << 25, timeout: Number(process.env.CETLI_MUTANT_TIMEOUT_MS) || 60000, killSignal: 'SIGKILL'});
     const failed = [...r.stdout.matchAll(/^not ok \d+ - (.*)$/gm)].map(m => m[1]);
     const pass = Number(/^# pass (\d+)/m.exec(r.stdout)?.[1] ?? NaN);
     // a hang (the mutant opens a FIFO and blocks) is a failure of the suite too
     if (r.error?.code === 'ETIMEDOUT')
         failed.push('(suite hung and was killed after the timeout)');
+    // so is a process that ate its memory limit (the mutant reads /dev/zero as a file)
+    if (limited && MEM_LIMIT_HIT.test(`${r.stdout}\n${r.stderr}`))
+        failed.push('(suite exceeded the memory limit)');
     return {failed, pass, status: r.status};
 }
 
