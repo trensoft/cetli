@@ -28,6 +28,7 @@ export class SyncNotice {
         for (const w of [heading, this.textLabel, this.folderLabel, this.pathLabel, this.button])
             box.append(w);
         this.win.set_child(box);
+        this.win.set_focus(this.button);           // not the selectable path: its caret would show
         this.win.connect('close-request', () => {
             this._onClose();
             return false;
