@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Builds the Flatpak of cetli (io.github.trensoft.cetli.yml) and checks it the way Flathub does. The tests of the code are in tests.yml.
+# The container is the Flathub image of the GNOME 51 runtime (the runtime of the manifest); flatpak-builder-lint, flatpak-builder,
+# xvfb-run and appstreamcli come from the image (ghcr.io/flathub-infra/flatpak-github-actions, built from flathub-infra/actions-images).
+name: flatpak
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  flatpak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    container:
+      # gnome-51 resolved to the index sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210 (ghcr.io, 2026-11-11)
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: lint the manifest
+        run: flatpak-builder-lint manifest io.github.trensoft.cetli.yml
+
+      # flatpak/flatpak-github-actions v6.8: builds into flatpak_app, the local repository is repo/, the bundle is cetli.flatpak.
+      - name: build
+        id: build
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3  # v6.8
+        with:
+          manifest-path: io.github.trensoft.cetli.yml
+          bundle: cetli.flatpak
+          arch: x86_64
+
+      - name: lint the repository (appstream, desktop file, icons, finish-args as built)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: flatpak-builder-lint repo repo
+
+      - name: validate the metainfo
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          if command -v appstreamcli >/dev/null; then
+            appstreamcli validate --no-net flatpak_app/files/share/metainfo/io.github.trensoft.cetli.metainfo.xml
+          else
+            echo "::warning::appstreamcli is not in the container; the metainfo is checked by the repository lint only"
+          fi
+
+      # The built application in its sandbox under a virtual X server (no Wayland compositor here): it must still run after 10 s and
+      # leave with exit code 0 on SIGTERM (app/application.js: SIGTERM is a clean quit). Only an application that starts is shown;
+      # no window is looked at and nothing is clicked.
+      - name: start the application headless
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          xvfb-run --auto-servernum timeout 120 flatpak-builder --run flatpak_app io.github.trensoft.cetli.yml sh -c '
+            cetli &
+            pid=$!
+            sleep 10
+            kill -0 "$pid" || { echo "cetli is not running after 10 s"; wait "$pid"; echo "exit code $?"; exit 1; }
+            kill -TERM "$pid"
+            wait "$pid"
+            rc=$?
+            echo "cetli exit code $rc"
+            exit "$rc"
+          '
