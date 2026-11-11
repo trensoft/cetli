@@ -44,3 +44,12 @@ export function syncMarked({markerExists, notesDir, homeDir}) {
         return true;
     }
 }
+
+// What the first start does about the sync (PLAN-WIZARD 0H.11, and the Flatpak): 'wizard' = open the sync window at its consent page, 'notice' =
+// the Flatpak has no sync engine, so it opens the one-time notice instead (app/sync-notice.js), 'none' = nothing. The same conditions
+// for both (shouldShowFirstStart: no "Later" written, no `.stfolder` marker: a folder that Syncthing already syncs needs no notice).
+export function firstStartAction({flatpak, ...rest}) {
+    if (!shouldShowFirstStart(rest))
+        return 'none';
+    return flatpak === true ? 'notice' : 'wizard';
+}

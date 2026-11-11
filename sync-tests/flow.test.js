@@ -312,7 +312,7 @@ test('the product turns the first-start sync window on in main.js; the notes tes
     assert.match(readFileSync(new URL('../app/main.js', import.meta.url), 'utf8'), /createApp\(\{firstStartSync: true\}\)/);
     const app = readFileSync(new URL('../app/application.js', import.meta.url), 'utf8');
     assert.match(app, /firstStartSync = false/);
-    assert.match(app, /firstStartSync && wantsFirstStart/);
+    assert.match(app, /if \(!firstStartSync\)\s+return;\s+const action = startAction\(\{dirs, flatpak, homeDir\}\);/);
 });
 
 test('groupView: a list the engine did not read (over the cap) is over_limit with no rows: overCap, only "Stop syncing" is left', () => {

@@ -47,6 +47,16 @@ msgstr ""
 "Ha két számítógép ugyanazt a jegyzetet módosítja, mielőtt találkoznának, a "
 "cetli mindkét változatot megőrzi, és a másodikat külön jegyzetként mutatja."
 
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"The sync itself is done by Syncthing, a separate program that cetli does not "
+"include: install it from your distribution or from Flathub, and add the "
+"notes folder to it."
+msgstr ""
+"A szinkront maga a Syncthing végzi, ez külön program, amelyet a cetli nem "
+"tartalmaz: telepítsd a disztribúciódból vagy a Flathubról, és add hozzá a "
+"jegyzetek mappáját."
+
 #: app/strings.js
 msgid "New note"
 msgstr "Új jegyzet"
@@ -343,6 +353,28 @@ msgstr ""
 "A szinkronizáláshoz a Syncthing program kell, és az nincs telepítve ezen a "
 "számítógépen. Telepítsd az alábbi parancsokkal, aztán nyomd meg az "
 "Ellenőrzés újra gombot. A cetli nem futtatja le őket helyetted."
+
+#: app/strings.js
+msgid "cetli does not sync by itself"
+msgstr "A cetli magától nem szinkronizál"
+
+#: app/strings.js
+msgid ""
+"To keep your notes in step between your computers, install Syncthing on this "
+"computer. It is in the software sources of your distribution (for example: "
+"dnf install syncthing, or apt install syncthing) and on Flathub."
+msgstr ""
+"Ha azt szeretnéd, hogy a jegyzeteid szinkronban maradjanak a számítógépeid "
+"között, telepítsd a Syncthinget erre a számítógépre. Megtalálod a "
+"disztribúciód szoftverforrásaiban (például: dnf install syncthing, vagy apt "
+"install syncthing), és a Flathubon is."
+
+#: app/strings.js
+msgid ""
+"Then add this folder in Syncthing and share it with your other computers:"
+msgstr ""
+"Utána add hozzá ezt a mappát a Syncthingben, és oszd meg a többi "
+"számítógéppel:"
 
 #: app/strings.js
 msgid "Set up sync"

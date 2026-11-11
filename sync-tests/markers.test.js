@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {markerPaths} from '../sync/markers.js';
-import {DISMISSED_TEXT, shouldShowFirstStart, syncMarked} from '../app/sync-start.js';
+import {DISMISSED_TEXT, firstStartAction, shouldShowFirstStart, syncMarked} from '../app/sync-start.js';
 
 const HOME = '/home/u';
 const NOTES = '/home/u/.local/share/cetli/notes';
@@ -82,4 +82,45 @@ test('0.2.5.1: both starts of application.js go through synced() and open the li
         const gate = body.slice(0, body.indexOf('\n    }\n'));
         assert.match(gate, /if \(synced\(\)\)\s+showAllNotes\(\);[^\n]*\n\s+else\s+await newNote\(null\);/, fn);
     }
+});
+
+// The Flatpak: no sync engine in the sandbox, so the first start shows a one-time notice instead of the sync window.
+test('Flatpak first start: no "Later", no marker: the notice; not a Flatpak: the sync window as before', () => {
+    assert.equal(firstStartAction({flatpak: true, stateText: null, markerExists: none, ...ARGS}), 'notice');
+    assert.equal(firstStartAction({flatpak: true, stateText: '{"version":1,"dismissed":false}', markerExists: none, ...ARGS}), 'notice');
+    for (const flatpak of [false, undefined, null, 'yes', 1])
+        assert.equal(firstStartAction({flatpak, stateText: null, markerExists: none, ...ARGS}), 'wizard', String(flatpak));
+});
+
+test('Flatpak first start: closed once (the "Later" file), a synchronised folder (a marker on the chain), or an unreadable state: nothing', () => {
+    for (const flatpak of [true, false]) {
+        assert.equal(firstStartAction({flatpak, stateText: DISMISSED_TEXT, markerExists: none, ...ARGS}), 'none');
+        assert.equal(firstStartAction({flatpak, stateText: 'not json', markerExists: none, ...ARGS}), 'none');
+        assert.equal(firstStartAction({flatpak, stateText: null, notesDir: 'x', homeDir: HOME, markerExists: none}), 'none');
+        for (const level of markerPaths(NOTES, HOME))
+            assert.equal(firstStartAction({flatpak, stateText: null, markerExists: p => p === level, ...ARGS}), 'none', `${flatpak} ${level}`);
+    }
+});
+
+test('Flatpak first start: the same answer as shouldShowFirstStart for every state, the Flatpak only picks which window', () => {
+    for (const stateText of [null, DISMISSED_TEXT, '{', '{"version":1,"dismissed":false}'])
+        for (const marked of [false, true])
+            for (const flatpak of [false, true]) {
+                const markerExists = () => marked;
+                const want = shouldShowFirstStart({stateText, markerExists, ...ARGS});
+                assert.equal(firstStartAction({flatpak, stateText, markerExists, ...ARGS}) !== 'none', want);
+            }
+});
+
+test('Flatpak: application.js asks the environment, skips the start-up check of the sync program, and the notice branch never opens the sync window', () => {
+    const src = readFileSync(new URL('../app/application.js', import.meta.url), 'utf8');
+    assert.match(src, /flatpak = isFlatpak\(\{FLATPAK_ID: GLib\.getenv\('FLATPAK_ID'\)\}\)\} = \{\}\) \{/);
+    const ensure = src.slice(src.indexOf('function ensureSync()'));
+    assert.match(ensure.slice(0, ensure.indexOf('\n    }\n')), /if \(startupEnsure !== null \|\| flatpak\)\s+return;/);
+    const first = src.slice(src.indexOf('function maybeShowFirstStartSync()'));
+    const body = first.slice(0, first.indexOf('\n    }\n'));
+    assert.match(body, /startAction\(\{dirs, flatpak, homeDir\}\)/);
+    assert.match(body, /if \(action === 'wizard'\)\s+showSync\(\{firstStart: true\}\);\s+else if \(action === 'notice'\)\s+showSyncNotice\(\);/);
+    const notice = src.slice(src.indexOf('function showSyncNotice()'));
+    assert.equal(/showSync\(|SyncWizard/.test(notice.slice(0, notice.indexOf('\n    }\n'))), false);
 });

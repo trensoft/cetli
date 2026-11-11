@@ -9,6 +9,7 @@
   <description>
     <p>cetli keeps short notes in small windows on the GNOME desktop. Every note is one plain file in a folder, so the folder can be kept in step between your computers with a tool such as Syncthing.</p>
     <p>If two computers change the same note before they meet, cetli keeps both versions and shows the second one as a note of its own.</p>
+    <p>The sync itself is done by Syncthing, a separate program that cetli does not include: install it from your distribution or from Flathub, and add the notes folder to it.</p>
   </description>
   <developer id="hu.trensoft">
     <name>TrenSoft</name>

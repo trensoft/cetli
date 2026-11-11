@@ -40,6 +40,13 @@ msgid ""
 "versions and shows the second one as a note of its own."
 msgstr ""
 
+#: data/io.github.trensoft.cetli.metainfo.xml.in
+msgid ""
+"The sync itself is done by Syncthing, a separate program that cetli does not "
+"include: install it from your distribution or from Flathub, and add the "
+"notes folder to it."
+msgstr ""
+
 #: app/strings.js
 msgid "New note"
 msgstr ""
@@ -328,6 +335,22 @@ msgid ""
 "Sync needs the Syncthing program, and it is not installed on this computer. "
 "Install it with the commands below, then press Check again. cetli does not "
 "run them for you."
+msgstr ""
+
+#: app/strings.js
+msgid "cetli does not sync by itself"
+msgstr ""
+
+#: app/strings.js
+msgid ""
+"To keep your notes in step between your computers, install Syncthing on this "
+"computer. It is in the software sources of your distribution (for example: "
+"dnf install syncthing, or apt install syncthing) and on Flathub."
+msgstr ""
+
+#: app/strings.js
+msgid ""
+"Then add this folder in Syncthing and share it with your other computers:"
 msgstr ""
 
 #: app/strings.js

@@ -130,6 +130,12 @@ export const syncMissingText = () => _('Sync needs the Syncthing program, and it
 // The commands are not translated; the window only shows them and offers to copy them.
 export const syncInstallCommands = 'sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm\nsudo dnf install syncthing';
 
+// The Flatpak has no sync engine of its own (the sync program runs on the computer, outside the sandbox): at the first start it only says so (app/sync-notice.js).
+export const syncNoticeHeading = () => _('cetli does not sync by itself');
+// The two commands sit inside the sentence; the program and package names stay as they are.
+export const syncNoticeText = () => _('To keep your notes in step between your computers, install Syncthing on this computer. It is in the software sources of your distribution (for example: dnf install syncthing, or apt install syncthing) and on Flathub.');
+export const syncNoticeFolder = () => _('Then add this folder in Syncthing and share it with your other computers:');
+
 export const syncConsentTitle = () => _('Set up sync');
 export const syncConsentText = () => _('This starts Syncthing as a background service for your user and keeps it running at every login. Your computers find each other through public Syncthing servers and relays, which learn that the computers exist (device ID and IP address) but not your notes: those are encrypted between your computers. cetli opens a network port and announces itself on the local network. Nothing is changed until you press the button.');
 export const syncConsentButton = () => _('Set up sync on this computer');

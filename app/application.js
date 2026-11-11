@@ -9,6 +9,7 @@ import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
 
 import {createStore, createWatcher} from '../src/index.js';
+import {isFlatpak} from '../src/dirs.js';
 import * as gio from '../src/gio-layer.js';
 import {
     APP_ID, APP_NAME, COPYRIGHT, DEFAULT_COLOR, DEFAULT_HEIGHT, DEFAULT_WIDTH, DEVELOPER, ISSUE_URL, MAX_SIZE, MIN_SIZE, NOTE_RHEL_RED, WEBSITE,
@@ -17,7 +18,8 @@ import {
 import {AllNotesWindow} from './allnotes.js';
 import {setOpen, shouldOpen, sizeOf, startNotes} from './layoutfile.js';
 import {SyncBridge} from './sync-bridge.js';
-import {notesSynced, wantsFirstStart, writeDismissed} from './sync-hook.js';
+import {notesSynced, startAction, writeDismissed} from './sync-hook.js';
+import {SyncNotice} from './sync-notice.js';
 import {SyncWizard} from './sync-wizard.js';
 import {NoteWindow} from './window.js';
 import * as S from './strings.js';
@@ -66,7 +68,9 @@ function loadCss() {
 // by a test too (a fake bridge replays the engine; the home is where the first-start hook looks for `.stfolder` markers).
 // `firstStartSync`: the product (main.js) turns the first-start sync window on; the tests of the notes leave it off.
 // `autostart`: the start at login (0.2.8), as if `--autostart` was given (the command line sets it too, see handle-local-options).
-export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false, linkPollMs = undefined, autostart: autostartOpt = false} = {}) {
+// `flatpak`: a test gives it; the product asks the environment (FLATPAK_ID). In a Flatpak the sync engine cannot run (the sync program lives on the
+// computer, outside the sandbox): the first start shows a one-time notice instead of the sync window, and the start-up check of the sync program is skipped.
+export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio.platform, bridge = null, homeDir = undefined, firstStartSync = false, linkPollMs = undefined, autostart: autostartOpt = false, flatpak = isFlatpak({FLATPAK_ID: GLib.getenv('FLATPAK_ID')})} = {}) {
     const gtkApp = new Adw.Application({application_id: APP_ID, flags: Gio.ApplicationFlags.DEFAULT_FLAGS});
     let autostart = autostartOpt;
     const store = createStore({fs, platform, dirs, resolveConflicts: true});   // the copies of Syncthing conflicts are resolved by the product; the store default stays off
@@ -74,6 +78,7 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     const version = readVersion();
     const syncBridge = bridge ?? new SyncBridge({log: m => platform.log.warn(m)});
     let syncWin = null;                  // the one sync window, while it is open
+    let syncNotice = null;               // the one Flatpak notice, while it is open
     let startupEnsure = null;            // the quiet start-up check of the sync program (see ensureSync), once per process
     let menu = null;
     let watcher = null;
@@ -125,6 +130,10 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         onSyncClosed: win => {
             if (syncWin === win)
                 syncWin = null;
+        },
+        onNoticeClosed: win => {
+            if (syncNotice === win)
+                syncNotice = null;
         },
         // "Later" on the consent page of the first-start window: the answer is written (no ID, no label), so it does not come back.
         dismissSync: () => {
@@ -240,12 +249,21 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         return syncWin;
     }
 
+    // The Flatpak's first start: what sync needs (Syncthing on the computer) and the folder to give it. Closing it, any way, writes the same "Later" answer as
+    // the sync window's, so it comes once.
+    function showSyncNotice() {
+        if (syncNotice === null)
+            syncNotice = new SyncNotice({ctl, notesDir: dirs.notes});
+        syncNotice.present();
+        return syncNotice;
+    }
+
     // 0.2.7: on a computer whose notes folder is synchronised, the sync program is looked at once when the app starts: a `pkill -f cetli` stops it cleanly and
     // systemd does not start it again, so the sync would stay off until somebody opens the sync window. The engine's `ensure` starts it only when it is
     // stopped (it never touches a running one). In the background, no window, no error shown; the first status of the sync window waits for it, so there is
     // no E_BUSY and no second restart. Once per process (a second activation does not ask again).
     function ensureSync() {
-        if (startupEnsure !== null)
+        if (startupEnsure !== null || flatpak)
             return;
         try {
             if (!synced())
@@ -263,8 +281,13 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
     // user presses the button in the window; a failure here must never block the notes.
     function maybeShowFirstStartSync() {
         try {
-            if (firstStartSync && wantsFirstStart({dirs, homeDir}))
+            if (!firstStartSync)
+                return;
+            const action = startAction({dirs, flatpak, homeDir});
+            if (action === 'wizard')
                 showSync({firstStart: true});
+            else if (action === 'notice')
+                showSyncNotice();
         } catch (e) {
             platform.log.warn(`sync window not opened: ${e?.message ?? e}`);
         }
@@ -460,5 +483,5 @@ export function createApp({dirs = gio.defaultDirs(), fs = gio.fs, platform = gio
         syncBridge.stop();
     });
 
-    return {gtkApp, store, windows, ctl, ready, run: argv => gtkApp.run(argv), showAllNotes, showSync, get allNotes() { return allNotes; }, get syncWindow() { return syncWin; }};
+    return {gtkApp, store, windows, ctl, ready, run: argv => gtkApp.run(argv), showAllNotes, showSync, get allNotes() { return allNotes; }, get syncWindow() { return syncWin; }, get syncNotice() { return syncNotice; }};
 }

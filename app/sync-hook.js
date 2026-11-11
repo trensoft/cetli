@@ -5,7 +5,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
-import {DISMISSED_TEXT, shouldShowFirstStart, syncMarked} from './sync-start.js';
+import {DISMISSED_TEXT, firstStartAction, shouldShowFirstStart, syncMarked} from './sync-start.js';
 
 const STATE_FILE = 'sync-wizard.json';
 const UNREADABLE = '\u0000unreadable';                 // a text that is not JSON: shouldShowFirstStart reads it as "do not show"
@@ -33,6 +33,10 @@ export function writeDismissed(stateDir) {
 
 export function wantsFirstStart({dirs, homeDir = GLib.get_home_dir(), markerExists = p => Gio.File.new_for_path(p).query_exists(null)}) {
     return shouldShowFirstStart({stateText: readWizardState(dirs.state), markerExists, notesDir: dirs.notes, homeDir});
+}
+
+export function startAction({dirs, flatpak, homeDir = GLib.get_home_dir(), markerExists = p => Gio.File.new_for_path(p).query_exists(null)}) {
+    return firstStartAction({flatpak, stateText: readWizardState(dirs.state), markerExists, notesDir: dirs.notes, homeDir});
 }
 
 export function notesSynced({dirs, homeDir = GLib.get_home_dir(), markerExists = p => Gio.File.new_for_path(p).query_exists(null)}) {
