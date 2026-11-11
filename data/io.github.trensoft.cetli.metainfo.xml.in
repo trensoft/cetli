@@ -20,6 +20,12 @@
   <categories>
     <category>Utility</category>
   </categories>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/trensoft/cetli/main/data/screenshots/main.png</image>
+      <caption>Cetli keeps short notes in small coloured windows on the desktop</caption>
+    </screenshot>
+  </screenshots>
   <releases>
     <release version="@VERSION@" date="@RELEASE_DATE@"/>
   </releases>
