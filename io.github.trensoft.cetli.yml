@@ -25,6 +25,10 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --env=CETLI_LOCALEDIR=/app/share/locale
+  # The notes and the state stay where the RPM puts them (src/dirs.js points the application there inside a Flatpak). The grants are the two
+  # directories of cetli only. state holds layout.json (also written by the GNOME Shell extension on the host) and the dedicated Syncthing home.
+  - --filesystem=xdg-data/cetli:create
+  - --filesystem=~/.local/state/cetli:create
 modules:
   - name: cetli
     buildsystem: simple
