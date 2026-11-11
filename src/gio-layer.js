@@ -10,6 +10,7 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import {flatpakHostDirs} from './dirs.js';
 import {FS, FsError} from './fs-error.js';
 
 Gio._promisify(Gio.File.prototype, 'enumerate_children_async', 'enumerate_children_finish');
@@ -177,11 +178,18 @@ export const platform = {
     log: {warn: m => console.warn(`cetli: ${m}`), info: m => console.log(`cetli: ${m}`)},
 };
 
+// In a Flatpak the data and state directories are the host's (src/dirs.js), outside one the ordinary XDG directories.
 export function defaultDirs() {
+    const host = flatpakHostDirs({
+        env: {FLATPAK_ID: GLib.getenv('FLATPAK_ID'), HOST_XDG_DATA_HOME: GLib.getenv('HOST_XDG_DATA_HOME'), HOST_XDG_STATE_HOME: GLib.getenv('HOST_XDG_STATE_HOME')},
+        homeDir: GLib.get_home_dir(),
+    });
+    const data = host?.data ?? GLib.get_user_data_dir();
+    const state = host?.state ?? GLib.get_user_state_dir();
     return {
-        notes: GLib.build_filenamev([GLib.get_user_data_dir(), 'cetli', 'notes']),
-        tmp: GLib.build_filenamev([GLib.get_user_data_dir(), 'cetli', 'tmp']),
-        state: GLib.build_filenamev([GLib.get_user_state_dir(), 'cetli']),
+        notes: GLib.build_filenamev([data, 'cetli', 'notes']),
+        tmp: GLib.build_filenamev([data, 'cetli', 'tmp']),
+        state: GLib.build_filenamev([state, 'cetli']),
     };
 }
 

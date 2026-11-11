@@ -99,3 +99,25 @@ test('exchange: a failed mv is NOT_FOUND when one of the two entries is missing 
     plan.missing = [];
     await assert.rejects(layer.fs.exchange('/t/a.x', '/n/a.json'), e => e instanceof FsError && e.code === FS.NOT_SUPPORTED);
 });
+
+// defaultDirs(): the ordinary XDG directories, and in a Flatpak (FLATPAK_ID) the host's. The fake GLib answers /data and /state for
+// the ordinary ones (what GLib would say inside the sandbox: ~/.var/app/<id>/...), plan.env is the environment, plan.home the home.
+test('defaultDirs: no Flatpak: the XDG directories of GLib, HOST_XDG_* is not looked at', () => {
+    plan.env = {HOST_XDG_DATA_HOME: '/host/data', HOST_XDG_STATE_HOME: '/host/state'};
+    assert.deepEqual(layer.defaultDirs(), {notes: '/data/cetli/notes', tmp: '/data/cetli/tmp', state: '/state/cetli'});
+    plan.env = {FLATPAK_ID: ''};
+    assert.deepEqual(layer.defaultDirs(), {notes: '/data/cetli/notes', tmp: '/data/cetli/tmp', state: '/state/cetli'}, 'an empty FLATPAK_ID is no Flatpak');
+});
+
+test('defaultDirs: Flatpak with HOST_XDG_DATA_HOME and HOST_XDG_STATE_HOME: the host directories', () => {
+    plan.env = {FLATPAK_ID: 'io.github.trensoft.cetli', HOST_XDG_DATA_HOME: '/mnt/d/share', HOST_XDG_STATE_HOME: '/mnt/d/state'};
+    assert.deepEqual(layer.defaultDirs(), {notes: '/mnt/d/share/cetli/notes', tmp: '/mnt/d/share/cetli/tmp', state: '/mnt/d/state/cetli'});
+});
+
+test('defaultDirs: Flatpak without HOST_XDG_*: the XDG defaults under the real home, not the sandbox directories', () => {
+    plan.env = {FLATPAK_ID: 'io.github.trensoft.cetli'};
+    plan.home = '/home/anna';
+    assert.deepEqual(layer.defaultDirs(), {notes: '/home/anna/.local/share/cetli/notes', tmp: '/home/anna/.local/share/cetli/tmp', state: '/home/anna/.local/state/cetli'});
+    plan.env = {FLATPAK_ID: 'io.github.trensoft.cetli', HOST_XDG_DATA_HOME: '/mnt/d/share'};
+    assert.deepEqual(layer.defaultDirs(), {notes: '/mnt/d/share/cetli/notes', tmp: '/mnt/d/share/cetli/tmp', state: '/home/anna/.local/state/cetli'}, 'each variable on its own');
+});

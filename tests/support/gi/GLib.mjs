@@ -35,6 +35,9 @@ export default {
     build_filenamev: parts => parts.join('/'),
     get_user_data_dir: () => '/data',
     get_user_state_dir: () => '/state',
+    get_home_dir: () => plan.home ?? '/home/u',
+    // an unset variable is null, as in GLib; plan.env is the environment of the test
+    getenv: name => plan.env?.[name] ?? null,
     get_real_time: () => 1_700_000_000_000_000,
     uuid_string_random: () => '00000000-0000-4000-8000-000000000000',
     random_int_range: () => 0,
