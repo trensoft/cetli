@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Flatpak manifest of cetli (the GTK application in app/ with the core in src/ and the sync files that app/ imports).
+# Not in the Flatpak: the GNOME Shell extension (extension/), cetli-enable-extension, the autostart entries and cetli-syncthing.service.
+#
+#   flatpak-builder --force-clean --user --install-deps-from=flathub --repo=repo build-dir io.github.trensoft.cetli.yml
+#   flatpak-builder --run build-dir io.github.trensoft.cetli.yml cetli
+#
+# The source is this checkout (type dir), so that a pull request builds its own tree. For Flathub the same file goes into the
+# flathub/io.github.trensoft.cetli repository with the source below replaced by
+#   - type: git
+#     url: https://github.com/trensoft/cetli.git
+#     tag: v<VERSION>
+#     commit: <the commit of the tag>
+# (Flathub does not accept type dir), and RELEASE_DATE changed to the date of that release.
+app-id: io.github.trensoft.cetli
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: cetli
+# app/strings.js reads the catalogs from $CETLI_LOCALEDIR (default /usr/share/locale, which is the runtime's). With separate-locales
+# the flatpak-builder would move them into the .Locale extension; so they stay in /app/share/locale and the variable points there.
+separate-locales: false
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --env=CETLI_LOCALEDIR=/app/share/locale
+modules:
+  - name: cetli
+    buildsystem: simple
+    build-commands:
+      # RELEASE_DATE: the Makefile would use the build date; the date of the release entry in the metainfo is the date of the release
+      # (the newest %changelog entry of packaging/fedora/cetli.spec).
+      - make install PREFIX=/app SYSCONFDIR=/app/etc LIBEXECDIR=/app/libexec USERUNITDIR=/app/lib/systemd/user RELEASE_DATE=2026-10-22
+      # What `make install` puts down that does not belong to the Flatpak: the GNOME Shell extension, the extension set-up helper, the
+      # two XDG autostart entries (a Flatpak is not started from /app/etc/xdg/autostart) and the Syncthing user unit.
+      - rm -rf /app/share/gnome-shell /app/libexec/cetli /app/etc/xdg/autostart /app/lib/systemd
+    sources:
+      - type: dir
+        path: .
+        skip:
+          - .git
+          - .flatpak-builder
+          - build
+          - build-dir
+          - repo

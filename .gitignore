@@ -5,3 +5,8 @@
 *.mo
 /po/*.new
 node_modules/
+
+# flatpak-builder (io.github.trensoft.cetli.yml)
+/.flatpak-builder/
+/build-dir/
+/repo/
