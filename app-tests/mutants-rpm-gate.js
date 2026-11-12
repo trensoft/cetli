@@ -212,6 +212,13 @@ const M = [
     ['W26', '.github/workflows/negative-control.yml', '        env:\n          START_GATE_ENGINE', '        continue-on-error: true\n        env:\n          START_GATE_ENGINE'],
     ['W27', '.github/workflows/negative-control.yml', 'quay.io/centos/centos:stream10 .', 'quay.io/centos/centos:stream10 . || true'],
     ['W28', '.github/workflows/negative-control.yml', '          ref: ${{ github.sha }}\n', ''],
+    // the forms of `if:` that are valid YAML and that `^\s*(- )?if:` did not see (Petra, review of #8)
+    ['W29', '.github/workflows/negative-control.yml', '      - name: The gate must fail', '      -  if: false\n         name: The gate must fail'],
+    ['W30', '.github/workflows/negative-control.yml', '      - name: The gate must fail', '      - "if": false\n        name: The gate must fail'],
+    ['W31', '.github/workflows/negative-control.yml', '    runs-on: ubuntu-24.04', '    "if": false\n    runs-on: ubuntu-24.04'],
+    ['W32', '.github/workflows/start-gate.yml', '      - name: Build the RPM', '      - "if": false\n        name: Build the RPM'],
+    ['W33', '.github/workflows/negative-control.yml', '    runs-on: ubuntu-24.04', "    'if': false\n    runs-on: ubuntu-24.04"],
+    ['W34', '.github/workflows/start-gate.yml', '    runs-on: ubuntu-24.04', "    'if': false\n    runs-on: ubuntu-24.04"],
     // docs
     ['D1', 'docs/RELEASING.md', 'Start gate chroots (the same as the chroots of the COPR project `trensoft/cetli`): `epel-10`, `fedora-43`, `fedora-44`, `fedora-rawhide`.', ''],
     ['D2', 'docs/RELEASING.md', '`fedora-43`, `fedora-44`, `fedora-rawhide`.', '`fedora-43`, `fedora-rawhide`.'],

@@ -70,12 +70,12 @@ again until it turns green: the cause is found, and the change goes through the 
 The script is the rule of the procedure, not a lock: that the tag cannot be pushed with a red or a missing check at all is a setting of the
 repository (a required status check on the four names, a tag rule), which is a decision of the maintainer's side and is not made by this file.
 
-The negative control is `tools/start_gate/negative_control.sh IMAGE TREE`: it copies the tree, puts a start-up error of the 1.0.11 kind into
+The negative control is `tools/start_gate/negative_control.sh IMAGE TREE`: it clones the committed state of the tree (its HEAD), puts a start-up error of the 1.0.11 kind into
 the copy (`app/application.js` calls `GLibUnix.signal_add` for the SIGTERM watch and does not import `GLibUnix`: the imports and the typelibs
 are fine, the call fails the moment the program starts), commits the copy and runs the gate on it. The error is put into the tree it is
 given (the checkout of the commit the run is on), there is no older tree or tag it depends on. It passes only when the gate built the RPM and
 then failed in step (d), with the `ReferenceError: GLibUnix is not defined` of the copy in the log of the program that the probe prints under
-the `START-GATE d FAIL` line, while (rpm), (a), (b) and (c) passed (a gate that passes is soft; a gate that fails for another reason, such as no
+the `START-GATE d FAIL` line, while (rpm), (a), (b) and (c) passed, each a line of its own in the output of stage 2 (a gate that passes is soft; a gate that fails for another reason, such as no
 network, a build error, or a (d) that fails with another message, proves nothing). The workflow `negative-control.yml` runs it for the image of
 `epel-10`, on the checkout of the commit the run is on (by its SHA); start it with "Run workflow" (`workflow_dispatch`) when the gate is changed
 and before the first tag that depends on a changed gate.

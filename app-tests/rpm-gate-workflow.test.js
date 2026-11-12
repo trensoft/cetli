@@ -58,12 +58,12 @@ test('the gate runs on pull requests, on main and on tags, and not by hand; the 
 });
 
 test('the gate file has no `if:` anywhere: a skipped job would leave a check named with the raw matrix template, and the negative control is not in it', () => {
-    assert.doesNotMatch(code(WORKFLOW), /^\s*(- )?if:/m);
+    assert.doesNotMatch(code(WORKFLOW), /^\s*(?:-\s+)?["']?if["']?\s*:/m);
     assert.doesNotMatch(code(WORKFLOW), /negative_control|negative-control/);
 });
 
 test('the negative control has no `if:` either, on its job or on a step: a skipped control is a green check on a control that did not run', () => {
-    assert.doesNotMatch(code(CONTROL), /^\s*(- )?if:/m);
+    assert.doesNotMatch(code(CONTROL), /^\s*(?:-\s+)?["']?if["']?\s*:/m);
 });
 
 const jobsOf = text => text.split(/^  (?=[a-z-]+:\n)/m).slice(1).filter(j => /^\w[\w-]*:\n/.test(j) && /runs-on/.test(j));
