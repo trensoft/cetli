@@ -76,6 +76,12 @@ const M = [
     ['N10', 'negative_control.sh', '--all --message', '--message'],
     ['N11', 'negative_control.sh', 'bash "$here/start_gate.sh" "$image" "$work/tree"', 'bash "$here/start_gate.sh" "$image" "$tree"'],
     ['N12', 'negative_control.sh', '"$target" 2>/dev/null)" = 1 ]', '"$target" 2>/dev/null)" = 0 ]'],
+    ['N33', 'negative_control.sh', 'git -c advice.detachedHead=false clone --quiet "$tree" "$work/tree"', 'cp -a "$tree" "$work/tree"'],
+    ['N34', 'negative_control.sh', 'git -c advice.detachedHead=false clone --quiet "$tree" "$work/tree"', 'git -C "$tree" worktree add --quiet --detach "$work/tree"'],
+    // the uncommitted change of the tree gets into the copy anyway
+    ['N35', 'negative_control.sh', 'git -c advice.detachedHead=false clone --quiet "$tree" "$work/tree"', 'git -c advice.detachedHead=false clone --quiet "$tree" "$work/tree" && cp "$tree/app/application.js" "$work/tree/app/application.js"'],
+    // clones the repository the worktree belongs to (its main checkout), not the worktree
+    ['N36', 'negative_control.sh', 'git -c advice.detachedHead=false clone --quiet "$tree" "$work/tree"', 'git clone --quiet "$(git -C "$tree" rev-parse --path-format=absolute --git-common-dir)" "$work/tree"'],
     // only stage 2, every line at its start and in its own case (Petra, review of r2)
     ['N18', 'negative_control.sh', 'stage2=$(awk \'/^== stage 2: / {inside = 1} inside\' "$log")', 'stage2=$(cat "$log")'],
     ['N19', 'negative_control.sh', "awk '/^== stage 2: /", "awk '/== stage 2: /"],
