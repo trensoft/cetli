@@ -278,17 +278,29 @@ test('start_gate.sh wants a tree with .copr/Makefile, and an image', withBox((bo
 
 // a tree that is a git checkout with the SIGTERM watch in app/application.js; start_gate.sh is a stand-in that prints what it is told to and
 // logs what the tree it got looks like
-function controlBox(box, {tree = true, output = '', rc = 1, line = '    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, 15, () => {'} = {}) {
+// `worktree`: the tree is a `git worktree add` of a repository that is next to it (its .git is a FILE that points into that repository), on a branch
+// that stands on a commit of its own, not on the one of the repository
+function controlBox(box, {tree = true, output = '', rc = 1, worktree = false, line = '    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, 15, () => {'} = {}) {
     const treeDir = path.join(box.root, 'tree');
-    mkdirSync(path.join(treeDir, 'app'), {recursive: true});
-    writeFileSync(path.join(treeDir, 'app', 'application.js'), tree ? `${line}\n    stopping = true;\n` : 'nothing here\n');
-    const git = (...a) => spawnSync('git', ['-C', treeDir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], {encoding: 'utf8'});
+    const repoDir = worktree ? path.join(box.root, 'repo') : treeDir;
+    mkdirSync(path.join(repoDir, 'app'), {recursive: true});
+    writeFileSync(path.join(repoDir, 'app', 'application.js'), tree ? `${line}\n    stopping = true;\n` : 'nothing here\n');
+    const git = (...a) => spawnSync('git', ['-C', repoDir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], {encoding: 'utf8'});
     git('init', '-q');
     git('add', '.');
     git('commit', '-q', '-m', 'tree');
+    if (worktree) {
+        git('worktree', 'add', '-q', '-b', 'feature', treeDir);
+        writeFileSync(path.join(treeDir, 'feature.txt'), 'only on the branch of the worktree\n');
+        spawnSync('git', ['-C', treeDir, 'add', 'feature.txt']);
+        spawnSync('git', ['-C', treeDir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'feature'], {encoding: 'utf8'});
+    }
     writeFileSync(path.join(box.gate, 'start_gate.sh'),
         '#!/bin/bash\necho "start_gate $1 tree-is-copy=$([ "$2" != "$TREE_UNDER_TEST" ] && echo yes || echo no)" >> "$STUB_LOG"\n' +
         'echo "mutated=$(grep -c "GLibUnix.signal_add(GLib.PRIORITY_DEFAULT, 15," "$2/app/application.js")" >> "$STUB_LOG"\n' +
+        'echo "uncommitted=$(grep -c "uncommitted = true;" "$2/app/application.js")" >> "$STUB_LOG"\n' +
+        'echo "copy-head=$(git -C "$2" rev-parse HEAD)" >> "$STUB_LOG"\n' +
+        'echo "copy-parent=$(git -C "$2" rev-parse HEAD^)" >> "$STUB_LOG"\n' +
         `echo "committed=$(git -C "$2" status --porcelain | wc -l)" >> "$STUB_LOG"\nprintf '%s\\n' '${output}'\nexit ${rc}\n`);
     chmodSync(path.join(box.gate, 'start_gate.sh'), 0o755);
     return {treeDir, script: path.join(box.gate, 'negative_control.sh')};
@@ -300,6 +312,9 @@ const control = (box, opts = {}) => {
     chmodSync(c.script, 0o755);
     return {...c, run: () => box.run(c.script, ['img:1', c.treeDir], {TREE_UNDER_TEST: c.treeDir})};
 };
+// what git says about the tree under test: where HEAD is, every ref and its commit of the repository it belongs to, its files, its worktrees
+const gitState = dir => ['rev-parse HEAD', 'for-each-ref --format=%(refname)=%(objectname)', 'status --porcelain', 'worktree list'].map(c =>
+    spawnSync('git', ['-C', dir, ...c.split(' ')], {encoding: 'utf8'}).stdout).join('|');
 const controlTools = [...REAL_TOOLS, 'git', 'grep', 'sed', 'tee', 'wc', 'cat', 'bash', 'awk'];
 // what the gate prints on the copy: the steps before (d), the FAIL line of (d) with the log of the program under it (the ReferenceError of the copy),
 // the FAIL of (e), the same error in the log of (e)
@@ -323,6 +338,38 @@ test('the control passes when the gate fails in step (d) and (a), (b), (c) pass,
     assert.ok(calls.includes('committed=0'), 'the copy must be committed: the source RPM is made from HEAD');
     // the tree under test is not changed
     assert.match(readFileSync(path.join(c.treeDir, 'app', 'application.js'), 'utf8'), /GLib\.unix_signal_add\(GLib\.PRIORITY_DEFAULT, 15,/);
+}, controlTools));
+
+for (const [kind, worktree] of [['a plain checkout', false], ['a git worktree', true]]) {
+    test(`the control commits the error into its copy only: ${kind} as the tree under test keeps its branch, its refs and its files`, withBox((box) => {
+        const c = control(box, {output: D_FAIL, worktree});
+        const before = gitState(c.treeDir);
+        const head = before.split('|')[0].trim();
+        const r = c.run();
+        assert.equal(r.rc, 0, r.all);
+        // not one ref of the tree (the branch of the developer) moved, and nothing in it was changed
+        assert.equal(gitState(c.treeDir), before);
+        // the gate got the tree with the error committed: a commit that is not the one of the tree under test, on top of it
+        assert.ok(box.calls().some(l => l.startsWith('copy-head=') && l !== `copy-head=${head}`), `the copy holds no commit of its own: ${box.calls().join('\n')}`);
+        assert.ok(box.calls().includes(`copy-parent=${head}`), `the commit of the copy is not on top of the HEAD of the tree (${head}): ${box.calls().join('\n')}`);
+        // a worktree is on a commit of its own, not on the one of the repository it belongs to
+        if (worktree)
+            assert.notEqual(head, spawnSync('git', ['-C', path.join(box.root, 'repo'), 'rev-parse', 'HEAD'], {encoding: 'utf8'}).stdout.trim());
+        assert.ok(box.calls().includes('mutated=1') && box.calls().includes('committed=0'), box.calls().join('\n'));
+    }, controlTools));
+}
+
+test('the control gives the gate the committed state of the tree: a change that is not committed is not in the copy and is not touched', withBox((box) => {
+    const c = control(box, {output: D_FAIL});
+    const file = path.join(c.treeDir, 'app', 'application.js');
+    writeFileSync(file, `${readFileSync(file, 'utf8')}    uncommitted = true;\n`);
+    const before = gitState(c.treeDir);
+    const r = c.run();
+    assert.equal(r.rc, 0, r.all);
+    assert.equal(gitState(c.treeDir), before);
+    assert.match(readFileSync(file, 'utf8'), /uncommitted = true;/);
+    // the copy has the committed state only: the marker of the change is in it 0 times
+    assert.ok(box.calls().includes('uncommitted=0') && box.calls().includes('mutated=1'), box.calls().join('\n'));
 }, controlTools));
 
 test('the control fails when the gate PASSES on the bad tree: it is soft', withBox((box) => {

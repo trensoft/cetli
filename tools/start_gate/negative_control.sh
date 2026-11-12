@@ -4,7 +4,8 @@
 # A gate that cannot fail on a bad tree is not a gate.
 # usage: tools/start_gate/negative_control.sh IMAGE TREE
 #   IMAGE  the image of a leg: quay.io/centos/centos:stream10 (epel-10)
-#   TREE   a git checkout of cetli (the tree under test); it is copied, it is not changed
+#   TREE   a git checkout of cetli (the tree under test); its committed state (HEAD) is cloned, it is not changed
+#          (not its uncommitted changes, which the source RPM does not hold either, and not when it is a git worktree)
 # The error is the kind that slideshow-lock 1.0.11 went out with: the program calls a function that is not
 # there on the platform, in the setup of its main loop, so the imports and the typelibs are fine and only the
 # start fails. In the copy, app/application.js calls GLibUnix.signal_add for the SIGTERM watch, and GLibUnix is
@@ -26,7 +27,10 @@ work=$(mktemp -d)
 log=$work/gate.log
 trap 'rm -rf "$work"' EXIT
 
-cp -a "$tree" "$work/tree" || { echo "NEGATIVE-CONTROL FAIL: $tree could not be copied"; exit 1; }
+# A clone and not `cp -a`: in a git worktree .git is a FILE that points at the git directory of the real worktree, so a copy would
+# commit the error below onto the branch of the developer. A clone has a git directory of its own (the objects are hard-linked,
+# nothing is written into $tree).
+git -c advice.detachedHead=false clone --quiet "$tree" "$work/tree" || { echo "NEGATIVE-CONTROL FAIL: $tree could not be cloned"; exit 1; }
 target=$work/tree/app/application.js
 [ "$(grep -c 'GLib\.unix_signal_add(GLib\.PRIORITY_DEFAULT, 15,' "$target" 2>/dev/null)" = 1 ] \
     || { echo "NEGATIVE-CONTROL FAIL: the SIGTERM watch is not in app/application.js once, the error cannot be put in"; exit 1; }
