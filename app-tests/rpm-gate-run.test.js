@@ -305,8 +305,11 @@ const controlTools = [...REAL_TOOLS, 'git', 'grep', 'sed', 'tee', 'wc', 'cat', '
 // the FAIL of (e), the same error in the log of (e)
 const REASON = 'Gjs-CRITICAL **: JS ERROR: ReferenceError: GLibUnix is not defined';
 const block = reason => `---- log of cetli ----\n${reason}\n---- end of the log of cetli ----`;
+// the two lines start_gate.sh prints before its stages; only the output after the second one counts
+const STAGE1 = '== stage 1: build the RPM from /tree in img:1';
+const STAGE2 = '== stage 2: install and start it in a clean img:1';
 const gateOutput = ({d = `START-GATE d FAIL x\n${block(REASON)}`, e = `START-GATE e FAIL x\n${block(REASON)}`} = {}) =>
-    `START-GATE rpm PASS x\nSTART-GATE a PASS x\nSTART-GATE b PASS x\nSTART-GATE c PASS x\n${d}\n${e}\nSTART-GATE RESULT FAIL cetli sha256 0`;
+    `${STAGE1}\nbuilt\n${STAGE2}\nSTART-GATE rpm PASS x\nSTART-GATE a PASS x\nSTART-GATE b PASS x\nSTART-GATE c PASS x\n${d}\n${e}\nSTART-GATE RESULT FAIL cetli sha256 0`;
 const D_FAIL = gateOutput();
 
 test('the control passes when the gate fails in step (d) and (a), (b), (c) pass, on a COPY of the tree with the error in it', withBox((box) => {
@@ -357,6 +360,64 @@ for (const [why, output] of [
         assert.match(r.out, /^NEGATIVE-CONTROL FAIL: step \(d\) failed, but the log of the program does not show the error that was put in/m);
     }, controlTools));
 }
+
+// every line the control reads, as the probe prints it in stage 2
+const CONTROL_LINES = ['START-GATE rpm PASS x', 'START-GATE a PASS x', 'START-GATE b PASS x', 'START-GATE c PASS x', 'START-GATE d FAIL x', 'START-GATE RESULT FAIL cetli sha256 0'];
+for (const line of CONTROL_LINES) {
+    for (const [kind, prefix] of [['a word', 'x '], ['an indent', '  '], ['a diff', '+ ']]) {
+        test(`the control wants "${line.split(' ').slice(0, 3).join(' ')}" as a line of its own: after ${kind} in front of it, it does not count`, withBox((box) => {
+            const r = control(box, {output: D_FAIL.replace(`\n${line}`, `\n${prefix}${line}`)}).run();
+            assert.equal(r.rc, 1, r.all);
+            assert.match(r.out, /^NEGATIVE-CONTROL FAIL: the gate failed/m);
+        }, controlTools));
+    }
+    test(`the control reads "${line.split(' ').slice(0, 3).join(' ')}" in its own case: in other letters it does not count`, withBox((box) => {
+        const r = control(box, {output: D_FAIL.replace(`\n${line}`, `\n${line.replace(/(PASS|FAIL)/, w => w.toLowerCase())}`)}).run();
+        assert.equal(r.rc, 1, r.all);
+        assert.match(r.out, /^NEGATIVE-CONTROL FAIL: the gate failed/m);
+    }, controlTools));
+}
+
+test('the control reads the error that was put in in its own case: in other letters it is another error', withBox((box) => {
+    const r = control(box, {output: gateOutput({d: `START-GATE d FAIL x\n${block(REASON.toLowerCase())}`})}).run();
+    assert.equal(r.rc, 1, r.all);
+    assert.match(r.out, /^NEGATIVE-CONTROL FAIL: step \(d\) failed, but the log of the program does not show the error that was put in/m);
+}, controlTools));
+
+test('a line that only quotes the FAIL line of (d) does not open the block of (d): the error under it does not count', withBox((box) => {
+    const output = gateOutput({d: `START-GATE d FAIL x\n${block('nothing')}`, e: `START-GATE e FAIL x\nx START-GATE d FAIL x\n${block(REASON)}`});
+    const r = control(box, {output}).run();
+    assert.equal(r.rc, 1, r.all);
+    assert.match(r.out, /^NEGATIVE-CONTROL FAIL: step \(d\) failed, but the log of the program does not show the error that was put in/m);
+}, controlTools));
+
+test('only the FAIL line of (d) opens its block: another line of (d) with the error under it does not count', withBox((box) => {
+    const output = gateOutput({d: `START-GATE d note x\n${block(REASON)}\nSTART-GATE d FAIL x\n${block('nothing')}`, e: 'START-GATE e FAIL x'});
+    const r = control(box, {output}).run();
+    assert.equal(r.rc, 1, r.all);
+    assert.match(r.out, /^NEGATIVE-CONTROL FAIL: step \(d\) failed, but the log of the program does not show the error that was put in/m);
+}, controlTools));
+
+test('only stage 2 counts: the lines of the probe in the output of stage 1 (the build) are not steps of the probe', withBox((box) => {
+    const steps = D_FAIL.slice(D_FAIL.indexOf(STAGE2) + STAGE2.length + 1);
+    let r = control(box, {output: `${STAGE1}\n${steps}\n${STAGE2}\nSTART-GATE RESULT FAIL cetli sha256 0`}).run();
+    assert.equal(r.rc, 1, r.all);
+    assert.match(r.out, /^NEGATIVE-CONTROL FAIL: the gate failed/m);
+    // stage 2 never started
+    r = control(box, {output: `${STAGE1}\n${steps}`}).run();
+    assert.equal(r.rc, 1, r.all);
+    assert.match(r.out, /^NEGATIVE-CONTROL FAIL: the gate failed/m);
+    // a line that names stage 2 but is not the line of start_gate.sh does not start it
+    r = control(box, {output: `${STAGE1}\nx ${STAGE2}\n${steps}`}).run();
+    assert.equal(r.rc, 1, r.all);
+}, controlTools));
+
+test('only stage 2 counts for the reason too: the error in the output of stage 1 is not the error of the start', withBox((box) => {
+    const output = gateOutput({d: 'START-GATE d FAIL x', e: 'START-GATE e FAIL x'}).replace('built\n', `built\nSTART-GATE d FAIL x\n${block(REASON)}\n`);
+    const r = control(box, {output}).run();
+    assert.equal(r.rc, 1, r.all);
+    assert.match(r.out, /^NEGATIVE-CONTROL FAIL: step \(d\) failed, but the log of the program does not show the error that was put in/m);
+}, controlTools));
 
 test('the control fails, and does not run the gate, when the SIGTERM watch is not in the tree once', withBox((box) => {
     const r = control(box, {tree: false, output: D_FAIL}).run();
