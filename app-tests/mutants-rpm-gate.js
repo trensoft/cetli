@@ -59,12 +59,12 @@ const M = [
     ['S8', 'start_gate.sh', 'bash /gate/build.sh', 'bash /gate/build.sh || true'],
     // negative_control.sh
     ['N1', 'negative_control.sh', 'it is soft"\n    exit 1', 'it is soft"\n    exit 0'],
-    ['N2', 'negative_control.sh', "! grep -q '^START-GATE d FAIL' \"$log\"", "! grep -q '^START-GATE c FAIL' \"$log\""],
-    ['N3', 'negative_control.sh', "    || ! grep -q '^START-GATE rpm PASS' \"$log\" \\\n", ''],
-    ['N4', 'negative_control.sh', "! grep -q '^START-GATE a PASS' \"$log\" || ", ''],
-    ['N5', 'negative_control.sh', " || ! grep -q '^START-GATE b PASS' \"$log\"", ''],
-    ['N5c', 'negative_control.sh', " || ! grep -q '^START-GATE c PASS' \"$log\"; then", '; then'],
-    ['N6', 'negative_control.sh', "! grep -q '^START-GATE RESULT FAIL' \"$log\" || ", ''],
+    ['N2', 'negative_control.sh', "! grep -q '^START-GATE d FAIL' <<<\"$stage2\"", "! grep -q '^START-GATE c FAIL' <<<\"$stage2\""],
+    ['N3', 'negative_control.sh', "    || ! grep -q '^START-GATE rpm PASS' <<<\"$stage2\" \\\n", ''],
+    ['N4', 'negative_control.sh', "! grep -q '^START-GATE a PASS' <<<\"$stage2\" || ", ''],
+    ['N5', 'negative_control.sh', " || ! grep -q '^START-GATE b PASS' <<<\"$stage2\"", ''],
+    ['N5c', 'negative_control.sh', " || ! grep -q '^START-GATE c PASS' <<<\"$stage2\"; then", '; then'],
+    ['N6', 'negative_control.sh', "! grep -q '^START-GATE RESULT FAIL' <<<\"$stage2\" || ", ''],
     ['N7', 'negative_control.sh', 'it proves nothing"\n    exit 1\nfi\nif ! grep', 'it proves nothing"\n    exit 0\nfi\nif ! grep'],
     ['N13', 'negative_control.sh', "grep -q 'ReferenceError: GLibUnix is not defined' <<<\"$d_block\"", "grep -q 'ReferenceError: GLibUnix is not defined' \"$log\""],
     ['N14', 'negative_control.sh', '/^START-GATE / {inside = 0} ', ''],
@@ -76,6 +76,22 @@ const M = [
     ['N10', 'negative_control.sh', '--all --message', '--message'],
     ['N11', 'negative_control.sh', 'bash "$here/start_gate.sh" "$image" "$work/tree"', 'bash "$here/start_gate.sh" "$image" "$tree"'],
     ['N12', 'negative_control.sh', '"$target" 2>/dev/null)" = 1 ]', '"$target" 2>/dev/null)" = 0 ]'],
+    // only stage 2, every line at its start and in its own case (Petra, review of r2)
+    ['N18', 'negative_control.sh', 'stage2=$(awk \'/^== stage 2: / {inside = 1} inside\' "$log")', 'stage2=$(cat "$log")'],
+    ['N19', 'negative_control.sh', "awk '/^== stage 2: /", "awk '/== stage 2: /"],
+    ['N20', 'negative_control.sh', "inside' <<<\"$stage2\")", "inside' \"$log\")"],
+    ['N21', 'negative_control.sh', "grep -q '^START-GATE rpm PASS'", "grep -q 'START-GATE rpm PASS'"],
+    ['N22', 'negative_control.sh', "grep -q '^START-GATE a PASS'", "grep -q 'START-GATE a PASS'"],
+    ['N23', 'negative_control.sh', "grep -q '^START-GATE b PASS'", "grep -q 'START-GATE b PASS'"],
+    ['N24', 'negative_control.sh', "grep -q '^START-GATE c PASS'", "grep -q 'START-GATE c PASS'"],
+    ['N25', 'negative_control.sh', "grep -q '^START-GATE d FAIL'", "grep -q 'START-GATE d FAIL'"],
+    ['N26', 'negative_control.sh', "grep -q '^START-GATE RESULT FAIL'", "grep -q 'START-GATE RESULT FAIL'"],
+    ['N27', 'negative_control.sh', "awk '/^START-GATE d FAIL/", "awk '/START-GATE d FAIL/"],
+    ['N28', 'negative_control.sh', 'grep -q ', 'grep -qi '],
+    ['N29', 'negative_control.sh', "awk '/^START-GATE d FAIL/ {inside = 1; next}", "awk '/^START-GATE d / {inside = 1; next}"],
+    ['N30', 'negative_control.sh', "grep -q '^START-GATE c PASS'", "grep -q '^START-GATE c '"],
+    ['N31', 'negative_control.sh', '/^START-GATE / {inside = 0}', '/^START-GATE [a-c] / {inside = 0}'],
+    ['N32', 'negative_control.sh', '2>/dev/null)" = 1 ]', '2>/dev/null)" -ge 1 ]'],
     // probe_start.sh
     ['P1', 'probe_start.sh', "'start failed|JS ERROR|Unhandled promise rejection'", "'JS ERROR|Unhandled promise rejection'"],
     ['P2', 'probe_start.sh', "'start failed|JS ERROR|Unhandled promise rejection'", "'start failed|Unhandled promise rejection'"],
@@ -182,6 +198,14 @@ const M = [
     ['W14', '.github/workflows/start-gate.yml', 'bash tools/start_gate/start_gate.sh "${{ matrix.image }}"', 'bash tools/start_gate/start_gate.sh quay.io/centos/centos:stream10'],
     ['W15', '.github/workflows/start-gate.yml', '  pull_request:\n', ''],
     ['W16', '.github/workflows/start-gate.yml', '    branches: [main]\n', ''],
+    // a gate or a control that is green without having run (Petra, review of r2)
+    ['W22', '.github/workflows/start-gate.yml', 'start_gate.sh "${{ matrix.image }}"', 'start_gate.sh "${{ matrix.image }}" || true'],
+    ['W23', '.github/workflows/negative-control.yml', '      - name: The gate must fail', '      - if: false\n        name: The gate must fail'],
+    ['W24', '.github/workflows/negative-control.yml', '    runs-on: ubuntu-24.04', '    if: false\n    runs-on: ubuntu-24.04'],
+    ['W25', '.github/workflows/start-gate.yml', '      - name: Build the RPM', '      - if: false\n        name: Build the RPM'],
+    ['W26', '.github/workflows/negative-control.yml', '        env:\n          START_GATE_ENGINE', '        continue-on-error: true\n        env:\n          START_GATE_ENGINE'],
+    ['W27', '.github/workflows/negative-control.yml', 'quay.io/centos/centos:stream10 .', 'quay.io/centos/centos:stream10 . || true'],
+    ['W28', '.github/workflows/negative-control.yml', '          ref: ${{ github.sha }}\n', ''],
     // docs
     ['D1', 'docs/RELEASING.md', 'Start gate chroots (the same as the chroots of the COPR project `trensoft/cetli`): `epel-10`, `fedora-43`, `fedora-44`, `fedora-rawhide`.', ''],
     ['D2', 'docs/RELEASING.md', '`fedora-43`, `fedora-44`, `fedora-rawhide`.', '`fedora-43`, `fedora-rawhide`.'],
@@ -192,6 +216,8 @@ const M = [
     // the program: the call the negative control and the probe look for
     ['A1', 'app/application.js', 'GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, 15,', 'GLib.unix_signal_add_full(GLib.PRIORITY_DEFAULT, 15,'],
 ];
+// every `grep -q` of the file at once: a search that ignores the case anywhere
+const MANY = new Set(['N28']);
 const FILES = f => f.includes('/') ? f : `${G}${f}`;
 
 const work = mkdtempSync(path.join(tmpdir(), 'sg-mut-'));
@@ -207,11 +233,11 @@ try {
         const abs = path.join(work, file);
         const orig = readFileSync(path.join(root, file), 'utf8');
         const hits = orig.split(find).length - 1;
-        if (hits !== 1) {
+        if (MANY.has(id) ? hits < 1 : hits !== 1) {
             rows.push({id, file, verdict: 'BROKEN', note: `find text occurs ${hits} times`});
             continue;
         }
-        writeFileSync(abs, orig.replace(find, () => repl));
+        writeFileSync(abs, MANY.has(id) ? orig.replaceAll(find, () => repl) : orig.replace(find, () => repl));
         const files = [...(FAMILY[file] ?? []).map(f => `${T}${f}.test.js`), `${T}structure.test.js`];
         const r = spawnSync('nice', ['-n', '19', process.execPath, '--test', ...files.map(f => path.join(work, f))], {encoding: 'utf8', timeout: 240000, cwd: work});
         writeFileSync(abs, orig);                       // restored at once

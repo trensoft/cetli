@@ -62,6 +62,10 @@ test('the gate file has no `if:` anywhere: a skipped job would leave a check nam
     assert.doesNotMatch(code(WORKFLOW), /negative_control|negative-control/);
 });
 
+test('the negative control has no `if:` either, on its job or on a step: a skipped control is a green check on a control that did not run', () => {
+    assert.doesNotMatch(code(CONTROL), /^\s*(- )?if:/m);
+});
+
 const jobsOf = text => text.split(/^  (?=[a-z-]+:\n)/m).slice(1).filter(j => /^\w[\w-]*:\n/.test(j) && /runs-on/.test(j));
 
 test('no leg stops the others, every job has a time limit that is a limit, and the check is named like the leg verify_checks.sh reads', () => {
@@ -93,7 +97,8 @@ test('every checkout keeps no token, and every action is pinned by a commit', ()
 });
 
 test('the gate job runs the gate on the image of its leg', () => {
-    assert.match(WORKFLOW, /run: bash tools\/start_gate\/start_gate\.sh "\$\{\{ matrix\.image \}\}"/);
+    // the whole line: a `|| true` (or anything else) after the command would make every leg green
+    assert.match(WORKFLOW, /^        run: bash tools\/start_gate\/start_gate\.sh "\$\{\{ matrix\.image \}\}"$/m);
     assert.equal((WORKFLOW.match(/START_GATE_ENGINE: docker/g) ?? []).length, 1);
 });
 
