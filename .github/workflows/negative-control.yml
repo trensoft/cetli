@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Negative control of the start gate
+
+# Run by hand ("Run workflow") when the gate changed and before the next tag (docs/RELEASING.md): the gate scripts of this commit against a copy of
+# the tree with a start-up error in it, on the image of epel-10. Green only when the gate FAILS there, in the real start, with the error that was
+# put in (tools/start_gate/negative_control.sh). It is a file of its own: a job of start-gate.yml that is skipped on a manual run would leave a
+# check named "start gate (${{ matrix.chroot }})" on the commit, and verify_checks.sh reads every such name as a leg of the gate.
+on:
+  workflow_dispatch:
+
+# The job only reads the repository: no write scope for the token.
+permissions:
+  contents: read
+
+jobs:
+  negative-control:
+    name: negative control (the gate must fail on a tree that cannot start)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      # the commit this run is on, by its SHA: no tag or branch name that could be moved. The token is not kept in .git/config: the code under
+      # test runs in the containers and can read /src.
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: The gate must fail on the copy with the error on epel-10
+        env:
+          START_GATE_ENGINE: docker
+        run: bash tools/start_gate/negative_control.sh quay.io/centos/centos:stream10 .
